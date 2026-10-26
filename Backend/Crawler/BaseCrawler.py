@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright, Playwright, Page
 from bs4 import BeautifulSoup
 from http.client import HTTPResponse
 from urllib.request import Request, urlopen
+import html2text
 
 
 class BaseCrawler():
@@ -83,6 +84,14 @@ class BeautifulSoupCrawler(BaseCrawler):
         
         soup = BeautifulSoup(html, "html.parser")
         return soup
+    
+    def convert_to_markdown(self, html: str):
+        """Convert HTML content to Markdown format."""
+        h = html2text.HTML2Text()
+        h.ignore_images = True
+        h.body_width = 0
+        markdown_content = h.handle(html)
+        return markdown_content
     
     def parse(self, soup: BeautifulSoup):
         """Extract and return the required data from the parsed document."""

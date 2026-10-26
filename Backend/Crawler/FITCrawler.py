@@ -19,12 +19,13 @@ class FITCrawler(BeautifulSoupCrawler):
             link = event.select_one("div.post-title a")["href"]
             
             event_soup = self.get_soup(link)
-            content = event_soup.select_one("section.has_content").get_text(strip=True)
+            content = event_soup.select_one("section.has_content > div > div").decode_contents()
+            markdown_content = self.convert_to_markdown(content)
             
             raw_task["Title"] = title
             raw_task["Brief"] = brief
             raw_task["Link"] = link
-            raw_task["Content"] = content
+            raw_task["Content"] = markdown_content
             
             raw_tasks.append(raw_task)
         return raw_tasks
