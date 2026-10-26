@@ -4,6 +4,7 @@ from Backend.Crawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
+from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
 
 
 class TaskCreator():
@@ -12,6 +13,7 @@ class TaskCreator():
             "Portal": PortalCrawler(),
             "Moodle": MoodleCrawler(),
             "FIT": FITCrawler(),
+            "HCMUS": HCMUSCrawler()
         }
     
     def crawl_raw_text(self):
