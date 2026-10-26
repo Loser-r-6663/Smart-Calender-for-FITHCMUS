@@ -4,6 +4,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Playwright, Page
 from bs4 import BeautifulSoup
+from http.client import HTTPResponse
 from urllib.request import Request, urlopen
 
 
@@ -52,7 +53,7 @@ class PlaywrightCrawler(BaseCrawler):
             self.login(p, self.check_state())
             print(f"Login state for {self.__class__.__name__} is valid. Starting to scrape data...")
             
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context(storage_state=self.state_file)
             page = context.new_page()
             
@@ -67,19 +68,21 @@ class PlaywrightCrawler(BaseCrawler):
 class BeautifulSoupCrawler(BaseCrawler):
     def __init__(self):
         self.home_url: str
-        self.headers = {"User-Agent": "UniversityLifeAssistant/1.0"}
     
     def fetch_data(self):
         """Download the target page and parse it with BeautifulSoup."""
-        html = self.fetch_html()
-        soup = BeautifulSoup(html, "html.parser")
+        soup = self.get_soup(self.home_url)
         return self.parse(soup)
     
-    def fetch_html(self) -> str:
+    def get_soup(self, url: str):
         """Download the configured URL and return its decoded HTML."""
-        request = Request(self.home_url, headers=dict(self.headers))
-        with urlopen(request, timeout=30) as response:
-            return response.read().decode(response.headers.get_content_charset() or "utf-8")
+        request = Request(url, headers={"User-Agent": "UniversityLifeAssistant/1.0"})
+        response: HTTPResponse = urlopen(request, timeout=30)
+        html = response.read().decode(response.headers.get_content_charset() or "utf-8")
+        response.close()
+        
+        soup = BeautifulSoup(html, "html.parser")
+        return soup
     
     def parse(self, soup: BeautifulSoup):
         """Extract and return the required data from the parsed document."""

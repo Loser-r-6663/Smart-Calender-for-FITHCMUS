@@ -3,13 +3,15 @@ import traceback
 from Backend.Crawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
+from Backend.Crawler.FITCrawler import FITCrawler
 
 
 class TaskCreator():
     def __init__(self):
         self.crawlers: dict[str, BaseCrawler] = {
             "Portal": PortalCrawler(),
-            "Moodle": MoodleCrawler()
+            "Moodle": MoodleCrawler(),
+            "FIT": FITCrawler(),
         }
     
     def crawl_raw_text(self):
@@ -29,4 +31,4 @@ class TaskCreator():
     def create_task(self):
         """Create structured data from website data"""
         raw_tasks = self.crawl_raw_text()
-        print(raw_tasks)
+        print(raw_tasks["FIT"])
