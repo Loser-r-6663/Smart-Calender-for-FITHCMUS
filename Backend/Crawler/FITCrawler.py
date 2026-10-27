@@ -10,22 +10,27 @@ class FITCrawler(BeautifulSoupCrawler):
     def parse(self, soup):
         raw_tasks = []
         
-        events = soup.select("article")
-        for event in events:
-            raw_task = {"Title": "N/A", "Link": "N/A"}
+        posts = soup.select("article")
+        for post in posts:
+            raw_task = {"Title": "N/A", "Brief": "N/A", "Link": "N/A", "Content": "N/A"}
             
-            title = event.select_one("div.post-title a").get_text(strip=True)
-            brief = event.select_one("div.post-excerpt").get_text(strip=True)
-            link = event.select_one("div.post-title a")["href"]
-            
-            event_soup = self.get_soup(link)
-            content = event_soup.select_one("section.has_content > div > div").decode_contents()
-            markdown_content = self.convert_to_markdown(content)
-            
-            raw_task["Title"] = title
-            raw_task["Brief"] = brief
-            raw_task["Link"] = link
-            raw_task["Content"] = markdown_content
+            # Get the title, brief, and link from the post
+            try:
+                link = post.select_one("div.post-title a")["href"]
+                raw_task["Link"] = link
+                
+                title = post.select_one("div.post-title a").get_text(strip=True)
+                raw_task["Title"] = title
+                
+                brief = post.select_one("div.post-excerpt").get_text(strip=True)
+                raw_task["Brief"] = brief
+                
+                post_soup = self.get_soup(link)
+                content = post_soup.select_one("section.has_content > div > div").decode_contents()
+                markdown_content = self.convert_to_markdown(content)
+                raw_task["Content"] = markdown_content
+            except Exception as e:
+                print(f"Error when parsing post item on FIT homepage: {e}")
             
             raw_tasks.append(raw_task)
         return raw_tasks
