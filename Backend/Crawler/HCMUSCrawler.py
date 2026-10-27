@@ -28,7 +28,7 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 raw_task["Date"] = date
                 
                 post_soup = self.get_soup(link)
-                content = post_soup.select_one("div.entry-content").get_text(strip=True)
+                content = post_soup.select_one("div.entry-content").decode_contents()
                 markdown_content = self.convert_to_markdown(content)
                 raw_task["Content"] = markdown_content
             except Exception as e:
