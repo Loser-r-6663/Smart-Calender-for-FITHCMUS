@@ -68,12 +68,21 @@ class PlaywrightCrawler(BaseCrawler):
 
 class BeautifulSoupCrawler(BaseCrawler):
     def __init__(self):
+        self.state_file: str
         self.home_url: str
     
     def fetch_data(self):
         """Download the target page and parse it with BeautifulSoup."""
+        print(f"Starting to scrape data from {self.__class__.__name__}...")
         soup = self.get_soup(self.home_url)
-        return self.parse(soup)
+        
+        # Get last crawled state from the state file
+        last_post = self.get_last_post()
+        print(f"Last crawled post: {last_post}")
+        
+        raw_tasks = self.parse(soup, last_post)
+        self.set_last_post(raw_tasks)
+        return raw_tasks
     
     def get_soup(self, url: str):
         """Download the configured URL and return its decoded HTML."""
@@ -93,5 +102,25 @@ class BeautifulSoupCrawler(BaseCrawler):
         markdown_content = h.handle(html)
         return markdown_content
     
-    def parse(self, soup: BeautifulSoup):
+    def get_last_post(self):
+        """Retrieve the last crawled post from the state file."""
+        path = Path(self.state_file)
+        if not path.is_file(): return None
+        
+        with path.open("r", encoding="utf-8") as f:
+            post_link = f.read().strip()
+        return post_link
+    
+    def set_last_post(self, raw_tasks: list[dict[str, str]]):
+        """Update the state file with the link of the most recent post."""
+        if not raw_tasks: return
+        
+        last_post_link = raw_tasks[-1].get("Link", "")
+        if not last_post_link: return
+        
+        path = Path(self.state_file)
+        with path.open("w", encoding="utf-8") as f:
+            f.write(last_post_link)
+    
+    def parse(self, soup: BeautifulSoup, last_post: str):
         """Extract and return the required data from the parsed document."""

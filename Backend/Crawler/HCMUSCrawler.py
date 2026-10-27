@@ -3,9 +3,10 @@ from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
 
 class HCMUSCrawler(BeautifulSoupCrawler):
     def __init__(self):
+        self.state_file = "Backend/Crawler/State/HCMUSState.txt"
         self.home_url = "https://hcmus.edu.vn/category/dao-tao/dai-hoc/thong-tin-danh-cho-sinh-vien/"
     
-    def parse(self, soup):
+    def parse(self, soup, last_post):
         raw_tasks = []
         
         articles = soup.select("article")
@@ -16,6 +17,9 @@ class HCMUSCrawler(BeautifulSoupCrawler):
             try:
                 title_element = article.select_one("h2.entry-title a")
                 link = title_element["href"]
+                
+                # Reached the last crawled post. Stopping further crawling
+                if last_post and link == last_post: break
                 raw_task["Link"] = link
                 
                 title = title_element.get_text(strip=True)
@@ -35,4 +39,4 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 print(f"Error when parsing article item on HCMUS homepage: {e}")
             
             raw_tasks.append(raw_task)
-        return raw_tasks
+        return raw_tasks[::-1]

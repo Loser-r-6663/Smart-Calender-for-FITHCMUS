@@ -3,11 +3,10 @@ from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
 
 class FITCrawler(BeautifulSoupCrawler):
     def __init__(self):
-        super().__init__()
         self.state_file = "Backend/Crawler/State/FITState.txt"
         self.home_url = "https://www.ctda.hcmus.edu.vn/vi/thong-bao/"
     
-    def parse(self, soup):
+    def parse(self, soup, last_post):
         raw_tasks = []
         
         posts = soup.select("article")
@@ -17,6 +16,9 @@ class FITCrawler(BeautifulSoupCrawler):
             # Get the title, brief, and link from the post
             try:
                 link = post.select_one("div.post-title a")["href"]
+                
+                # Reached the last crawled post. Stopping further crawling
+                if last_post and link == last_post: break
                 raw_task["Link"] = link
                 
                 title = post.select_one("div.post-title a").get_text(strip=True)
@@ -33,4 +35,4 @@ class FITCrawler(BeautifulSoupCrawler):
                 print(f"Error when parsing post item on FIT homepage: {e}")
             
             raw_tasks.append(raw_task)
-        return raw_tasks
+        return raw_tasks[::-1]
