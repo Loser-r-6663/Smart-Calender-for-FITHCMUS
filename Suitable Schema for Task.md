@@ -232,90 +232,95 @@ CREATE INDEX IF NOT EXISTS idx_tasks_course ON tasks(course_code) WHERE course_c
 
 ## 6. Phân Tích Thiết Kế Schema Dưới Góc Nhìn Tư Duy Tính Toán (Computational Thinking)
 
-Để giải quyết bài toán quản lý và tự động tối ưu hóa lịch biểu sinh viên, việc hợp nhất toàn bộ hoạt động vào **một thực thể `Task` duy nhất với 22 trường thuộc tính** không phải là quyết định ngẫu nhiên, mà là kết quả của việc áp dụng chặt chẽ 3 trụ cột nền tảng của **Tư duy tính toán (Computational Thinking)**:
+### Trụ Cột 1: Trừu Tượng Hóa (Abstraction) — Tại sao quy mọi hoạt động về một thực thể `Task`?
+
+Trừu tượng hóa là bước đi khởi đầu nhằm **loại bỏ các chi tiết ngữ cảnh rườm rà** để nắm bắt bản chất cốt lõi của bài toán trước khi sa đà vào các thuộc tính vụn vặt.
+
+1. **Lược bỏ lớp vỏ cảm tính đời thường:**
+   * Khi đứng trước thông tin thực tế: Buổi học môn Giải tích trên giảng đường, Bài tập Lab 3 trên Moodle, Tọa đàm khoa học kiếm 5 ĐRL, Hạn nộp học phí, hay Lịch hẹn khám răng.
+   * Nếu tiếp cận ngây thơ (chưa qua trừu tượng hóa), ta sẽ bị cuốn vào ngữ nghĩa đời thường: *"Học tập khác với đi chơi, hội thảo khác với bài tập"* $\to$ Dẫn đến sai lầm tạo ra hàng loạt bảng dữ liệu rời rạc (`Classes`, `Assignments`, `Events`).
+
+2. **Nhìn thấu bản chất toán học (Resource Contention Abstraction):**
+   * Dưới góc nhìn hệ thống tính toán, toàn bộ các hoạt động trên đều cùng cạnh tranh một loại tài nguyên hữu hạn và độc quyền duy nhất: **Quỹ thời gian của một cá nhân ($T \in [0, 24\text{h}/\text{ngày}]$)**.
+   * Một con người tại một thời điểm chỉ có thể làm một việc duy nhất. Dù mang tên gọi là gì, bản chất của chúng đều chỉ là: **Một yêu cầu phân bổ trên trục thời gian (A Time-Allocation Request)**.
+
+👉 **Cú nhảy Trừu tượng hóa**: 
+Hệ thống không cần phân mảnh theo tên gọi đời thường, mà mô hình hóa toàn bộ các hoạt động thành một thực thể trừu tượng duy nhất đặt tên là **`Task`**. Toàn bộ đường ống xử lý (Crawler $\to$ SQLite $\to$ AI Search $\to$ Lập lịch CP-SAT $\to$ UI PySide6) chỉ cần làm việc với một giao diện dữ liệu thống nhất (`TaskSchema`).
 
 ---
 
-### Trụ cột 1: Trừu tượng hóa (Abstraction) — Tại sao quy mọi hoạt động về một thực thể `Task`?
+### Trụ Cột 2: Phân Rã (Decomposition) — Tại sao lại cần đúng 22 trường thuộc tính?
 
-Trừu tượng hóa là quá trình loại bỏ các chi tiết ngữ cảnh rườm rà, tập trung vào bản chất cốt lõi của bài toán trong mô hình tính toán.
+Sau khi đã trừu tượng hóa thành thực thể `Task`, bước tiếp theo là **Phân rã**: *"Để thực thể `Task` này có thể sống, luân chuyển và vận hành trơn tru qua toàn bộ 4 phân hệ của trợ lý ảo, nó bắt buộc phải chứa những thông tin nguyên tử nào?"*
 
-1. **Bản chất cạnh tranh tài nguyên hữu hạn (Resource Contention Abstraction):**
-   * *Ngữ cảnh thực tế:* Sinh viên có nhiều hoạt động mang tên gọi và ngữ nghĩa khác nhau: đi học trên giảng đường, nộp bài tập Moodle, tham gia hội thảo kiếm ĐRL, đi khám răng, nộp học phí.
-   * *Bản chất tính toán:* Dưới góc nhìn hệ thống, toàn bộ các hoạt động trên đều cùng cạnh tranh một loại tài nguyên khan hiếm duy nhất: **Quỹ thời gian của một cá nhân ($T \in [0, 24\text{h}/\text{ngày}]$)**. Dù mang tên gọi là gì, một con người không thể cùng lúc ngồi học ở Cơ sở 1 và dự hội thảo ở Cơ sở 2.
-   * *Mô hình hóa:* Thay vì tạo các bảng riêng biệt (`Classes`, `Assignments`, `Events`, `PersonalNotes`), ta trừu tượng hóa chúng thành các **khoảng thời gian (Intervals)** trên trục số thực:
-     $$I_i = [\text{start}_i, \text{end}_i]$$
-     Việc hợp nhất thành một thực thể `Task` cho phép mô hình toán học CP-SAT áp dụng ràng buộc duy nhất `AddNoOverlap` trên một mảng tập hợp chung thay vì phải xử lý ma trận giao cắt giữa nhiều bảng dữ liệu khác nhau.
-
-2. **Chuẩn hóa giao diện dữ liệu (Unified Data Contract):**
-   * Toàn bộ pipeline hệ thống (Crawler $\rightarrow$ Trích xuất LLM $\rightarrow$ Lưu trữ SQLite $\rightarrow$ Vector Search RAG $\rightarrow$ Bộ giải CP-SAT $\rightarrow$ Giao diện PySide6) chỉ cần làm việc với **một kiểu dữ liệu duy nhất (`TaskSchema`)**.
-   * Loại bỏ hoàn toàn sự phức tạp của các câu lệnh đa bảng (`JOIN`, `UNION`), giảm độ trễ truy vấn I/O từ $O(k \cdot \log N)$ xuống $O(\log N)$ trên một bảng duy nhất có lập chỉ mục (index).
-
----
-
-### Trụ cột 2: Phân rã bài toán (Decomposition) — Tại sao lại cần phân rã thành đúng 22 trường dữ liệu?
-
-Phân rã là việc chia tách một bài toán lớn, phức tạp thành các thành phần con độc lập, nguyên tử (atomic) và có thể quản lý được. Để một `Task` đáp ứng trọn vẹn vòng đời từ thu thập tự động, lưu trữ, suy luận ngữ nghĩa đến lập lịch tối ưu, 22 trường thuộc tính được phân rã thành 6 nhóm chức năng nguyên tử:
+Ta phân rã thực thể `Task` theo **4 chiều không gian chức năng** của hệ thống:
 
 ```
-                            ┌──────────────────────────────────────────────┐
-                            │      THỰC THỂ HỢP NHẤT: TASK (22 TRƯỜNG)     │
-                            └──────────────────────┬───────────────────────┘
-         ┌──────────────────┬──────────────────────┼──────────────────────┬──────────────────┐
-         ▼                  ▼                      ▼                      ▼                  ▼
-┌─────────────────┐┌─────────────────┐   ┌───────────────────┐  ┌──────────────────┐┌──────────────────┐
-│ 1. ĐỊNH DANH &  ││ 2. KHÔNG-GIỜ   │   │ 3. ĐIỀU KHIỂN     │  │ 4. VÒNG ĐỜI &    ││ 5. TRUY XUẤT     │
-│    SIÊU DỮ LIỆU ││    CỐ ĐỊNH      │   │    LẬP LỊCH & ĐRL │  │    ĐỒNG BỘ        ││    THÔNG MINH    │
-│                 ││                 │   │                   │  │                  ││    (RAG / VECTOR)│
-│ • id            ││ • start_time    │   │ • deadline        │  │ • status         ││ • embedding      │
-│ • title         ││ • end_time      │   │ • estimated_hours │  │ • recurrence     ││ • target_audience│
-│ • type          ││ • location      │   │ • training_points │  │ • is_manual      ││ • updated_at     │
-│ • course_code   ││                 │   │ • drl_category    │  │ • source_platform││                  │
-│ • description   ││                 │   │ • registration_   │  │ • source_url     ││                  │
-│                 ││                 │   │   start/end       │  │                  ││                  │
-└─────────────────┘└─────────────────┘   └───────────────────┘  └──────────────────┘└──────────────────┘
+                          THỰC THỂ TRỪU TƯỢNG: TASK
+                                     │
+     ┌──────────────────┬────────────┴────────┬──────────────────┐
+     ▼                  ▼                     ▼                  ▼
+┌─────────────────┐┌─────────────────┐  ┌───────────────────┐  ┌──────────────────┐
+│ 1. CHIỀU ĐỒNG BỘ││ 2. CHIỀU NGỮ    │  │ 3. CHIỀU TOÁN HỌC │  │ 4. CHIỀU TRẠNG   │
+│    & ETL        ││    NGHĨA & AI   │  │    & LẬP LỊCH     │  │    THÁI & GIAO   │
+│ (5 trường)      ││ (5 trường)      │  │ (9 trường)        │  │    DIỆN (3 trường│
+└─────────────────┘└─────────────────┘  └───────────────────┘  └──────────────────┘
 ```
 
-#### Phân tích sự cần thiết của các trường bổ sung so với schema 15 trường ban đầu:
-Schema 15 trường ban đầu chỉ đủ cho việc hiển thị bảng tin (Bulletin Board), nhưng hoàn toàn **bế tắc** khi đưa vào hệ thống tính toán tự động:
+1. **Chiều 1: Quản trị nạp & Đồng bộ dữ liệu (ETL / 5 trường)**:
+   * *Định danh duy nhất, chống trùng lặp:* $\to$ **`id`** (UUID / SHA-1 hash).
+   * *Nguồn gốc dữ liệu & Đường dẫn xem chi tiết:* $\to$ **`source_platform`**, **`source_url`**.
+   * *Mốc thời gian crawl & Cờ bảo vệ dữ liệu người dùng tự nhập không bị ghi đè:* $\to$ **`updated_at`**, **`is_manual`**.
+2. **Chiều 2: Nhận thức & Khám phá thông tin (RAG / 5 trường)**:
+   * *Nội dung ngữ nghĩa:* $\to$ **`title`**, **`description`**.
+   * *Ngữ cảnh môn học & Đối tượng thụ hưởng:* $\to$ **`course_code`**, **`target_audience`**.
+   * *Vector toán học để AI truy vấn ngôn ngữ tự nhiên:* $\to$ **`embedding`**.
+3. **Chiều 3: Điều phối tài nguyên & Lập lịch toán học (CP-SAT / 9 trường)**:
+   * *Không gian địa lý để tính thời gian di chuyển giữa các cơ sở:* $\to$ **`location`**.
+   * *Khung thời gian cố định & Khung đăng ký sự kiện:* $\to$ **`start_time`**, **`end_time`**, **`registration_start`**, **`registration_end`**.
+   * *Khối lượng thời gian cần thiết & Hạn chót cho task linh hoạt:* $\to$ **`estimated_hours`**, **`deadline`**.
+   * *Điểm thưởng & Tiêu chí quy chế 5 Điều để kiểm soát trần $\text{Cap}_c$:* $\to$ **`training_points`**, **`drl_category`**.
+4. **Chiều 4: Vòng đời & Trạng thái tương tác (Lifecycle / 3 trường)**:
+   * *Phân loại nghiệp vụ:* $\to$ **`type`**.
+   * *Tiến độ hoàn thành để solver không xếp lại việc đã làm:* $\to$ **`status`**.
+   * *Biểu thức lặp chu kỳ để tránh phình to CSDL:* $\to$ **`recurrence`**.
 
-1. **`estimated_hours` (Thời lượng ước tính):** 
-   * *Vấn đề:* Bài tập và ôn thi không có `start_time` và `end_time` cố định trước; chúng chỉ có hạn chót (`deadline`). Nếu không có trường này, thuật toán lập lịch không thể biết cần phân bổ khối thời gian dài bao nhiêu tiếng (ví dụ: chia thành các block 90 phút) vào các khoảng trống trong tuần.
-2. **`drl_category` (Khoản mục quy chế ĐRL):**
-   * *Vấn đề:* Quy chế rèn luyện HCMUS áp dụng trần điểm phụ thuộc từng điều khoản cụ thể ($\text{Cap}_c \in \{20, 25, 10\}$ điểm). Nếu chỉ có số điểm `training_points` mà thiếu nhóm quy chế, thuật toán sẽ phạm sai lầm xếp dồn toàn bộ sự kiện dễ vào Điều 1 và làm vượt trần vô ích (vi phạm hàm mục tiêu cực đại hóa điểm thực tế).
-3. **`deadline` (Hạn chót hoàn thành):**
-   * *Vấn đề:* Tách biệt rạch ròi giữa hạn chót hoàn thành công việc (`deadline`) với ngày hết hạn đăng ký sự kiện (`registration_end`). Việc gộp chung sẽ gây nhầm lẫn nghiêm trọng trong thuật toán lập lịch theo thời hạn (EDF).
-4. **`status` (Trạng thái công việc):**
-   * *Vấn đề:* Phân rã vòng đời của tác vụ (`active`, `done`, `archived`, `cancelled`). Tránh việc bộ lập lịch tính toán lại cả những bài tập sinh viên đã nộp hoặc các sự kiện đã kết thúc.
-5. **`course_code` (Mã môn học chuẩn hóa):**
-   * *Vấn đề:* Phân rã ngữ cảnh học phần (ví dụ `CSC10001`). Cho phép lọc, gộp và lập lịch ôn tập tương thích với thời khóa biểu; đồng thời hỗ trợ AI trả lời chính xác các câu hỏi như: *"Tuần này môn Kiến trúc máy tính có bài tập gì không?"*.
-6. **`recurrence` (Quy luật lặp lại):**
-   * *Vấn đề:* Thời khóa biểu lặp lại đều đặn 15 tuần. Thay vì sinh ra 15 bản ghi nhân bản làm phình to cơ sở dữ liệu ($15 \times N$), ta phân rã thành một bản ghi duy nhất đi kèm biểu thức chu kỳ (`WEEKLY:MON`).
-7. **`is_manual` (Cờ phân định quyền chỉnh sửa):**
-   * *Vấn đề:* Bảo vệ tính toàn vẹn dữ liệu. Khi crawler chạy định kỳ (mỗi 12 tiếng), cờ này giúp hệ thống nhận diện và không bao giờ ghi đè hoặc xóa các công việc cá nhân do chính sinh viên tự tay tạo lập (`is_manual = 1`).
+👉 **Kết quả Phân rã**:
+$$\mathbf{5\text{ (Đồng bộ)}} + \mathbf{5\text{ (Ngữ nghĩa)}} + \mathbf{9\text{ (Lập lịch)}} + \mathbf{3\text{ (Vòng đời)}} = \mathbf{22\text{ trường thuộc tính}}.$$
+*Mỗi trường là một thành phần nguyên tử bắt buộc; thiếu 1 trường thì một phân hệ chức năng sẽ bị gãy vỡ, thừa 1 trường thì phát sinh dữ liệu rác không phục vụ mục đích tính toán nào.*
 
 ---
 
-### Trụ cột 3: Nhận dạng quy luật (Pattern Recognition) — Nhận diện sự đồng nhất giữa các hoạt động
+### Trụ Cột 3: Nhận Dạng Quy Luật (Pattern Recognition) — Tối ưu hóa kiến trúc tổ chức dữ liệu
 
-Nhận dạng quy luật giúp phát hiện các cấu trúc tương đồng ẩn sau các hiện tượng bề ngoài khác biệt, từ đó áp dụng các giải pháp kiến trúc tối ưu đã được kiểm chứng.
+Sau khi đã trừu tượng hóa thành thực thể `Task` và phân rã ra 22 trường, câu hỏi kiến trúc xuất hiện: *"Liệu việc gom 22 trường vào chung 1 bảng duy nhất có gây lãng phí dung lượng hay suy giảm hiệu năng không?"* 
 
-1. **Khuôn mẫu phân loại nhị phân thời gian (Temporal Polymorphism Pattern):**
-   * Quan sát mọi hoạt động của sinh viên đại học, ta nhận diện được quy luật toán học cốt lõi: Tất cả chỉ quy về **2 loại khuôn mẫu thời gian**:
-     * **Khuôn mẫu Cố định (Fixed-Interval Events):** Có mốc bắt đầu và kết thúc cố định trên trục thời gian ($\exists t_{\text{start}}, t_{\text{end}}$). Thuộc nhóm này gồm: Lịch học trên lớp, hội thảo ĐRL, lịch thi, việc hẹn cá nhân. Các công việc này đóng vai trò là **vật cản cứng (Hard Obstacles)** trên lịch.
-     * **Khuôn mẫu Linh hoạt (Floating Deadline Tasks):** Không có mốc bắt đầu cố định, chỉ có thời lượng và hạn chót ($\exists \text{duration}, \text{deadline}$). Thuộc nhóm này gồm: Bài tập Moodle, ôn thi, đồ án môn học, đóng học phí. Các công việc này là **khối lưu động (Floating Blocks)** cần thuật toán tìm khoảng trống để lấp vào.
-   * *Hệ quả kiến trúc:* Nhận diện quy luật này cho phép schema 22 trường dùng chung các cột thời gian: Sự kiện cố định thì điền `start_time`/`end_time`, tác vụ linh hoạt thì điền `estimated_hours`/`deadline`.
+Trụ cột **Nhận dạng quy luật** giúp phát hiện các mẫu hình đã được chứng minh trong khoa học máy tính:
 
-2. **Khuôn mẫu thiết kế cơ sở dữ liệu (Single Table Inheritance - STI):**
-   * Nhận diện đặc tính truy vấn của trợ lý ảo sinh viên: Thường truy vấn từ giao diện hoặc chatbot là truy vấn theo chiều thời gian (Time-series Query): *"Hôm nay tôi phải làm gì?"*, *"Tuần này có những sự kiện nào?"*.
-   * Thay vì phân mảnh dữ liệu thành nhiều bảng dẫn đến câu lệnh truy vấn phức tạp tốn chi phí kết nối bảng (`JOIN`), mô hình **Single Table Inheritance** gom toàn bộ vào một bảng phẳng duy nhất. Nhờ cơ chế lưu trữ của SQLite (các giá trị `NULL` chỉ tốn cờ bit 0 byte), giải pháp này vừa tối ưu dung lượng đĩa, vừa tối đa tốc độ đọc dữ liệu.
+1. **Quy luật Đa hình Không-Thời gian (Temporal Polymorphism Pattern):**
+   * Nhận diện quy luật đối ngẫu giữa các trường thời gian:
+     * Task cố định (`class`, `event`) $\to$ điền `start_time/end_time`, để trống `deadline/estimated_hours`.
+     * Task linh hoạt (`assignment`, `exam`) $\to$ điền `deadline/estimated_hours`, để trống `start_time/end_time`.
+   * Quy luật này cho thấy 22 trường hoàn toàn tương thích và bổ trợ cho nhau mà không hề gây xung đột cấu trúc.
 
-3. **Khuôn mẫu tối ưu hóa toán học (Submodular Knapsack Pattern):**
-   * Hoạt động săn Điểm rèn luyện của sinh viên tuân theo đúng khuôn mẫu toán học của bài toán **Balo đa chiều với ràng buộc cận trên từng ngăn (Multi-dimensional Knapsack with Category Caps)**.
-   * Việc thiết kế cặp trường `training_points` và `drl_category` trực tiếp chuyển hóa bài toán đời thực thành mô hình toán chuẩn tắc:
+2. **Quy luật Kế thừa bảng đơn (Single Table Inheritance - STI) trong SQLite:**
+   * Trong SQLite, các giá trị mang cờ `NULL` chỉ tốn đúng **0 byte** dữ liệu thực tế.
+   * Nhận diện quy luật truy vấn: Sinh viên luôn truy vấn theo dòng thời gian tổng hợp (*"Hôm nay tôi phải làm gì?"*). Gom chung 1 bảng giúp triệt tiêu hoàn toàn các câu lệnh `JOIN`/`UNION` đa bảng phức tạp, giảm độ phức tạp truy vấn từ $O(k \log N)$ xuống $O(\log N)$ trên một cây chỉ mục B-Tree duy nhất.
+
+3. **Quy luật Balo Submodular (Submodular Knapsack Pattern):**
+   * Cặp trường `training_points` và `drl_category` khớp chính xác với quy luật lợi ích biên giảm dần khi chạm trần quy chế:
      $$\max \sum_{c} \min \left( \text{Cap}_c, \sum_{i \in \text{Task}_c} x_i \cdot p_i \right)$$
-     giúp bộ giải toán nhận diện cấu trúc bài toán ngay lập tức mà không cần qua tầng tiền xử lý trung gian phức tạp.
+     giúp bộ giải nhận dạng cấu trúc bài toán ngay lập tức mà không cần qua tầng tiền xử lý trung gian phức tạp.
 
-4. **Khuôn mẫu đồng bộ hóa bất biến (Idempotent Synchronization Pattern):**
-   * Quá trình đồng bộ dữ liệu từ các cổng thông tin (Moodle, Web Khoa, Mạng xã hội) lặp lại liên tục theo chu kỳ.
-   * Sự kết hợp của `source_platform`, `source_url` và `updated_at` tạo thành mẫu khóa nhận diện idempotent: Nếu một thông báo sự kiện được quét lại, hệ thống nhận diện được bản ghi đã tồn tại để thực hiện cập nhật (`UPSERT`) thay vì chèn trùng lặp, bảo đảm tính toàn vẹn của lịch biểu.
+4. **Quy luật Đồng bộ hóa Bất biến (Idempotent Synchronization Pattern):**
+   * Bộ ba (`id`, `source_platform`, `updated_at`) tạo thành quy luật cập nhật bảo toàn trạng thái (`UPSERT`), giúp crawler chạy lặp lại định kỳ mà không sinh rác bản ghi.
+
+---
+
+### Bảng Tổng Kết Tiến Trình Suy Luận Kiến Trúc
+
+| Trụ cột Tư duy Tính toán | Luận cứ khoa học | Kết quả thiết kế tất yếu |
+|---|---|---|
+| **1. Trừu tượng hóa (Abstraction)** | Lược bỏ chi tiết cảm tính; quy mọi hoạt động về mô hình tranh chấp quỹ thời gian cá nhân 24h. | $\implies$ **Hợp nhất toàn bộ hoạt động vào một thực thể duy nhất: `Task`.** |
+| **2. Phân rã (Decomposition)** | Bóc tách 4 bài toán kỹ thuật: ETL (5) + RAG (5) + Lập lịch (9) + Vòng đời (3). | $\implies$ **Bắt buộc phải có đúng 22 trường thuộc tính nguyên tử.** |
+| **3. Nhận dạng quy luật (Pattern Recognition)** | Nhận diện tính đa hình thời gian, mô hình STI với 0 byte NULL và hàm Submodular Knapsack. | $\implies$ **Chứng minh 22 trường dùng chung trong 1 bảng là tối ưu tuyệt đối về I/O và bộ nhớ.** |
