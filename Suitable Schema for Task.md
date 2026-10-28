@@ -88,11 +88,11 @@ class TaskStatus(str, Enum):
     CANCELLED   = "cancelled"    # Bị hủy bỏ
 
 class DRLCategory(str, Enum):
-    DIEU_1 = "dieu_1"  # Ý thức học tập
-    DIEU_2 = "dieu_2"  # Ý thức kỷ luật
-    DIEU_3 = "dieu_3"  # Hoạt động phong trào, tình nguyện
-    DIEU_4 = "dieu_4"  # Phẩm chất công dân, quan hệ cộng đồng
-    DIEU_5 = "dieu_5"  # Thành tích xuất sắc, khen thưởng đặc biệt
+    DIEU_1 = "dieu_1"  # Tham gia học tập và nghiên cứu khoa học (Tối đa: 30 điểm)
+    DIEU_2 = "dieu_2"  # Chấp hành nội quy, quy chế và các quy định (Tối đa: 20 điểm)
+    DIEU_3 = "dieu_3"  # Hoạt động CT-XH, VH-VN, TD-TT; phòng chống tội phạm, tệ nạn (Tối đa: 25 điểm)
+    DIEU_4 = "dieu_4"  # Hành động hướng đến xây dựng và phát triển cộng đồng (Tối đa: 25 điểm)
+    DIEU_5 = "dieu_5"  # Các nội dung khuyến khích (Tối đa: 30 điểm)
 
 class SourcePlatform(str, Enum):
     MOODLE   = "moodle"

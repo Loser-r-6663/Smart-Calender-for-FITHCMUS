@@ -220,7 +220,7 @@ Sau khi phân rã, ta quan sát các đặc trưng toán học của từng bài
    $$\forall c \in \mathcal{C}: \quad \text{Gain}_c = \min \left( \max(0, \text{Cap}_c - \text{Current}_c), \sum_{i \in \mathcal{E}_c} \text{Points}_i \cdot x_i \right)$$
    *Chú thích ký hiệu:*
    * $c$: Nhóm tiêu chí đánh giá ĐRL ($c \in \{\text{dieu\_1}, \text{dieu\_2}, \dots, \text{dieu\_5}\}$).
-   * $\text{Cap}_c$: Trần điểm tối đa của tiêu chí $c$ (ví dụ: Điều 1 tối đa 20 điểm).
+   * $\text{Cap}_c$: Trần điểm tối đa của tiêu chí $c$ theo Quy chế ĐRL HCMUS (Điều 1: 30, Điều 2: 20, Điều 3: 25, Điều 4: 25, Điều 5: 30 điểm).
    * $\text{Current}_c$: Điểm ĐRL sinh viên đã tích lũy từ trước trong học kỳ ở tiêu chí $c$.
    * $\text{Points}_i$: Điểm thưởng mà sự kiện $i$ đem lại nếu tham gia ($x_i = 1$).
    * $\sum_{i \in \mathcal{E}_c} \text{Points}_i \cdot x_i$: Tổng điểm thô kiếm được từ các sự kiện thuộc tiêu chí $c$.
