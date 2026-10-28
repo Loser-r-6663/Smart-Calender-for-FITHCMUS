@@ -17,7 +17,30 @@ Thay vì phân mảnh thành nhiều bảng riêng biệt (`assignments`, `event
 2. **Giao diện người dùng tập trung (Unified Timeline / UI Feed)**: Calendar và Todo-list trên PySide6 chỉ cần đọc từ một nguồn dữ liệu duy nhất.
 3. **Đơn giản hóa đường ống xử lý (Pipeline Simplicity)**: Từ khâu Crawl $\to$ Filter $\to$ Extract $\to$ Dedup chỉ cần xuất ra một kiểu đối tượng duy nhất.
 
-### 1.2. Phân tích sự thiếu hụt của 15 trường ban đầu
+### 1.2. Luận chứng thiết kế: Mô hình hóa Hoạt động sinh học (Giờ ngủ & Bữa ăn) — Tách bạch Dữ liệu lưu trữ (DB) và Ràng buộc tối ưu (Scheduler)
+
+Trong đời sống sinh viên, các hoạt động sinh học như ngủ và ăn uống là tối quan trọng để duy trì sức khỏe, nhưng chúng có bản chất vận hành rất khác biệt so với các thực thể học vụ thông thường:
+
+| Tiêu chí so sánh | 1. Giấc ngủ ban đêm (Sleep Anchor) | 2. Bữa ăn linh hoạt (Floating Meals) | 3. Công việc học vụ (`Task` thông thường) |
+|---|---|---|---|
+| **Bản chất nghiệp vụ** | Nhu cầu sinh học bất biến | Nhu cầu sinh học linh hoạt | Hoạt động học tập, sự kiện phong trào |
+| **Phân loại trong Solver** | **Tầng 1: Cố định (Fixed Anchor)** | **Tầng 2: Linh hoạt (Flexible Task)** | Tầng 1 (TKB), Tầng 2 (Bài tập), Tầng 3 (Sự kiện ĐRL) |
+| **Khung giờ phân bổ** | Khóa cứng: $23:30 \to 06:30$ ($7\text{ tiếng}$) | Cửa sổ trượt hẹp: Trưa $[11:00, 13:30]$, Tối $[17:30, 20:00]$ | Theo mốc giờ BTC ấn định hoặc tự do trước deadline |
+| **Chiến lược lưu trữ CSDL** | **Không lưu vào bảng `tasks`** | **Không lưu vào bảng `tasks`** | **Lưu thành các dòng trong SQLite `tasks`** |
+| **Nguồn gốc tham số** | Cấu hình thói quen (`UserPreferences`) | Cấu hình thói quen (`UserPreferences`) | Trích xuất từ Crawler hoặc người dùng tạo tay |
+
+#### Tại sao KHÔNG lưu Giờ ngủ và Bữa ăn thành các dòng trong bảng SQLite `tasks`?
+1. **Chống ô nhiễm dữ liệu & Phình to CSDL (Database Anti-bloat)**:
+   * Nếu lưu 2 bữa ăn + 1 giấc ngủ mỗi ngày thành các bản ghi `Task`:
+     $$3\text{ hoạt động/ngày} \times 7\text{ ngày/tuần} \times 15\text{ tuần/học kỳ} = 315\text{ bản ghi rác!}$$
+   * Con số 315 bản ghi nhân tạo này sẽ làm loãng CSDL, làm chậm các truy vấn tìm kiếm ngữ nghĩa (Vector Embedding search) và khiến bảng chỉ mục B-tree phải gánh tải vô ích.
+2. **Tách bạch mối quan tâm (Separation of Concerns - SoC)**:
+   * **Bảng `tasks`** chỉ chịu trách nhiệm quản lý **thực thể dữ liệu nghiệp vụ** (Business Entities) có vòng đời hoàn chỉnh: cần crawl, dedup, đánh dấu hoàn thành (`status='done'`), hoặc kiểm tra hạn nộp.
+   * **Bảng `user_preferences`** quản lý **cấu hình thói quen sinh hoạt** (`sleep_start="23:30"`, `sleep_end="06:30"`, `lunch_window=["11:00", "13:30"]`, `dinner_window=["17:30", "20:00"]`).
+3. **Cơ chế Sinh động trong Bộ nhớ (On-the-Fly Dynamic Generation)**:
+   * Khi người dùng bấm *"Tối ưu hóa lịch tuần"*, Engine CP-SAT đọc cấu hình từ `UserPreferences` và **tự động sinh trực tiếp các đối tượng `IntervalVar` trên RAM** để đưa vào bộ ràng buộc `AddNoOverlap`. Lịch trình sau khi giải xong được chiếu trực tiếp lên giao diện Calendar mà không cần rải hàng trăm bản ghi vào đĩa cứng.
+
+### 1.3. Phân tích sự thiếu hụt của 15 trường ban đầu
 Bản đề xuất ban đầu (15 trường) mới chỉ mô tả được phần nào các **sự kiện cố định (Events)**, nhưng **thiếu hoàn toàn các trường phục vụ cho Bài tập linh hoạt (Assignments), Lịch học lặp lại (Timetable) và Bộ lập lịch tối ưu (Scheduler)**:
 
 | Vấn đề của Schema cũ | Hậu quả thực tế | Giải pháp bổ sung |
@@ -243,6 +266,10 @@ Trừu tượng hóa là bước đi khởi đầu nhằm **loại bỏ các chi
 2. **Nhìn thấu bản chất toán học (Resource Contention Abstraction):**
    * Dưới góc nhìn hệ thống tính toán, toàn bộ các hoạt động trên đều cùng cạnh tranh một loại tài nguyên hữu hạn và độc quyền duy nhất: **Quỹ thời gian của một cá nhân ($T \in [0, 24\text{h}/\text{ngày}]$)**.
    * Một con người tại một thời điểm chỉ có thể làm một việc duy nhất. Dù mang tên gọi là gì, bản chất của chúng đều chỉ là: **Một yêu cầu phân bổ trên trục thời gian (A Time-Allocation Request)**.
+
+3. **Phân biệt Thực thể Học vụ (Business Task) và Ràng buộc Môi trường Sinh học (Ambient Biological Constraints):**
+   * Quá trình trừu tượng hóa cũng chỉ ra ranh giới rõ ràng: Giờ ngủ và Bữa ăn là nhu cầu sinh học tất yếu, không mang các thuộc tính học vụ (không có mã môn `course_code`, không có điểm rèn luyện `training_points`, không có hạn nộp `deadline` hay link Moodle).
+   * Do đó, chúng được trừu tượng hóa thành **Ràng buộc Môi trường Sinh học (Ambient Constraints)** nạp từ cấu hình người dùng (`UserPreferences`) và được bộ giải CP-SAT tự động sinh động trên RAM, thay vì bị ép uổng thành các bản ghi lưu trữ trong cơ sở dữ liệu `tasks`.
 
 👉 **Cú nhảy Trừu tượng hóa**: 
 Hệ thống không cần phân mảnh theo tên gọi đời thường, mà mô hình hóa toàn bộ các hoạt động thành một thực thể trừu tượng duy nhất đặt tên là **`Task`**. Toàn bộ đường ống xử lý (Crawler $\to$ SQLite $\to$ AI Search $\to$ Lập lịch CP-SAT $\to$ UI PySide6) chỉ cần làm việc với một giao diện dữ liệu thống nhất (`TaskSchema`).
