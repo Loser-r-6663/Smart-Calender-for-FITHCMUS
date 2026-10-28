@@ -5,6 +5,7 @@ from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
 from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
+from Backend.Crawler.OSACrawler import OSACrawler
 
 
 class TaskCreator():
@@ -13,7 +14,8 @@ class TaskCreator():
             "Portal": PortalCrawler(),
             "Moodle": MoodleCrawler(),
             "FIT": FITCrawler(),
-            "HCMUS": HCMUSCrawler()
+            "HCMUS": HCMUSCrawler(),
+            "OSA": OSACrawler()
         }
     
     def crawl_raw_text(self):
@@ -33,4 +35,4 @@ class TaskCreator():
     def create_task(self):
         """Create structured data from website data"""
         raw_tasks = self.crawl_raw_text()
-        print(raw_tasks["FIT"])
+        print(raw_tasks["OSA"])
