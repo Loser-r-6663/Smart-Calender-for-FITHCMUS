@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler, expect
+from Backend.Crawler.BaseCrawler import PlaywrightCrawler, expect, convert_to_markdown
 import re
 
 
@@ -56,7 +56,7 @@ class OSACrawler(PlaywrightCrawler):
 
                 content_element = page.locator('div.hcmus-content')
                 expect(content_element).to_have_text(re.compile(r".+"))
-                raw_task["Content"] = content_element.inner_text().strip()
+                raw_task["Content"] = convert_to_markdown(content_element.inner_html())
 
                 # Add to results
                 raw_tasks.append(raw_task)

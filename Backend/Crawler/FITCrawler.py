@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
+from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler, convert_to_markdown
 
 
 class FITCrawler(BeautifulSoupCrawler):
@@ -29,7 +29,7 @@ class FITCrawler(BeautifulSoupCrawler):
                 
                 post_soup = self.get_soup(link)
                 content = post_soup.select_one("section.has_content > div > div").decode_contents()
-                markdown_content = self.convert_to_markdown(content)
+                markdown_content = convert_to_markdown(content)
                 raw_task["Content"] = markdown_content
             except Exception as e:
                 print(f"Error when parsing post item on FIT homepage: {e}")
