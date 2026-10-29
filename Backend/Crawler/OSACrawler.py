@@ -1,4 +1,5 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler
+from Backend.Crawler.BaseCrawler import PlaywrightCrawler, expect
+import re
 
 
 class OSACrawler(PlaywrightCrawler):
@@ -51,13 +52,11 @@ class OSACrawler(PlaywrightCrawler):
 
                 # Get link and content
                 article.click()
-                page.wait_for_load_state("networkidle")
-
                 raw_task["Link"] = page.url
 
-                content_element = page.locator('xpath=//div[contains(@class,"hcmus-content")]')
-                if content_element.count() > 0:
-                    raw_task["Content"] = content_element.first.inner_text().strip()
+                content_element = page.locator('div.hcmus-content')
+                expect(content_element).to_have_text(re.compile(r".+"))
+                raw_task["Content"] = content_element.inner_text().strip()
 
                 # Add to results
                 raw_tasks.append(raw_task)

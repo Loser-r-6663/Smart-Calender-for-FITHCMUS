@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright, Playwright, Page
+from playwright.sync_api import sync_playwright, Playwright, Page, expect
 from bs4 import BeautifulSoup
 from http.client import HTTPResponse
 from urllib.request import Request, urlopen
