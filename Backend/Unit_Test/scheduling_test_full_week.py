@@ -248,6 +248,19 @@ def build_full_week_mock_tasks() -> List[Task]:
             drl_category=DRLCategory.DIEU_4,
             source_platform=SourcePlatform.FACEBOOK,
         ),
+        # Sự kiện 9 (Hợp lệ - Online chỉ có end_time, không có start_time):
+        # Cuộc thi trắc nghiệm trực tuyến đóng cổng lúc 22:00 tối Thứ Năm
+        Task(
+            id="event_online_law_quiz",
+            title="Thi trắc nghiệm trực tuyến Tìm hiểu Pháp luật & Nội quy (Chỉ có hạn đóng)",
+            type=TaskType.EVENT,
+            location="Online - MyAloha",
+            start_time=None,
+            end_time=datetime(2026, 11, 5, 22, 0),
+            training_points=3,
+            drl_category=DRLCategory.DIEU_2,
+            source_platform=SourcePlatform.PORTAL,
+        ),
     ]
 
 
@@ -316,10 +329,11 @@ def verify_weekly_schedule_invariants(
     assert len(sleep_items) == 7, f"Phải có đúng 7 giấc ngủ đêm, nhưng thực tế có {len(sleep_items)}!"
     assert len(meal_items) == 14, f"Phải có đúng 14 bữa ăn (7 trưa + 7 tối), nhưng thực tế có {len(meal_items)}!"
 
-    # 6. Kiểm tra các sự kiện bẫy bắt buộc phải bị loại và các sự kiện tốt được chọn
+    # 6. Kiểm tra các sự kiện bẫy bắt buộc phải bị loại và các sự kiện tốt (gồm cả online chỉ có end_time) được chọn
     assert "event_late_gala" not in result.selected_event_ids, "Sự kiện lấn giờ ngủ 23:30 phải bị loại!"
     assert "event_hackathon_conflict" not in result.selected_event_ids, "Sự kiện trùng giờ học phải bị loại!"
     assert "event_sports_fest_travel_trap" not in result.selected_event_ids, "Sự kiện thiếu thời gian chạy xe phải bị loại!"
+    assert "event_online_law_quiz" in result.selected_event_ids, "Sự kiện ĐRL online chỉ có end_time phải được chọn!"
 
     for cat, gained in result.drl_gained_by_category.items():
         cap = DRL_CATEGORY_CAPS[cat]
@@ -382,9 +396,13 @@ def print_full_week_schedule_report(
     for ev in all_events:
         is_selected = ev.id in result.selected_event_ids
         status_tag = "[ĐƯỢC CHỌN]" if is_selected else "[BỊ LOẠI]  "
-        time_info = f"{ev.start_time.strftime('%a %d/%m %H:%M')}-{ev.end_time.strftime('%H:%M')}"  # type: ignore
+        if ev.start_time and ev.end_time:
+            time_info = f"{ev.start_time.strftime('%a %d/%m %H:%M')}-{ev.end_time.strftime('%H:%M')}"
+        else:
+            eff_end = ev.end_time or ev.deadline
+            time_info = f"Hạn: {eff_end.strftime('%a %d/%m %H:%M'):<16}" if eff_end else "Linh hoạt"
         cat_str = ev.drl_category.value if ev.drl_category else ""
-        print(f"  {status_tag} {time_info} | +{ev.training_points:2d}đ ({cat_str}) | {ev.title} [{ev.location}]")
+        print(f"  {status_tag} {time_info:<21} | +{ev.training_points:2d}đ ({cat_str}) | {ev.title} [{ev.location}]")
 
     # 3. Chi tiết thời gian biểu từng ngày (Thứ Hai -> Chủ Nhật)
     print("\n[III] THỜI GIAN BIỂU CHI TIẾT 7 NGÀY TRONG TUẦN:")

@@ -364,6 +364,49 @@ class TestSchedulerOptimization(unittest.TestCase):
         self.assertIn("event_online", result.selected_event_ids)
         self.assertEqual(result.total_drl_gained, 4)
 
+    # -------------------------------------------------------------------------
+    # CASE 8: SỰ KIỆN ĐRL ONLINE CHỈ CÓ END_TIME, KHÔNG CÓ START_TIME
+    # -------------------------------------------------------------------------
+    def test_case_8_online_drl_event_only_end_time(self):
+        """
+        Kiểm tra: Sự kiện ĐRL online (vd: Thi trắc nghiệm trực tuyến tìm hiểu quy chế)
+        không có start_time cố định, chỉ có end_time đóng cổng nộp bài.
+        Kỳ vọng: Thuật toán mô hình hóa thành Optional Flexible Interval, tự động tìm
+        khe trống (mặc định 30 phút nếu không truyền estimated_hours) trước end_time
+        để xếp vào lịch và cộng điểm ĐRL.
+        """
+        online_quiz_event = Task(
+            id="event_online_quiz",
+            title="Thi trắc nghiệm trực tuyến Tìm hiểu Quy chế Công tác Sinh viên",
+            type=TaskType.EVENT,
+            location="Online - MyAloha",
+            start_time=None,  # Không có giờ bắt đầu cố định
+            end_time=datetime(2026, 11, 3, 22, 0),  # Chỉ có thời điểm đóng cổng
+            training_points=5,
+            drl_category=DRLCategory.DIEU_2,
+            source_platform=SourcePlatform.PORTAL,
+        )
+
+        result = solve_max_drl_schedule(
+            tasks=[online_quiz_event],
+            week_start=self.week_start,
+            now=self.now_dt,
+            preferences=self.prefs,
+        )
+
+        self.assertIn(result.status, ("OPTIMAL", "FEASIBLE"))
+        self.assertIn("event_online_quiz", result.selected_event_ids)
+        self.assertEqual(result.total_drl_gained, 5)
+
+        scheduled_quiz = next(
+            (item for item in result.scheduled_items if item.task_id == "event_online_quiz"),
+            None,
+        )
+        self.assertIsNotNone(scheduled_quiz)
+        self.assertEqual(scheduled_quiz.duration_minutes, 30)  # Mặc định 30 phút
+        self.assertGreaterEqual(scheduled_quiz.start_time, self.now_dt)
+        self.assertLessEqual(scheduled_quiz.end_time, datetime(2026, 11, 3, 22, 0))
+
 
 # =============================================================================
 # HÀM CHẠY TRỰC TIẾP
@@ -377,7 +420,7 @@ if __name__ == "__main__":
     test_result = runner.run(suite)
     if test_result.wasSuccessful():
         print("\n" + "=" * 80)
-        print(">>> TẤT CẢ 7/7 UNIT TESTS ĐỀU VƯỢT QUA THÀNH CÔNG (100% PASSED)! <<<")
+        print(">>> TẤT CẢ 8/8 UNIT TESTS ĐỀU VƯỢT QUA THÀNH CÔNG (100% PASSED)! <<<")
         print("=" * 80)
         sys.exit(0)
     else:

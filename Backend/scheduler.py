@@ -355,26 +355,52 @@ def solve_max_drl_schedule(
     # -------------------------------------------------------------------------
     # BƯỚC 6: TẦNG 3 — SỰ KIỆN TÙY CHỌN TỐI ƯU ĐIỂM RÈN LUYỆN (GẮN BIẾN BOOLEAN x_i)
     # -------------------------------------------------------------------------
-    event_vars: List[Tuple[Task, cp_model.IntVar, int, int, Any]] = []
+    # Hỗ trợ 2 hình thái sự kiện ĐRL:
+    # - Hình thái 1 (Cố định giờ): Có cả start_time và end_time -> s_min, e_min là hằng số int.
+    # - Hình thái 2 (Linh hoạt/Online chỉ có hạn đóng): start_time = None, chỉ có end_time/deadline
+    #   -> s_var, e_var là biến nguyên IntVar trôi nổi trong [t_now, end_limit].
+    event_vars: List[Tuple[Task, cp_model.IntVar, Any, Any, Any]] = []
+    flexible_event_start_vars: List[cp_model.IntVar] = []
 
     for t in tasks:
         if t.is_optional_drl_event:
-            s_min = dt_to_minute(t.start_time, horizon_start)  # type: ignore
-            e_min = dt_to_minute(t.end_time, horizon_start)    # type: ignore
+            # Hình thái 1: Sự kiện có khung giờ bắt đầu và kết thúc cố định
+            if t.start_time is not None and t.end_time is not None:
+                s_min = dt_to_minute(t.start_time, horizon_start)
+                e_min = dt_to_minute(t.end_time, horizon_start)
 
-            # Nếu sự kiện đã trôi qua trước t_now hoặc nằm ngoài tuần thì bỏ qua
-            if e_min <= t_now or s_min >= horizon_limit_minutes or s_min < 0:
-                continue
+                # Nếu sự kiện đã trôi qua trước t_now hoặc nằm ngoài tuần thì bỏ qua
+                if e_min <= t_now or s_min >= horizon_limit_minutes or s_min < 0:
+                    continue
 
-            dur = e_min - s_min
-            if dur <= 0:
-                continue
+                dur = e_min - s_min
+                if dur <= 0:
+                    continue
 
-            # Biến Boolean x_i: 1 nếu chọn đi sự kiện, 0 nếu không đi
-            x_i = model.NewBoolVar(f"select_event_{t.id}")
-            opt_int = model.NewOptionalIntervalVar(s_min, dur, e_min, x_i, f"event_{t.id}")
-            all_intervals.append(opt_int)
-            event_vars.append((t, x_i, s_min, e_min, opt_int))
+                # Biến Boolean x_i: 1 nếu chọn đi sự kiện, 0 nếu không đi
+                x_i = model.NewBoolVar(f"select_event_{t.id}")
+                opt_int = model.NewOptionalIntervalVar(s_min, dur, e_min, x_i, f"event_{t.id}")
+                all_intervals.append(opt_int)
+                event_vars.append((t, x_i, s_min, e_min, opt_int))
+
+            # Hình thái 2: Sự kiện online không có start_time, chỉ có end_time hoặc deadline
+            elif t.start_time is None and (t.end_time is not None or t.deadline is not None):
+                eff_end_dt = t.end_time if t.end_time is not None else t.deadline
+                end_limit_min = min(horizon_limit_minutes, dt_to_minute(eff_end_dt, horizon_start))  # type: ignore
+                dur = t.duration_minutes
+
+                # Nếu hạn đóng sự kiện không đủ thời lượng thực hiện từ t_now thì bỏ qua
+                if dur <= 0 or end_limit_min < t_now + dur:
+                    continue
+
+                x_i = model.NewBoolVar(f"select_flex_event_{t.id}")
+                s_var = model.NewIntVar(t_now, end_limit_min - dur, f"s_flex_event_{t.id}")
+                e_var = model.NewIntVar(t_now + dur, end_limit_min, f"e_flex_event_{t.id}")
+                opt_int = model.NewOptionalIntervalVar(s_var, dur, e_var, x_i, f"flex_event_{t.id}")
+
+                all_intervals.append(opt_int)
+                event_vars.append((t, x_i, s_var, e_var, opt_int))
+                flexible_event_start_vars.append(s_var)
 
     # -------------------------------------------------------------------------
     # BƯỚC 7: RÀNG BUỘC LOẠI TRỪ LẪN NHAU TOÀN CỤC (KHÔNG TRÙNG LỊCH - ADD_NO_OVERLAP)
@@ -384,12 +410,16 @@ def solve_max_drl_schedule(
     # -------------------------------------------------------------------------
     # BƯỚC 8: RÀNG BUỘC DI CHUYỂN GIỮA CÁC CƠ SỞ ĐÀO TẠO KÈM ĐỆM NGHỈ (CS1 <-> CS2)
     # -------------------------------------------------------------------------
-    # A. Giữa cặp 2 sự kiện ĐRL tùy chọn i và k
+    # A. Giữa cặp 2 sự kiện ĐRL tùy chọn i và k (Chỉ xét các sự kiện có mốc giờ cố định offline)
     num_events = len(event_vars)
     for i in range(num_events):
         task_i, x_i, s_i, e_i, _ = event_vars[i]
+        if not (isinstance(s_i, int) and isinstance(e_i, int)):
+            continue
         for k in range(i + 1, num_events):
             task_k, x_k, s_k, e_k, _ = event_vars[k]
+            if not (isinstance(s_k, int) and isinstance(e_k, int)):
+                continue
             travel_ik = get_travel_time(task_i.location, task_k.location, preferences)
             if travel_ik > 0:
                 # Nếu i kết thúc trước k mà không kịp di chuyển
@@ -401,6 +431,8 @@ def solve_max_drl_schedule(
 
     # B. Giữa sự kiện ĐRL tùy chọn i và Khối cố định m (Lịch học TKB)
     for task_i, x_i, s_i, e_i, _ in event_vars:
+        if not (isinstance(s_i, int) and isinstance(e_i, int)):
+            continue
         for fixed_task, s_m, e_m in fixed_tasks_records:
             travel_im = get_travel_time(task_i.location, fixed_task.location, preferences)
             if travel_im > 0:
@@ -443,11 +475,12 @@ def solve_max_drl_schedule(
     # Mục tiêu chính: Tối đa hóa tổng điểm ĐRL thực tế tăng thêm
     total_gain_expr = sum(gain_vars[cat] for cat in categories)
 
-    # Mục tiêu phụ (Tie-Breaker): Ưu tiên làm bài tập sớm hơn nếu có slot trống
-    # Trọng số: 100_000 * ĐRL - early_assignment_penalty
-    # Đảm bảo 1 điểm ĐRL (100_000) luôn áp đảo toàn bộ tổng phút của tuần (max ~ 50_000)
-    early_assignment_penalty = sum(s_assign for _, s_assign, _, _ in assignment_vars) if assignment_vars else 0
-    model.Maximize(100_000 * total_gain_expr - early_assignment_penalty)
+    # Mục tiêu phụ (Tie-Breaker): Ưu tiên làm bài tập và sự kiện online sớm hơn nếu có slot trống
+    # Trọng số: 1_000_000 * ĐRL - early_start_penalty
+    # Đảm bảo 1 điểm ĐRL (1_000_000) luôn áp đảo toàn bộ tổng phút của tuần
+    all_flexible_starts = [s_assign for _, s_assign, _, _ in assignment_vars] + flexible_event_start_vars
+    early_start_penalty = sum(all_flexible_starts) if all_flexible_starts else 0
+    model.Maximize(1_000_000 * total_gain_expr - early_start_penalty)
 
     # -------------------------------------------------------------------------
     # BƯỚC 10: CẤU HÌNH ĐA LUỒNG VÀ GỌI BỘ GIẢI GOOGLE OR-TOOLS CP-SAT
@@ -572,18 +605,20 @@ def solve_max_drl_schedule(
         drl_gained_by_cat[cat] = val
         total_gained += val
 
-    for t, x_i, s_min, e_min, _ in event_vars:
+    for t, x_i, s_min_or_var, e_min_or_var, _ in event_vars:
         if solver.Value(x_i) == 1:
+            s_val = s_min_or_var if isinstance(s_min_or_var, int) else solver.Value(s_min_or_var)
+            e_val = e_min_or_var if isinstance(e_min_or_var, int) else solver.Value(e_min_or_var)
             selected_event_ids.append(t.id)
             scheduled_items.append(
                 ScheduledItem(
                     task_id=t.id,
                     title=f"ĐRL (+{t.training_points}): {t.title}",
                     item_type=t.type.value,
-                    start_time=minute_to_dt(s_min, horizon_start),
-                    end_time=minute_to_dt(e_min, horizon_start),
-                    duration_minutes=e_min - s_min,
-                    location=t.location,
+                    start_time=minute_to_dt(s_val, horizon_start),
+                    end_time=minute_to_dt(e_val, horizon_start),
+                    duration_minutes=e_val - s_val,
+                    location=t.location or "Online",
                     training_points=t.training_points,
                     drl_category=t.drl_category.value if t.drl_category else None,
                     details=f"Điểm thưởng: +{t.training_points} [{t.drl_category.value if t.drl_category else ''}]",

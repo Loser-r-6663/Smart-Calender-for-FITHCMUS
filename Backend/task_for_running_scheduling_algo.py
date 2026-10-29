@@ -285,6 +285,7 @@ class Task(BaseModel):
         Tính thời lượng công việc quy đổi ra phút:
         - Nếu có start_time và end_time: lấy chênh lệch thực tế.
         - Nếu có estimated_hours: lấy estimated_hours * 60.
+        - Nếu là sự kiện ĐRL online chỉ có end_time/deadline mà không truyền estimated_hours: mặc định 30 phút.
         - Mặc định: 0 phút.
         """
         if self.start_time and self.end_time:
@@ -292,6 +293,12 @@ class Task(BaseModel):
             return max(1, int(delta.total_seconds() / 60))
         if self.estimated_hours:
             return max(1, int(self.estimated_hours * 60))
+        if (
+            self.type == TaskType.EVENT
+            and self.start_time is None
+            and (self.end_time is not None or self.deadline is not None)
+        ):
+            return 30
         return 0
 
     @property
@@ -327,14 +334,20 @@ class Task(BaseModel):
     def is_optional_drl_event(self) -> bool:
         """
         Kiểm tra tác vụ có thuộc Tầng 3 (Sự kiện tùy chọn kiếm ĐRL / Optional Events):
-        Có mốc giờ cố định và có điểm ĐRL > 0.
+        Hỗ trợ cả 2 hình thái:
+        1. Sự kiện cố định khung giờ (Offline / Webinar live): có cả start_time và end_time.
+        2. Sự kiện online linh hoạt (Trắc nghiệm / Khảo sát / Minigame): không có start_time,
+           chỉ có hạn đóng cổng (end_time hoặc deadline).
         """
         if self.status != TaskStatus.ACTIVE:
             return False
+        has_valid_time = (
+            (self.start_time is not None and self.end_time is not None)
+            or (self.start_time is None and (self.end_time is not None or self.deadline is not None))
+        )
         return bool(
             self.type == TaskType.EVENT
-            and self.start_time is not None
-            and self.end_time is not None
+            and has_valid_time
             and self.training_points > 0
         )
 
