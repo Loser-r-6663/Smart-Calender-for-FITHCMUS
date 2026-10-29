@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import time, PlaywrightCrawler
+from Backend.Crawler.BaseCrawler import PlaywrightCrawler, time_is_expired
 from dotenv import load_dotenv
 import os
 
@@ -13,8 +13,7 @@ class PortalCrawler(PlaywrightCrawler):
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
-        now = time.time()
-        if cookies["TwoFaTrustedDevice"]["expires"] < now + 60:
+        if time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
             return False, {"headless": False, "storage_state": None}
         else:
             return False, {"headless": True, "storage_state": self.state_file}

@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
+from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler, convert_to_markdown
 
 
 class HCMUSCrawler(BeautifulSoupCrawler):
@@ -33,7 +33,7 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 
                 post_soup = self.get_soup(link)
                 content = post_soup.select_one("div.entry-content").decode_contents()
-                markdown_content = self.convert_to_markdown(content)
+                markdown_content = convert_to_markdown(content)
                 raw_task["Content"] = markdown_content
             except Exception as e:
                 print(f"Error when parsing article item on HCMUS homepage: {e}")
