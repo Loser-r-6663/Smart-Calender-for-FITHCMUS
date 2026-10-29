@@ -15,7 +15,7 @@ class TaskCreator():
             "Moodle": MoodleCrawler(),
             "FIT": FITCrawler(),
             "HCMUS": HCMUSCrawler(),
-            "OSA": OSACrawler()
+            # "OSA": OSACrawler()
         }
     
     def crawl_raw_text(self):
@@ -35,4 +35,4 @@ class TaskCreator():
     def create_task(self):
         """Create structured data from website data"""
         raw_tasks = self.crawl_raw_text()
-        print(raw_tasks["OSA"])
+        print(raw_tasks)

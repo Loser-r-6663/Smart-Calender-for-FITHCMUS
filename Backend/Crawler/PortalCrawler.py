@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler
+from Backend.Crawler.BaseCrawler import time, PlaywrightCrawler
 from dotenv import load_dotenv
 import os
 
@@ -9,15 +9,21 @@ class PortalCrawler(PlaywrightCrawler):
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
     
-    def login(self, p, state_file):
-        storage_state = None if state_file["NotFound"] else self.state_file
+    def check_state(self, p, cookies):
+        if not cookies:
+            return False, {"headless": False, "storage_state": None}
         
-        browser = p.chromium.launch(headless=not (state_file["NotFound"] or state_file["AllExpires"]))
-        context = browser.new_context(storage_state=storage_state)
-        page = context.new_page()
-        
+        now = time.time()
+        if cookies["TwoFaTrustedDevice"]["expires"] < now + 60:
+            return False, {"headless": False, "storage_state": None}
+        else:
+            return False, {"headless": True, "storage_state": self.state_file}
+    
+    def login(self, p, browser_settings):
+        browser, context, page = self.start_browser(p, browser_settings)
         page.goto(self.home_url)
-        if page.url == self.login_url:        
+        
+        if page.url == self.login_url:
             # Fill in the login form and submit
             load_dotenv()
             username = os.getenv("PORTAL_USERNAME")

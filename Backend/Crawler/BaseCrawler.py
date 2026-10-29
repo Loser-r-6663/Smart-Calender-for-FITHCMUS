@@ -18,45 +18,58 @@ class PlaywrightCrawler(BaseCrawler):
     def __init__(self):
         self.state_file: str
     
-    def login(self, p: Playwright, state_file: dict[str, bool]):
+    def login(self, p: Playwright, browser_settings: dict | None = None):
         """Login to the website and save the login state to a file"""
     
-    def check_state(self):
+    def get_state(self):
         """Check if the storage state file is valid and not expired
         Returns:
-            state_file (dict):
-                - NotFound (bool): if the state file does not exist
-                - AnyExpires (bool): if any of the cookies in the state file are expired
-                - AllExpires (bool): if all of the cookies in the state file are expired
+            cookies (dict): A dictionary of cookies if the state file is valid, otherwise None
         """
         path = Path(self.state_file)
-        compose = lambda i, j, k: {"NotFound": i, "AnyExpires": j, "AllExpires": k}
-        if not path.is_file(): return compose(True, True, True)
+        if not path.is_file(): return None
         
-        try:
-            with path.open("r", encoding="utf-8") as f:
-                state: dict[str, list[dict[str, int]]] = json.load(f)
-            
-            now = time.time()
-            expires_list = [
-                cookie.get("expires", -1) != -1 and cookie["expires"] < now + 60
-                for cookie in state.get("cookies", [])
-            ]
-            return compose(False, any(expires_list), all(expires_list))
+        with path.open("r", encoding="utf-8") as f:
+            state: dict[str, list[dict[str, int|str]]] = json.load(f)
+            cookies = {i["name"]: i for i in state.get("cookies", [])}
         
-        except (OSError, json.JSONDecodeError, TypeError, KeyError):
-            return compose(True, True, True)
+        return cookies
+    
+    def check_state(self, p: Playwright, cookies: dict[str, dict[str, int | str]] | None):
+        """Check if the storage state file is valid and not expired
+        Returns:
+            - is_valid (bool): True if the state file is valid, otherwise False
+            - browser_settings (dict, None): The ways to launch the browser if the state file is invalid
+        """
+        return True, None
+    
+    def start_browser(self, p: Playwright, browser_settings: dict | None = None):
+        """Start a new browser instance with the given settings"""
+        if browser_settings is None:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(storage_state=None)
+            page = context.new_page()
+        else:
+            browser = p.chromium.launch(headless=browser_settings.get("headless", True))
+            context = browser.new_context(storage_state=browser_settings.get("storage_state", None))
+            page = context.new_page()
+        return browser, context, page
     
     def fetch_data(self):
         """Fetch data from the website by logging in and interacting with the page"""
         with sync_playwright() as p:
-            print(f"Checking login state for {self.__class__.__name__}...")
-            self.login(p, self.check_state())
-            print(f"Login state for {self.__class__.__name__} is valid. Starting to scrape data...")
+            print(f"🌐 Checking login state for {self.__class__.__name__}...")
             
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(storage_state=self.state_file)
-            page = context.new_page()
+            cookies = self.get_state()
+            is_valid, browser_settings = self.check_state(p, cookies)
+            if not is_valid:
+                self.login(p, browser_settings)
+            
+            print(f"🌐 Login state for {self.__class__.__name__} is valid. Starting to scrape data...")
+            
+            browser, _, page = self.start_browser(p, {
+                "headless": True, "storage_state": self.state_file
+            })
             
             raw_task = self.interact(page)
             browser.close()
@@ -73,12 +86,12 @@ class BeautifulSoupCrawler(BaseCrawler):
     
     def fetch_data(self):
         """Download the target page and parse it with BeautifulSoup."""
-        print(f"Starting to scrape data from {self.__class__.__name__}...")
+        print(f"🌐 Starting to scrape data from {self.__class__.__name__}...")
         soup = self.get_soup(self.home_url)
         
         # Get last crawled state from the state file
         last_post = self.get_last_post()
-        print(f"Last crawled post: {last_post}")
+        print(f"🌐 Last crawled post: {last_post}")
         
         raw_tasks = self.parse(soup, last_post)
         self.set_last_post(raw_tasks)
