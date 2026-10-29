@@ -1,24 +1,11 @@
 from Backend.Crawler.BaseCrawler import PlaywrightCrawler
-from playwright.sync_api import sync_playwright
+
 
 class OSACrawler(PlaywrightCrawler):
-
     def __init__(self):
-        self.state_file = "Backend/Crawler/State/OSAState.json"
+        self.state_file = None
         self.home_url = "https://ctsv.hcmus.edu.vn/info/"
-
-    def login(self, p, state_file):
-        # Login
-        storage_state = None if state_file["NotFound"] else self.state_file
-        browser = p.chromium.launch(headless=not (state_file["NotFound"] or state_file["AllExpires"]))
-        context = browser.new_context(storage_state=storage_state)
-
-        page = context.new_page()
-        page.goto(self.home_url)
-
-        context.storage_state(path=self.state_file)
-        browser.close()
-
+    
     def interact(self, page):
         # Access homepage, wait for loading
         page.goto(self.home_url, wait_until="networkidle")
@@ -31,7 +18,6 @@ class OSACrawler(PlaywrightCrawler):
         # Get all articles
         article_elements = page.locator('xpath=//div[contains(@class, "cursor-pointer") and contains(@class, "h-full")]')
         count = article_elements.count()
-        print(f"Found {count} posts using XPath.")
 
         # Initialize raw tasks
         raw_tasks = []

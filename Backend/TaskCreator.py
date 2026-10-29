@@ -15,7 +15,7 @@ class TaskCreator():
             "Moodle": MoodleCrawler(),
             "FIT": FITCrawler(),
             "HCMUS": HCMUSCrawler(),
-            # "OSA": OSACrawler()
+            "OSA": OSACrawler()
         }
     
     def crawl_raw_text(self):

@@ -26,6 +26,7 @@ class PlaywrightCrawler(BaseCrawler):
         Returns:
             cookies (dict): A dictionary of cookies if the state file is valid, otherwise None
         """
+        if not self.state_file: return None
         path = Path(self.state_file)
         if not path.is_file(): return None
         
