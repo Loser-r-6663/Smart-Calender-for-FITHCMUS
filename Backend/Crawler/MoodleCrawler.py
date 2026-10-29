@@ -36,13 +36,34 @@ class MoodleCrawler(PlaywrightCrawler):
         browser.close()
     
     def interact(self, page):
-        page.goto(self.home_url)
+        page.goto(self.home_url, wait_until="networkidle")
+        raw_tasks = []
         
-        # Crawling the assignment list
-        container = page.locator('//div[@data-region="event-list-container"]')
+        container = page.locator('div[data-region="event-list-container"]')
         container.scroll_into_view_if_needed()
         
-        ASSIGNMENT_SELECTOR = '//div[@data-region="event-list-container"]//a'
-        page.locator(ASSIGNMENT_SELECTOR).is_visible(timeout=10000)
-        assignments = page.locator(ASSIGNMENT_SELECTOR).all()
-        return assignments
+        wrapper = page.locator('div[data-region="event-list-wrapper"]').all()
+        for content in wrapper:
+            raw_task = {"Title": "N/A", "Link": "N/A", "DueDatetime": "N/A", "Course": "N/A"}
+            
+            try:
+                due_date = content.locator('h4').inner_text()
+                
+                items = content.locator('div[data-region="event-list-item"]').all()
+                for item in items:
+                    title = item.locator('h5.event-name > a').get_attribute('title')
+                    raw_task["Title"] = title
+                    
+                    link = item.locator('h5.event-name > a').get_attribute('href')
+                    raw_task["Link"] = link
+                    
+                    due_time = item.locator('small.text-end').inner_text()
+                    raw_task["DueDatetime"] = f"{due_date} {due_time}"
+                    
+                    course = item.locator('small.mb-0').inner_text()
+                    raw_task["Course"] = course                    
+            except Exception as e:
+                print(f"Error when parsing assignment on Moodle: {e}")
+            
+            raw_tasks.append(raw_task)
+        return raw_tasks
