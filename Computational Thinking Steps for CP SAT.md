@@ -373,26 +373,26 @@ Khi phát hiện xung đột (ví dụ: không còn đủ thời gian làm bài 
 
 ```mermaid
 flowchart TD
-    Start([Nhận dữ liệu đầu vào: events, assignments, busy, now, prefs, current_points]) --> Step1[Bước 1: Khởi tạo mô hình CpModel & Chuẩn hóa trục thời gian sang phút]
+    Start([Nhận dữ liệu đầu vào: tasks, week_start, now, current_drl_points, preferences]) --> Step1["Bước 1: Khởi tạo mô hình CpModel & Chuẩn hóa trục thời gian sang phút [0, 10080]"]
     
-    Step1 --> Step2[Bước 2: Khóa cứng quá khứ: Tạo Interval cho khoảng 0 -> now]
-    Step2 --> Step3[Bước 3: Tạo Fixed Intervals: BusySlots, ManualSlots + Sinh động Giờ ngủ 23:30-06:30]
-    Step2 --> Step4[Bước 4: Sinh động Floating Meal Windows cho Bữa trưa & Bữa tối 7 ngày]
-    Step2 --> Step5[Bước 5: Tạo Flexible Intervals cho Bài tập: [now, deadline]]
-    Step2 --> Step6[Bước 6: Tạo Optional Intervals cho Sự kiện ĐRL gắn với biến Bool x_i]
+    Step1 --> Step2["Bước 2: Khóa cứng quá khứ: Tạo Interval cho khoảng [0, t_now]"]
+    Step2 --> Step3["Bước 3: Tạo Fixed Intervals: TKB, việc riêng + Sinh động Giờ ngủ đêm theo UserPreferences"]
+    Step2 --> Step4["Bước 4: Sinh động Floating Meal Windows cho Bữa trưa & Bữa tối 7 ngày theo UserPreferences"]
+    Step2 --> Step5["Bước 5: Tạo Flexible Intervals cho Bài tập Moodle: [t_now, deadline]"]
+    Step2 --> Step6["Bước 6: Tạo Optional Intervals cho Sự kiện ĐRL: Cố định giờ & Online linh hoạt trước hạn chót"]
     
-    Step3 & Step4 & Step5 & Step6 --> Step7[Bước 7: Kích hoạt Ràng buộc Toàn cục AddNoOverlap]
+    Step3 & Step4 & Step5 & Step6 --> Step7["Bước 7: Kích hoạt Ràng buộc Toàn cục AddNoOverlap"]
     
-    Step7 --> Step8[Bước 8: Thiết lập Ràng buộc Di chuyển + REST_BUFFER giữa các cặp sự kiện]
-    Step8 --> Step9[Bước 9: Xây dựng Hàm Mục Tiêu có trần điều bằng AddMinEquality]
+    Step7 --> Step8["Bước 8: Thiết lập Ràng buộc Di chuyển + REST_BUFFER giữa các cặp sự kiện CS1 và CS2"]
+    Step8 --> Step9["Bước 9: Xây dựng Hàm Mục Tiêu: Cắt trần ĐRL 5 Điều + Phạt trễ early_start_penalty"]
     
-    Step9 --> Step10[Bước 10: Cấu hình CpSolver: 2 workers, timeout 3.0s -> solver.Solve]
+    Step9 --> Step10["Bước 10: Cấu hình CpSolver: 2 workers, timeout 3.0s -> solver.Solve"]
     
     Step10 --> Decision{Trạng thái nghiệm?}
-    Decision -- OPTIMAL / FEASIBLE --> Success[Trích xuất danh sách sự kiện ĐRL được chọn & slot bài tập]
-    Decision -- INFEASIBLE --> Fallback[Báo cáo xung đột / Dự phòng bằng Greedy Reservation]
+    Decision -- OPTIMAL / FEASIBLE --> Success["Trích xuất ScheduleResult: Sự kiện ĐRL được chọn, Lịch bài tập, Giờ ăn/ngủ"]
+    Decision -- INFEASIBLE / TIMEOUT --> Fallback["Báo cáo lý do xung đột hoặc quá thời gian giải"]
     
-    Success --> End([Trả về kết quả PlanResult cho UI])
+    Success --> End(["Trả về ScheduleResult hoàn chỉnh cho UI / Client"])
     Fallback --> End
 ```
 
