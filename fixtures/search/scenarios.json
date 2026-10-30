@@ -1,0 +1,52 @@
+[
+  {
+    "id": "edited",
+    "from_state": "base",
+    "operation": "update",
+    "task_id": "asg-update",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "changes": {
+      "title": "Final retrieval report",
+      "deadline": "2026-11-02T23:59:00+07:00",
+      "updated_at": "2026-10-30T12:00:00+07:00"
+    },
+    "before_queries": [
+      "q25",
+      "q27"
+    ],
+    "after_queries": [
+      "q26",
+      "q28"
+    ]
+  },
+  {
+    "id": "cancelled",
+    "from_state": "base",
+    "operation": "update",
+    "task_id": "evt-cancel",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "changes": {
+      "status": "cancelled",
+      "updated_at": "2026-10-30T12:00:00+07:00"
+    },
+    "before_queries": [
+      "q29"
+    ],
+    "after_queries": [
+      "q30"
+    ]
+  },
+  {
+    "id": "deleted",
+    "from_state": "base",
+    "operation": "delete",
+    "task_id": "evt-delete",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "before_queries": [
+      "q31"
+    ],
+    "after_queries": [
+      "q32"
+    ]
+  }
+]
