@@ -52,21 +52,24 @@ class UserPreferences:
     Cấu hình thói quen sinh học và di chuyển của sinh viên.
     Được nạp từ bảng user_preferences để sinh động (on-the-fly) các khoảng thời gian
     trong bộ nhớ RAM mà không cần lưu thành bản ghi rác trong bảng SQLite tasks.
+    Người dùng có thể tùy ý cấu hình giờ ăn, thời lượng ăn, giờ ngủ và thời lượng ngủ.
     """
-    # Khung giờ ngủ ban đêm cố định (Tầng 1 - Khối Cố Định: 23:30 -> 06:30)
+    # Khung giờ ngủ ban đêm cố định (Mặc định: 23:30 -> 06:30 = 420 phút)
+    # Người dùng có thể cấu hình theo (giờ đi ngủ + giờ thức dậy) HOẶC (giờ đi ngủ + sleep_duration_minutes)
     sleep_start_hour: int = 23
     sleep_start_minute: int = 30
     sleep_end_hour: int = 6
     sleep_end_minute: int = 30
+    sleep_duration_minutes: Optional[int] = None  # Nếu được truyền (vd: 360p, 480p), sẽ ưu tiên dùng thời lượng này
 
-    # Khung giờ ăn trưa linh hoạt (Tầng 2 - Cửa sổ Bữa ăn trượt: 11:00 -> 13:30)
+    # Khung giờ ăn trưa linh hoạt (Mặc định cửa sổ: 11:00 -> 13:30, thời lượng 45 phút)
     lunch_window_start_hour: int = 11
     lunch_window_start_minute: int = 0
     lunch_window_end_hour: int = 13
     lunch_window_end_minute: int = 30
     lunch_duration_minutes: int = 45
 
-    # Khung giờ ăn tối linh hoạt (Tầng 2 - Cửa sổ Bữa ăn trượt: 17:30 -> 20:00)
+    # Khung giờ ăn tối linh hoạt (Mặc định cửa sổ: 17:30 -> 20:00, thời lượng 60 phút)
     dinner_window_start_hour: int = 17
     dinner_window_start_minute: int = 30
     dinner_window_end_hour: int = 20
@@ -79,6 +82,30 @@ class UserPreferences:
 
     # Giới hạn chống kiệt sức (Anti-Burnout)
     max_work_hours_per_day: float = 11.0
+
+    def get_sleep_interval_for_day(self, day_k: int) -> Tuple[int, int, int]:
+        """
+        Tính mốc phút bắt đầu ngủ, kết thúc ngủ và thời lượng ngủ của đêm ngày day_k (0 = Thứ Hai ... 6 = Chủ Nhật).
+        Hỗ trợ cả trường hợp đi ngủ trước nửa đêm (vd: 22:30, 23:30) lẫn sau nửa đêm (vd: 00:30, 01:00),
+        và ưu tiên sleep_duration_minutes nếu người dùng cấu hình trực tiếp thời lượng ngủ.
+        """
+        if self.sleep_start_hour >= 12:
+            # Đi ngủ vào buổi tối ngày day_k (vd: 22:00, 23:30)
+            night_start = day_k * 1440 + self.sleep_start_hour * 60 + self.sleep_start_minute
+        else:
+            # Đi ngủ sau nửa đêm (rạng sáng ngày day_k + 1, vd: 00:30, 01:00)
+            night_start = (day_k + 1) * 1440 + self.sleep_start_hour * 60 + self.sleep_start_minute
+
+        if self.sleep_duration_minutes is not None:
+            sleep_dur = max(0, self.sleep_duration_minutes)
+            night_end = night_start + sleep_dur
+        else:
+            night_end = (day_k + 1) * 1440 + self.sleep_end_hour * 60 + self.sleep_end_minute
+            if night_end <= night_start:
+                night_end += 1440
+            sleep_dur = night_end - night_start
+
+        return night_start, night_end, sleep_dur
 
 
 # =============================================================================
@@ -246,11 +273,11 @@ def solve_max_drl_schedule(
                     all_intervals.append(fixed_int)
                     fixed_tasks_records.append((t, s_min, e_min))
 
-    # Sinh động Giờ ngủ ban đêm bảo vệ nhịp sinh học (23:30 -> 06:30 mỗi đêm, đủ 7 đêm)
-    # Đêm đầu tuần (Thứ Hai sáng sớm: 00:00 -> 06:30)
-    mon_morning_sleep_end = 6 * 60 + preferences.sleep_end_minute
-    if mon_morning_sleep_end > t_now:
-        sleep_start = max(t_now, 0)
+    # Sinh động Giờ ngủ ban đêm bảo vệ nhịp sinh học theo cấu hình người dùng (đủ 7 đêm)
+    # Đêm trước đầu tuần (Chủ Nhật rạng sáng Thứ Hai: day_k = -1)
+    prev_night_start, mon_morning_sleep_end, prev_sleep_dur = preferences.get_sleep_interval_for_day(-1)
+    if prev_sleep_dur > 0 and mon_morning_sleep_end > t_now:
+        sleep_start = max(t_now, 0, prev_night_start)
         sleep_dur = mon_morning_sleep_end - sleep_start
         if sleep_dur > 0:
             int_sleep_mon = model.NewIntervalVar(
@@ -260,10 +287,9 @@ def solve_max_drl_schedule(
 
     # 7 đêm k = 0 (Thứ Hai) đến k = 6 (Chủ Nhật)
     for day_k in range(7):
-        # 23:30 tối ngày day_k
-        night_start = day_k * 1440 + preferences.sleep_start_hour * 60 + preferences.sleep_start_minute
-        # 06:30 sáng hôm sau
-        night_end = (day_k + 1) * 1440 + preferences.sleep_end_hour * 60 + preferences.sleep_end_minute
+        night_start, night_end, cfg_sleep_dur = preferences.get_sleep_interval_for_day(day_k)
+        if cfg_sleep_dur <= 0:
+            continue
         night_end_clamped = min(horizon_limit_minutes, night_end)
 
         if night_end_clamped > t_now and night_start < horizon_limit_minutes:
@@ -284,35 +310,37 @@ def solve_max_drl_schedule(
     for day_k in range(7):
         day_offset = day_k * 1440
 
-        # A. Bữa trưa (Cửa sổ sinh học: 11:00 -> 13:30, thời lượng 45 phút)
-        lunch_w_start = day_offset + preferences.lunch_window_start_hour * 60 + preferences.lunch_window_start_minute
-        lunch_w_end = day_offset + preferences.lunch_window_end_hour * 60 + preferences.lunch_window_end_minute
+        # A. Bữa trưa (Tùy chỉnh khung giờ và thời lượng theo preferences)
         lunch_dur = preferences.lunch_duration_minutes
-        latest_lunch_start = lunch_w_end - lunch_dur
+        if lunch_dur > 0:
+            lunch_w_start = day_offset + preferences.lunch_window_start_hour * 60 + preferences.lunch_window_start_minute
+            lunch_w_end = day_offset + preferences.lunch_window_end_hour * 60 + preferences.lunch_window_end_minute
+            latest_lunch_start = lunch_w_end - lunch_dur
 
-        if latest_lunch_start >= t_now:
-            earliest_start = max(t_now, lunch_w_start)
-            if earliest_start <= latest_lunch_start:
-                s_lunch = model.NewIntVar(earliest_start, latest_lunch_start, f"s_lunch_{day_k}")
-                e_lunch = model.NewIntVar(earliest_start + lunch_dur, lunch_w_end, f"e_lunch_{day_k}")
-                int_lunch = model.NewIntervalVar(s_lunch, lunch_dur, e_lunch, f"lunch_{day_k}")
-                all_intervals.append(int_lunch)
-                lunch_vars.append((day_k, s_lunch, e_lunch, int_lunch))
+            if latest_lunch_start >= t_now:
+                earliest_start = max(t_now, lunch_w_start)
+                if earliest_start <= latest_lunch_start:
+                    s_lunch = model.NewIntVar(earliest_start, latest_lunch_start, f"s_lunch_{day_k}")
+                    e_lunch = model.NewIntVar(earliest_start + lunch_dur, lunch_w_end, f"e_lunch_{day_k}")
+                    int_lunch = model.NewIntervalVar(s_lunch, lunch_dur, e_lunch, f"lunch_{day_k}")
+                    all_intervals.append(int_lunch)
+                    lunch_vars.append((day_k, s_lunch, e_lunch, int_lunch))
 
-        # B. Bữa tối (Cửa sổ sinh học: 17:30 -> 20:00, thời lượng 60 phút)
-        dinner_w_start = day_offset + preferences.dinner_window_start_hour * 60 + preferences.dinner_window_start_minute
-        dinner_w_end = day_offset + preferences.dinner_window_end_hour * 60 + preferences.dinner_window_end_minute
+        # B. Bữa tối (Tùy chỉnh khung giờ và thời lượng theo preferences)
         dinner_dur = preferences.dinner_duration_minutes
-        latest_dinner_start = dinner_w_end - dinner_dur
+        if dinner_dur > 0:
+            dinner_w_start = day_offset + preferences.dinner_window_start_hour * 60 + preferences.dinner_window_start_minute
+            dinner_w_end = day_offset + preferences.dinner_window_end_hour * 60 + preferences.dinner_window_end_minute
+            latest_dinner_start = dinner_w_end - dinner_dur
 
-        if latest_dinner_start >= t_now:
-            earliest_dinner_start = max(t_now, dinner_w_start)
-            if earliest_dinner_start <= latest_dinner_start:
-                s_dinner = model.NewIntVar(earliest_dinner_start, latest_dinner_start, f"s_dinner_{day_k}")
-                e_dinner = model.NewIntVar(earliest_dinner_start + dinner_dur, dinner_w_end, f"e_dinner_{day_k}")
-                int_dinner = model.NewIntervalVar(s_dinner, dinner_dur, e_dinner, f"dinner_{day_k}")
-                all_intervals.append(int_dinner)
-                dinner_vars.append((day_k, s_dinner, e_dinner, int_dinner))
+            if latest_dinner_start >= t_now:
+                earliest_dinner_start = max(t_now, dinner_w_start)
+                if earliest_dinner_start <= latest_dinner_start:
+                    s_dinner = model.NewIntVar(earliest_dinner_start, latest_dinner_start, f"s_dinner_{day_k}")
+                    e_dinner = model.NewIntVar(earliest_dinner_start + dinner_dur, dinner_w_end, f"e_dinner_{day_k}")
+                    int_dinner = model.NewIntervalVar(s_dinner, dinner_dur, e_dinner, f"dinner_{day_k}")
+                    all_intervals.append(int_dinner)
+                    dinner_vars.append((day_k, s_dinner, e_dinner, int_dinner))
 
     # -------------------------------------------------------------------------
     # BƯỚC 5: TẦNG 2 — CÔNG VIỆC LINH HOẠT BẮT BUỘC (BÀI TẬP MOODLE, ĐỒ ÁN)
@@ -530,10 +558,12 @@ def solve_max_drl_schedule(
 
     # 2. Trích xuất Giờ ngủ (Sleep Anchors)
     for day_k in range(7):
-        night_start = day_k * 1440 + preferences.sleep_start_hour * 60 + preferences.sleep_start_minute
-        night_end = (day_k + 1) * 1440 + preferences.sleep_end_hour * 60 + preferences.sleep_end_minute
+        night_start, night_end, cfg_sleep_dur = preferences.get_sleep_interval_for_day(day_k)
+        if cfg_sleep_dur <= 0:
+            continue
         s_dt = minute_to_dt(night_start, horizon_start)
         e_dt = minute_to_dt(night_end, horizon_start)
+        sleep_hours_str = f"{cfg_sleep_dur / 60:.1f}".rstrip("0").rstrip(".")
         scheduled_items.append(
             ScheduledItem(
                 task_id=f"sleep_night_{day_k}",
@@ -541,9 +571,9 @@ def solve_max_drl_schedule(
                 item_type="sleep",
                 start_time=s_dt,
                 end_time=e_dt,
-                duration_minutes=420,
+                duration_minutes=cfg_sleep_dur,
                 location="Nhà / KTX",
-                details="Bảo vệ nhịp sinh học & chống kiệt sức (7 tiếng)",
+                details=f"Bảo vệ nhịp sinh học & chống kiệt sức ({sleep_hours_str} tiếng)",
             )
         )
 

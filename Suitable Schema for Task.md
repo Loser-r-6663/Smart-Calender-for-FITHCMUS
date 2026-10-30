@@ -25,7 +25,7 @@ Trong đời sống sinh viên, các hoạt động sinh học như ngủ và ă
 |---|---|---|---|
 | **Bản chất nghiệp vụ** | Nhu cầu sinh học bất biến | Nhu cầu sinh học linh hoạt | Hoạt động học tập, sự kiện phong trào |
 | **Phân loại trong Solver** | **Tầng 1: Cố định (Fixed Anchor)** | **Tầng 2: Linh hoạt (Flexible Task)** | Tầng 1 (TKB), Tầng 2 (Bài tập), Tầng 3 (Sự kiện ĐRL) |
-| **Khung giờ phân bổ** | Khóa cứng: $23:30 \to 06:30$ ($7\text{ tiếng}$) | Cửa sổ trượt hẹp: Trưa $[11:00, 13:30]$, Tối $[17:30, 20:00]$ | Theo mốc giờ BTC ấn định hoặc tự do trước deadline |
+| **Khung giờ phân bổ** | Khóa cứng theo cấu hình (mặc định $23:30 \to 06:30$, $420\text{p}$, tùy chỉnh được giờ & thời lượng) | Cửa sổ trượt hẹp tùy chỉnh (mặc định Trưa $45\text{p}$ trong $[11:00, 13:30]$, Tối $60\text{p}$ trong $[17:30, 20:00]$) | Theo mốc giờ BTC ấn định hoặc tự do trước `end_time`/`deadline` |
 | **Chiến lược lưu trữ CSDL** | **Không lưu vào bảng `tasks`** | **Không lưu vào bảng `tasks`** | **Lưu thành các dòng trong SQLite `tasks`** |
 | **Nguồn gốc tham số** | Cấu hình thói quen (`UserPreferences`) | Cấu hình thói quen (`UserPreferences`) | Trích xuất từ Crawler hoặc người dùng tạo tay |
 
@@ -72,7 +72,7 @@ Bảng schema dưới đây được thiết kế chuẩn mực, đáp ứng 100
 | **8** | `registration_start` | `DATETIME` | NULL | Thời điểm mở đơn đăng ký tham gia | Sự kiện ĐRL |
 | **9** | `registration_end` | `DATETIME` | NULL | Thời điểm đóng đơn đăng ký tham gia | Sự kiện ĐRL |
 | **10** | `start_time` | `DATETIME` | NULL | Thời điểm bắt đầu hoạt động (cố định) | Lịch học, Sự kiện, Việc riêng |
-| **11** | `end_time` | `DATETIME` | NULL | Thời điểm kết thúc hoạt động (cố định) | Lịch học, Sự kiện, Việc riêng |
+| **11** | `end_time` | `DATETIME` | NULL | Thời điểm kết thúc hoạt động cố định (hoặc hạn đóng cổng đối với sự kiện ĐRL online không có `start_time`) | Lịch học, Sự kiện, Việc riêng |
 | **12** | `deadline` | `DATETIME` | NULL | Hạn chót bắt buộc phải nộp bài / hoàn thành / đóng tiền | Bài tập, Đồ án, Học phí |
 | **13** | `estimated_hours` | `FLOAT` | NULL | Thời lượng dự tính cần làm (ví dụ: 2.0h, 3.5h) phục vụ xếp lịch | Bài tập, Đồ án, Ôn thi |
 | **14** | `training_points` | `INT` | NULL | Số điểm rèn luyện nhận được nếu tham gia (mặc định: 0) | Sự kiện ĐRL |
@@ -326,7 +326,7 @@ Trụ cột **Nhận dạng quy luật** giúp phát hiện các mẫu hình đ�
 
 1. **Quy luật Đa hình Không-Thời gian (Temporal Polymorphism Pattern):**
    * Nhận diện quy luật đối ngẫu giữa các trường thời gian:
-     * Task cố định (`class`, `event`) $\to$ điền `start_time/end_time`, để trống `deadline/estimated_hours`.
+     * Task cố định (`class`, `event` offline/webinar) $\to$ điền cả `start_time` và `end_time` (riêng `event` ĐRL online chỉ có hạn đóng cổng thì `start_time = NULL`, chỉ điền `end_time`/`deadline` và nhận thời lượng mặc định $30\text{ phút}$ hoặc `estimated_hours`).
      * Task linh hoạt (`assignment`, `exam`) $\to$ điền `deadline/estimated_hours`, để trống `start_time/end_time`.
    * Quy luật này cho thấy 22 trường hoàn toàn tương thích và bổ trợ cho nhau mà không hề gây xung đột cấu trúc.
 

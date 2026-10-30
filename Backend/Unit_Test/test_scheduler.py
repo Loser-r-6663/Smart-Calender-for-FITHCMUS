@@ -407,6 +407,80 @@ class TestSchedulerOptimization(unittest.TestCase):
         self.assertGreaterEqual(scheduled_quiz.start_time, self.now_dt)
         self.assertLessEqual(scheduled_quiz.end_time, datetime(2026, 11, 3, 22, 0))
 
+    # -------------------------------------------------------------------------
+    # CASE 9: NGƯỜI DÙNG TÙY Ý CẤU HÌNH GIỜ ĂN, NGỦ VÀ THỜI LƯỢNG ĂN, NGỦ
+    # -------------------------------------------------------------------------
+    def test_case_9_custom_user_sleep_and_meal_preferences(self):
+        """
+        Kiểm tra: Người dùng tự cấu hình:
+        - Đi ngủ sau nửa đêm lúc 00:30 và ngủ 390 phút (6.5 tiếng -> dậy lúc 07:00).
+        - Ăn trưa 30 phút trong khung 11:30 -> 13:00; Ăn tối 50 phút trong khung 18:00 -> 20:30.
+        Kỳ vọng: Sự kiện Gala tối (20:00 -> 24:00) lúc này KHÔNG vi phạm giờ ngủ 00:30 nên ĐƯỢC CHỌN,
+        và thời lượng ngủ/ăn trong lịch trình khớp 100% với cấu hình của người dùng.
+        """
+        custom_prefs = UserPreferences(
+            sleep_start_hour=0,
+            sleep_start_minute=30,
+            sleep_duration_minutes=390,  # Ngủ 6.5 tiếng (00:30 -> 07:00)
+            lunch_window_start_hour=11,
+            lunch_window_start_minute=30,
+            lunch_window_end_hour=13,
+            lunch_window_end_minute=0,
+            lunch_duration_minutes=30,   # Ăn trưa 30 phút
+            dinner_window_start_hour=18,
+            dinner_window_start_minute=0,
+            dinner_window_end_hour=20,
+            dinner_window_end_minute=30,
+            dinner_duration_minutes=50,  # Ăn tối 50 phút
+        )
+
+        late_night_gala = Task(
+            id="event_late_gala",
+            title="Đêm Gala Chào đón Tân sinh viên (20:00 -> 24:00)",
+            type=TaskType.EVENT,
+            location="CS1 - Hội trường C",
+            start_time=datetime(2026, 11, 2, 20, 0),
+            end_time=datetime(2026, 11, 3, 0, 0),
+            training_points=5,
+            drl_category=DRLCategory.DIEU_3,
+            source_platform=SourcePlatform.FACEBOOK,
+        )
+
+        result = solve_max_drl_schedule(
+            tasks=[late_night_gala],
+            week_start=self.week_start,
+            now=self.now_dt,
+            preferences=custom_prefs,
+        )
+
+        self.assertIn(result.status, ("OPTIMAL", "FEASIBLE"))
+        # Vì người dùng cài đặt 00:30 mới ngủ nên Gala (kết thúc 24:00) hoàn toàn hợp lệ và được chọn!
+        self.assertIn("event_late_gala", result.selected_event_ids)
+
+        sleep_night_0 = next(
+            (item for item in result.scheduled_items if item.task_id == "sleep_night_0"),
+            None,
+        )
+        self.assertIsNotNone(sleep_night_0)
+        self.assertEqual(sleep_night_0.duration_minutes, 390)
+        self.assertEqual(sleep_night_0.start_time, datetime(2026, 11, 3, 0, 30))
+        self.assertEqual(sleep_night_0.end_time, datetime(2026, 11, 3, 7, 0))
+
+        lunch_0 = next(
+            (item for item in result.scheduled_items if item.task_id == "lunch_0"),
+            None,
+        )
+        dinner_0 = next(
+            (item for item in result.scheduled_items if item.task_id == "dinner_0"),
+            None,
+        )
+        self.assertIsNotNone(lunch_0)
+        self.assertEqual(lunch_0.duration_minutes, 30)
+        self.assertIsNotNone(dinner_0)
+        self.assertEqual(dinner_0.duration_minutes, 50)
+        # Bữa tối phải kết thúc trước hoặc đúng 20:00 để kịp tham gia Gala lúc 20:00
+        self.assertLessEqual(dinner_0.end_time, datetime(2026, 11, 2, 20, 0))
+
 
 # =============================================================================
 # HÀM CHẠY TRỰC TIẾP
@@ -420,7 +494,7 @@ if __name__ == "__main__":
     test_result = runner.run(suite)
     if test_result.wasSuccessful():
         print("\n" + "=" * 80)
-        print(">>> TẤT CẢ 8/8 UNIT TESTS ĐỀU VƯỢT QUA THÀNH CÔNG (100% PASSED)! <<<")
+        print(">>> TẤT CẢ 9/9 UNIT TESTS ĐỀU VƯỢT QUA THÀNH CÔNG (100% PASSED)! <<<")
         print("=" * 80)
         sys.exit(0)
     else:

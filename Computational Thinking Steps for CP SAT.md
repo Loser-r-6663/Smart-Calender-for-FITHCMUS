@@ -68,7 +68,7 @@ Thay vì xem mọi việc là "ô bận" (busy slot), hệ thống phân rã cá
    * *Lưu ý kiến trúc (Dynamic Interval Generation)*: Cả Giờ ngủ và Bữa ăn đều nạp từ cấu hình người dùng (`UserPreferences`) và được Engine CP-SAT **sinh động (on-the-fly generation)** thành các `IntervalVar` trong bộ nhớ khi giải, **tuyệt đối không lưu thành bản ghi rác trong cơ sở dữ liệu SQLite**.
 3. **Tầng 3 — Sự Kiện Tùy Chọn Tối Ưu (Optional Discrete Events)**:
    * *Đại diện*: Buổi tọa đàm khoa học, Chiến dịch tình nguyện, Cuộc thi học thuật.
-   * *Đặc tính*: Có mốc giờ cố định do Ban tổ chức ấn định, nhưng **không bắt buộc tham gia**. Sinh viên chỉ tham gia nếu nó đem lại lợi ích ĐRL lớn và không làm xung đột với Tầng 1 và Tầng 2.
+   * *Đặc tính*: **Không bắt buộc tham gia** (gắn biến quyết định $x_i \in \{0, 1\}$), gồm cả **Sự kiện cố định giờ** (có `start_time` và `end_time` do BTC ấn định) lẫn **Sự kiện ĐRL online linh hoạt** (không có `start_time`, chỉ có hạn đóng cổng `end_time`/`deadline`, tự động tìm khe trống $p_i$ mặc định $30\text{ phút}$ trước khi đóng cổng). Sinh viên chỉ tham gia nếu đem lại lợi ích ĐRL lớn và không xung đột với Tầng 1 và Tầng 2.
 
 ### 1.3. Phân rã hệ thống ràng buộc (Constraints Decomposition)
 Hệ thống ràng buộc được phân rã thành hai nhóm:
@@ -79,8 +79,8 @@ Hệ thống ràng buộc được phân rã thành hai nhóm:
   * *Ràng buộc di chuyển địa lý (Geographic Travel Time)*: Đi lại giữa Cơ sở 1 (Q5) và Cơ sở 2 (Thủ Đức) tốn 45–60 phút.
   * *Ràng buộc quá khứ*: Không được xếp việc vào thời điểm trước $now$.
 * **Ràng buộc mềm & Nhân văn (Human-Centric Constraints)**:
-  * *Bảo vệ giấc ngủ sinh học (Circadian Sleep Anchor)*: Khóa cứng tối thiểu 7 tiếng ngủ/ngày ($23:30 \to 06:30$) như một Hard Anchor nhằm ngăn chặn tình trạng kiệt sức và giảm $29.2\%$ không gian tìm kiếm.
-  * *Khung giờ ăn uống linh hoạt (Floating Meal Windows)*: Bữa trưa (45p trong $[11:00, 13:30]$), Bữa tối (60p trong $[17:30, 20:00]$).
+  * *Bảo vệ giấc ngủ sinh học (Circadian Sleep Anchor)*: Khóa cứng giấc ngủ đêm (mặc định $23:30 \to 06:30$, $420\text{ phút} = 7\text{ tiếng}$; người dùng tùy ý cấu hình giờ đi ngủ, giờ thức dậy hoặc trực tiếp thời lượng ngủ `sleep_duration_minutes` qua `UserPreferences`, hỗ trợ cả ngủ trước/sau nửa đêm) như một Hard Anchor nhằm ngăn chặn tình trạng kiệt sức và giảm $\approx 29.2\%$ không gian tìm kiếm.
+  * *Khung giờ ăn uống linh hoạt (Floating Meal Windows)*: Bữa trưa (mặc định 45p trong $[11:00, 13:30]$), Bữa tối (mặc định 60p trong $[17:30, 20:00]$); người dùng hoàn toàn có thể tùy chỉnh cửa sổ giờ ăn và thời lượng từng bữa ăn qua `UserPreferences`.
   * *Đệm hồi sức (Rest Buffer)*: 15 phút nghỉ ngơi sau khi chạy xe đường dài ngoài đường.
   * *Chống kiệt sức (Anti-Burnout)*: Giới hạn tổng giờ học tập/sự kiện $\le 10\text{–}11$ tiếng/ngày.
 
@@ -195,7 +195,7 @@ Sau khi phân rã, ta quan sát các đặc trưng toán học của từng bài
 1. **Sự kiện ĐRL $i \in \mathcal{E}$**:
    * Biến nhị phân: $x_i \in \{0, 1\}$ (1: chọn tham gia, 0: bỏ qua).
    * Khoảng thời gian tùy chọn: $\text{Interval}_i = \text{OptionalIntervalVar}(s_i, p_i, e_i, x_i)$.
-     *(Trong đó: $s_i, e_i$ là mốc bắt đầu/kết thúc cố định do BTC quy định; $p_i = e_i - s_i$ là thời lượng).*
+     *(Trong đó: nếu là sự kiện cố định giờ thì $s_i, e_i$ là mốc hằng số do BTC quy định và $p_i = e_i - s_i$; nếu là sự kiện ĐRL online chỉ có `end_time`/`deadline` thì $s_i, e_i$ là biến nguyên trôi nổi `IntVar` trước hạn đóng cổng với thời lượng $p_i$ từ `estimated_hours` hoặc mặc định $30\text{p}$).*
 2. **Bài tập bắt buộc $j \in \mathcal{A}$**:
    * Biến bắt đầu: $s_j \in [t_{\text{now}}, d_j - p_j]$ (phải bắt đầu từ hiện tại trở đi).
    * Biến kết thúc: $e_j \in [t_{\text{now}} + p_j, d_j]$ (phải kết thúc trước hạn chót $d_j$).
@@ -204,7 +204,7 @@ Sau khi phân rã, ta quan sát các đặc trưng toán học của từng bài
    * Bữa trưa: $s_{\text{lunch}, k} \in [k \cdot 1440 + 660, k \cdot 1440 + 810 - 45]$, thời lượng $p = 45\text{p}$.
    * Bữa tối: $s_{\text{dinner}, k} \in [k \cdot 1440 + 1050, k \cdot 1440 + 1200 - 60]$, thời lượng $p = 60\text{p}$.
 4. **Giấc ngủ sinh học cố định ngày $k \in \{0, \dots, 6\}$ (Circadian Sleep Anchors — Sinh động từ UserPreferences)**:
-   * $\text{Interval}_{\text{sleep}, k} = \text{IntervalVar}(k \cdot 1440 + 1410, 420, (k+1) \cdot 1440 + 390)$ ($23:30 \to 06:30$ sáng hôm sau, thời lượng cố định $420\text{p} = 7\text{h}$).
+   * $\text{Interval}_{\text{sleep}, k} = \text{IntervalVar}(\text{night\_start}_k, p_{\text{sleep}}, \text{night\_end}_k)$ (mặc định $23:30 \to 06:30$ sáng hôm sau, thời lượng $420\text{p} = 7\text{h}$; người dùng tùy ý cấu hình giờ ngủ hoặc trực tiếp `sleep_duration_minutes`).
 5. **Khối cố định $m \in \mathcal{B} \cup \mathcal{M}$ (TKB trên lớp, slot cá nhân, việc khóa tay)**:
    * Khoảng thời gian bất biến: $\text{Interval}_m = \text{IntervalVar}(s_m, p_m, e_m)$.
 6. **Khoảng quá khứ**:
