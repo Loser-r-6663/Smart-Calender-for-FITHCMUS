@@ -2,8 +2,8 @@
 Phân hệ Lập lịch thông minh (Smart Scheduler) - Đồ án Trợ lý ảo sinh viên FIT - HCMUS.
 Hiện thực hóa quy trình 10 bước của thuật toán Google OR-Tools CP-SAT nhằm tối đa hóa
 Điểm Rèn Luyện (ĐRL) nhưng vẫn bảo toàn 100% các ràng buộc học vụ và nhịp sinh học:
-- Tầng 1: Khối Cố Định (Thời khóa biểu trên lớp, việc riêng cố định, giờ ngủ 23:30 - 06:30)
-- Tầng 2: Công Việc Linh Hoạt (Bài tập Moodle, đồ án) & Bữa ăn linh hoạt (Trưa & Tối)
+- Tầng 1: Khối Cố Định (Thời khóa biểu trên lớp, việc riêng cố định, giờ ngủ (user cấu hình))
+- Tầng 2: Công Việc Linh Hoạt (Bài tập Moodle, đồ án) & Bữa ăn linh hoạt (Trưa & Tối, user cấu hình)
 - Tầng 3: Sự kiện ĐRL Tùy chọn tối ưu theo mô hình Balô Submodular có trần điểm (Điều 1 -> 5)
 - Ràng buộc di chuyển phụ thuộc thứ tự và đệm nghỉ giữa các cơ sở đào tạo (CS1 <-> CS2)
 
@@ -52,7 +52,7 @@ class UserPreferences:
     Cấu hình thói quen sinh học và di chuyển của sinh viên.
     Được nạp từ bảng user_preferences để sinh động (on-the-fly) các khoảng thời gian
     trong bộ nhớ RAM mà không cần lưu thành bản ghi rác trong bảng SQLite tasks.
-    Người dùng có thể tùy ý cấu hình giờ ăn, thời lượng ăn, giờ ngủ và thời lượng ngủ.
+    Người dùng có thể tùy ý cấu hình các thông số
     """
     # Khung giờ ngủ ban đêm cố định (Mặc định: 23:30 -> 06:30 = 420 phút)
     # Người dùng có thể cấu hình theo (giờ đi ngủ + giờ thức dậy) HOẶC (giờ đi ngủ + sleep_duration_minutes)
