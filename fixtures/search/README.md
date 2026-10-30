@@ -174,6 +174,11 @@ assumed authoritative; a crawler failure alone is not evidence of deletion.
 
 ## Coverage and future integration
 
+The [structured search service](../../docs/structured-search.md) now exercises all
+nine existing structured-query expectations through an in-memory SQLite adapter.
+The standalone validator above still checks fixture integrity independently.
+Keyword, hybrid and semantic retrieval remain future integration work.
+
 | Required case | Query IDs / supporting records |
 | --- | --- |
 | CSC10004 versus CSC10005 | q01–q02, q18, q23; paired labs and projects |
