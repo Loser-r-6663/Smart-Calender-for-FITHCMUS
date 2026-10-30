@@ -6,8 +6,8 @@ File này thực hiện:
 1. Xây dựng dữ liệu giả lập thực tế trọn vẹn 7 ngày (Thứ Hai 02/11/2026 -> Chủ Nhật 08/11/2026):
    - Tầng 1 (Cố định): 5 ca học lý thuyết/thực hành tại CS1 & CS2 + 1 lịch cá nhân cố định.
    - Tầng 2 (Linh hoạt): 3 bài tập/đồ án Moodle có hạn chót rải đều trong tuần.
-   - Tầng 3 (Tùy chọn ĐRL): 8 sự kiện phong trào/học thuật thuộc các Điều 1, 2, 3, 4, 5
-     (bao gồm cả các sự kiện bẫy: trùng giờ học, không kịp di chuyển CS1<->CS2, lấn giờ ngủ, kịch trần điểm).
+   - Tầng 3 (Tùy chọn ĐRL): 9 sự kiện phong trào/học thuật thuộc các Điều 1, 2, 3, 4, 5
+     (bao gồm 5 sự kiện hợp lệ, 1 sự kiện online trắc nghiệm chỉ có hạn đóng cổng, và 3 sự kiện bẫy bị loại).
    - Nhịp sinh học tự động: 7 giấc ngủ đêm (23:30 - 06:30) và 14 bữa ăn linh hoạt (7 trưa + 7 tối).
 2. Giải bài toán tối ưu hóa bằng Google OR-Tools CP-SAT.
 3. In trực quan thời gian biểu chi tiết từng ngày từ Thứ Hai đến Chủ Nhật.

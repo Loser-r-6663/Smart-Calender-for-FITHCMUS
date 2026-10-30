@@ -2,7 +2,7 @@
 Unit Test Suite cho Phân hệ Lập lịch thông minh (Smart Scheduler) - FIT HCMUS.
 Sử dụng thư viện chuẩn unittest của Python.
 
-Kiểm chứng 7 trường hợp nghiệp vụ và ràng buộc toán học cốt lõi:
+Kiểm chứng 9 trường hợp nghiệp vụ và ràng buộc toán học cốt lõi:
 1. test_case_1_hard_anchor_protection: Bảo vệ Thời khóa biểu cố định (không cúp học đi sự kiện ĐRL).
 2. test_case_2_campus_travel_constraint: Ràng buộc di chuyển địa lý giữa các cơ sở (CS1 <-> CS2 cần 65p).
 3. test_case_3_submodular_category_capping: Ràng buộc trần điểm quy chế 5 Điều (lợi ích biên giảm dần).
@@ -10,6 +10,8 @@ Kiểm chứng 7 trường hợp nghiệp vụ và ràng buộc toán học cố
 5. test_case_5_assignment_feasibility_and_overdue: Phát hiện và cảnh báo bài tập có deadline bất khả thi.
 6. test_case_6_sleep_anchor_circadian_rhythm: Bảo vệ giấc ngủ đêm sinh học (23:30 - 06:30, 7 tiếng).
 7. test_case_7_online_activity_zero_travel: Hoạt động Online triệt tiêu thời gian di chuyển (D = 0).
+8. test_case_8_online_drl_event_only_end_time: Sự kiện ĐRL online chỉ có end_time (Optional Flexible Interval).
+9. test_case_9_custom_user_sleep_and_meal_preferences: Người dùng tùy ý cấu hình giờ/thời lượng ăn và ngủ.
 """
 
 import sys
