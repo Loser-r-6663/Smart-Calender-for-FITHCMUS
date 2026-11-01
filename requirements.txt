@@ -2,3 +2,4 @@ beautifulsoup4
 playwright
 python-dotenv
 html2text
+pydantic

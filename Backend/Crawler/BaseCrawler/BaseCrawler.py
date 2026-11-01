@@ -2,12 +2,24 @@ import time
 from pathlib import Path
 from contextlib import contextmanager
 import html2text
+from pydantic import BaseModel
 
 
 # HTML2Text configuration
 _h2t = html2text.HTML2Text()
 _h2t.ignore_images = True
 _h2t.body_width = 0
+
+
+class RawTask(BaseModel):
+    Title: str = "N/A"           # Title of the post
+    Type: str = "N/A"            # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
+    Description: str = "N/A"     # Description or brief summary of the post
+    Date: str = "N/A"            # Creation date of the post
+    Deadline: str = "N/A"        # Assignment deadline (if applicable)
+    Course: str = "N/A"          # Course associated with the post (if applicable)
+    Content: str = "N/A"         # Full content of the post
+    Link: str = "N/A"            # Link to the original post
 
 
 class BaseCrawler():
@@ -33,9 +45,9 @@ class BaseCrawler():
         if self.history_file and (path := Path(self.history_file)).is_file():
             return path.read_text(encoding="utf-8").strip()
     
-    def set_last_post(self, raw_tasks: list[dict[str, str]]):
+    def set_last_post(self, raw_tasks: list[RawTask]):
         """Update the history file with the link of the most recent task."""
-        if self.history_file and raw_tasks and (link := raw_tasks[-1].get("Link")):
+        if self.history_file and raw_tasks and (link := raw_tasks[-1].Link):
             Path(self.history_file).write_text(link, encoding="utf-8")
     
     @contextmanager
@@ -67,6 +79,6 @@ class BaseCrawler():
             self.last_post = self.get_last_post()
             print(f"🌐 Last crawled task: {self.last_post}\n")
             
-            raw_tasks = self.browse_page(driver[0] if isinstance(driver, tuple) else driver)
+            raw_tasks: RawTask = self.browse_page(driver[0] if isinstance(driver, tuple) else driver)
             self.set_last_post(raw_tasks)
         return raw_tasks

@@ -1,9 +1,10 @@
+from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
 class MoodleCrawler(PlaywrightCrawler):
     def __init__(self):
-        self.history_file = None
+        self.history_file = "Backend/Crawler/History/MoodleHistory.txt"
         self.state_file = "Backend/Crawler/State/MoodleState.json"
         self.login_url = "https://courses.ctda.hcmus.edu.vn/login/index.php"
         self.home_url = "https://courses.ctda.hcmus.edu.vn/my/"
@@ -36,33 +37,32 @@ class MoodleCrawler(PlaywrightCrawler):
         browser.close()
     
     def browse_page(self, page):
-        raw_tasks = []
+        raw_tasks: list[RawTask] = []
         
         container = page.locator('div[data-region="event-list-container"]')
         container.scroll_into_view_if_needed()
         
         wrapper = page.locator('div[data-region="event-list-wrapper"]').all()
         for content in wrapper:
-            raw_task = {"Title": "N/A", "Link": "N/A", "DueDatetime": "N/A", "Course": "N/A"}
-            
             try:
+                raw_task = RawTask()
+                
                 due_date = content.locator('h4').inner_text()
                 
                 items = content.locator('div[data-region="event-list-item"]').all()
                 for item in items:
-                    title = item.locator('h5.event-name > a').get_attribute('title')
-                    raw_task["Title"] = title
-                    
                     link = item.locator('h5.event-name > a').get_attribute('href')
-                    raw_task["Link"] = link
+                    if link == self.last_post: break
+                    
+                    raw_task.Link = link
+                    raw_task.Title = item.locator('h5.event-name > a').get_attribute('title')
                     
                     due_time = item.locator('small.text-end').inner_text()
-                    raw_task["DueDatetime"] = f"{due_date} {due_time}"
-                    
-                    course = item.locator('small.mb-0').inner_text()
-                    raw_task["Course"] = course                    
+                    raw_task.Deadline = f"{due_date} {due_time}"
+                    raw_task.Course = item.locator('small.mb-0').inner_text()
+                else:
+                    raw_tasks.append(raw_task)
             except Exception as e:
                 print(f"Error when parsing assignment on Moodle: {e}")
-            
-            raw_tasks.append(raw_task)
+        
         return raw_tasks

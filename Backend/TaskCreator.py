@@ -1,6 +1,6 @@
 import traceback
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
+from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler, RawTask
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
@@ -20,7 +20,7 @@ class TaskCreator():
     
     def crawl_raw_text(self):
         """Start the crawling process"""
-        raw_tasks = {}
+        raw_tasks: dict[str, RawTask] = {}
         
         for key, crawler in self.crawlers.items():
             try:
