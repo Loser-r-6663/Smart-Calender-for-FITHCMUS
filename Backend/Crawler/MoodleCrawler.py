@@ -3,30 +3,30 @@ from Backend.Crawler.BaseCrawler import PlaywrightCrawler
 
 class MoodleCrawler(PlaywrightCrawler):
     def __init__(self):
+        self.history_file = None
         self.state_file = "Backend/Crawler/State/MoodleState.json"
         self.login_url = "https://courses.ctda.hcmus.edu.vn/login/index.php"
         self.home_url = "https://courses.ctda.hcmus.edu.vn/my/"
     
-    def check_state(self, p, cookies):
+    def check_state(self, cookies):
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
-        browser_settings = {"headless": True, "storage_state": self.state_file}
+        settings = {"headless": True, "storage_state": self.state_file}
         try:
-            self.login(p, browser_settings)
-            return True, browser_settings
+            self.login(settings)
+            return True, settings
         except ConnectionError:
             return False, {"headless": False, "storage_state": self.state_file}
     
-    def login(self, p, browser_settings):
-        browser, context, page = self.start_browser(p, browser_settings)
-        page.goto(self.home_url)
+    def login(self, settings):
+        page, context, browser = self.launch_engine(self.home_url, settings)
         
         # If the login session has expired
         if page.url.startswith(self.login_url):
             page.locator('a.login-identityprovider-btn:first-of-type').click()
         
-        if browser_settings["headless"] and page.url.startswith("https://accounts.google.com/"):
+        if settings["headless"] and page.url.startswith("https://accounts.google.com/"):
             raise ConnectionError("Please log in to Moodle using Google account manually.")
         
         page.wait_for_url(self.home_url, timeout=0)
@@ -35,8 +35,7 @@ class MoodleCrawler(PlaywrightCrawler):
         context.storage_state(path=self.state_file)
         browser.close()
     
-    def interact(self, page):
-        page.goto(self.home_url, wait_until="networkidle")
+    def browse_page(self, page):
         raw_tasks = []
         
         container = page.locator('div[data-region="event-list-container"]')

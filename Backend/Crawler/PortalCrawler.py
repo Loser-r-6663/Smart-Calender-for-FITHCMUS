@@ -1,26 +1,26 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler, time_is_expired
+from Backend.Crawler.BaseCrawler import PlaywrightCrawler
 from dotenv import load_dotenv
 import os
 
 
 class PortalCrawler(PlaywrightCrawler):
     def __init__(self):
+        self.history_file = None
         self.state_file = "Backend/Crawler/State/PortalState.json"
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
     
-    def check_state(self, p, cookies):
+    def check_state(self, cookies):
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
-        if time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
+        if self.time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
             return False, {"headless": False, "storage_state": None}
         else:
             return False, {"headless": True, "storage_state": self.state_file}
     
-    def login(self, p, browser_settings):
-        browser, context, page = self.start_browser(p, browser_settings)
-        page.goto(self.home_url)
+    def login(self, settings):
+        page, context, browser = self.launch_engine(self.home_url, settings)
         
         if page.url == self.login_url:
             # Fill in the login form and submit
@@ -38,9 +38,7 @@ class PortalCrawler(PlaywrightCrawler):
             context.storage_state(path=self.state_file)
         browser.close()
     
-    def interact(self, page):
-        page.goto(self.home_url)
-        
+    def browse_page(self, page):
         table_selector = "table"
         page.wait_for_selector(table_selector, timeout=10000)
         

@@ -1,25 +1,25 @@
-from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler, convert_to_markdown
+from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
 
 
 class HCMUSCrawler(BeautifulSoupCrawler):
     def __init__(self):
-        self.state_file = "Backend/Crawler/State/HCMUSState.txt"
+        self.state_file = None
+        self.history_file = "Backend/Crawler/History/HCMUSHistory.txt"
         self.home_url = "https://hcmus.edu.vn/category/dao-tao/dai-hoc/thong-tin-danh-cho-sinh-vien/"
     
-    def parse(self, soup, last_post):
+    def browse_page(self, page):
         raw_tasks = []
         
-        articles = soup.select("article")
+        articles = page.select("article")
         for article in articles:
             raw_task = {"Title": "N/A", "Brief": "N/A", "Link": "N/A", "Date": "N/A", "Content": "N/A"}
             
-            # Get the title, brief, and link from the post
             try:
                 title_element = article.select_one("h2.entry-title a")
                 link = title_element["href"]
                 
                 # Reached the last crawled post. Stopping further crawling
-                if last_post and link == last_post: break
+                if self.last_post and link == self.last_post: break
                 raw_task["Link"] = link
                 
                 title = title_element.get_text(strip=True)
@@ -31,9 +31,9 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 date = article.select_one("abbr.published").get_text(strip=True)
                 raw_task["Date"] = date
                 
-                post_soup = self.get_soup(link)
-                content = post_soup.select_one("div.entry-content").decode_contents()
-                markdown_content = convert_to_markdown(content)
+                post_page = self.launch_engine(link)
+                content = post_page.select_one("div.entry-content").decode_contents()
+                markdown_content = self.convert_to_markdown(content)
                 raw_task["Content"] = markdown_content
             except Exception as e:
                 print(f"Error when parsing article item on HCMUS homepage: {e}")

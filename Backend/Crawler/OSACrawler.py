@@ -1,40 +1,37 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler, expect, convert_to_markdown
-import re
+from Backend.Crawler.BaseCrawler import BaseCrawler, HTTPResponse, urlopen
+import json
 
 
-class OSACrawler(PlaywrightCrawler):
+class OSACrawler(BaseCrawler):
     def __init__(self):
         self.state_file = None
-        self.home_url = "https://ctsv.hcmus.edu.vn/info/"
+        self.history_file = "Backend/Crawler/History/OSAHistory.txt"
+        self.home_url = "https://ctsv.hcmus.edu.vn/api/news/latest?limit=10"
     
-    def interact(self, page):
-        page.goto(self.home_url, wait_until="networkidle")
+    def launch_engine(self, url: str):
+        response: HTTPResponse = urlopen(url)
+        data = json.loads(response.read().decode())
+        response.close()
+        return data["data"]
+    
+    def browse_page(self, articles: list[dict[str, str]]):
         raw_tasks = []
         
-        articles = page.locator('div.cursor-pointer.h-full').all()
         for article in articles:
-            raw_task = {"Title": "N/A", "Link": "N/A", "Type": "N/A", "Date": "N/A", "Content": "N/A"}
+            raw_task = {"Title": "N/A", "Brief": "N/A", "Link": "N/A", "Type": "N/A", "Date": "N/A", "Content": "N/A"}
             
             try:
-                title = article.locator('h3 > span:nth-child(1)')
-                raw_task["Title"] = title.inner_text()
+                link = "https://ctsv.hcmus.edu.vn/news/" + article["slug"]
+                if link == self.last_post: break
                 
-                type = article.locator('div.top-3.left-3')
-                raw_task["Type"] = type.inner_text()
-                
-                date = article.locator('h3 span span')
-                raw_task["Date"] = date.inner_text()
-                
-                article.click()
-                raw_task["Link"] = page.url
-                
-                content_element = page.locator('div.hcmus-content')
-                expect(content_element).to_have_text(re.compile(r".+"))
-                raw_task["Content"] = convert_to_markdown(content_element.inner_html())
-                
-                page.go_back()
+                raw_task["Link"] = link
+                raw_task["Title"] = article["title"]
+                raw_task["Brief"] = article["summary"]
+                raw_task["Date"] = article["createdAt"]
+                raw_task["Type"] = article["category"]["name"]
+                raw_task["Content"] = self.convert_to_markdown(article["content"])
             except Exception as e:
-                print(f"Error when parsing article item on OSA: {e}")
+                print(f"Error when parsing article item on HCMUS homepage: {e}")
             
             raw_tasks.append(raw_task)
-        return raw_tasks
+        return raw_tasks[::-1]
