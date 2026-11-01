@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler
+from Backend.Crawler.BaseCrawler.BaseCrawler import PlaywrightCrawler
 from dotenv import load_dotenv
 import os
 

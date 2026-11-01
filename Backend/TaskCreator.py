@@ -1,6 +1,6 @@
 import traceback
 
-from Backend.Crawler.BaseCrawler import BaseCrawler
+from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler

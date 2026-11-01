@@ -1,9 +1,8 @@
-from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
+from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawler
 
 
 class HCMUSCrawler(BeautifulSoupCrawler):
     def __init__(self):
-        self.state_file = None
         self.history_file = "Backend/Crawler/History/HCMUSHistory.txt"
         self.home_url = "https://hcmus.edu.vn/category/dao-tao/dai-hoc/thong-tin-danh-cho-sinh-vien/"
     

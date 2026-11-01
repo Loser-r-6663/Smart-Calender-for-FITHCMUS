@@ -1,10 +1,10 @@
-from Backend.Crawler.BaseCrawler import BaseCrawler, HTTPResponse, urlopen
+from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
+from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import HTTPResponse, urlopen
 import json
 
 
 class OSACrawler(BaseCrawler):
     def __init__(self):
-        self.state_file = None
         self.history_file = "Backend/Crawler/History/OSAHistory.txt"
         self.home_url = "https://ctsv.hcmus.edu.vn/api/news/latest?limit=10"
     

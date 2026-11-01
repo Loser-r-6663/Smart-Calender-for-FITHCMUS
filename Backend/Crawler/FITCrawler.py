@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import BeautifulSoupCrawler
+from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawler
 
 
 class FITCrawler(BeautifulSoupCrawler):

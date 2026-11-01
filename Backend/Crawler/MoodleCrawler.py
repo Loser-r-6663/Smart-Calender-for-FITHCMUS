@@ -1,4 +1,4 @@
-from Backend.Crawler.BaseCrawler import PlaywrightCrawler
+from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
 class MoodleCrawler(PlaywrightCrawler):
