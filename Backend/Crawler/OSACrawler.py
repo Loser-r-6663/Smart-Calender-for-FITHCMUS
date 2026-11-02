@@ -27,7 +27,7 @@ class OSACrawler(BaseCrawler):
                 raw_task.Link = link
                 raw_task.Title = article["title"]
                 raw_task.Description = article["summary"]
-                raw_task.Date = article["createdAt"]
+                raw_task.CreateDate = article["createdAt"]
                 raw_task.Type = article["category"]["name"]
                 raw_task.Content = self.convert_to_markdown(article["content"])
                 

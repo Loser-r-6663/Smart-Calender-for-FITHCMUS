@@ -24,7 +24,7 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 raw_task.Link = link
                 raw_task.Title = title_element.get_text(strip=True)
                 raw_task.Description = article.select_one("div.entry-content p").get_text(strip=True)
-                raw_task.Date = article.select_one("abbr.published").get_text(strip=True)
+                raw_task.CreateDate = article.select_one("abbr.published").get_text(strip=True)
                 
                 post_page = self.launch_engine(link)
                 content = post_page.select_one("div.entry-content").decode_contents()

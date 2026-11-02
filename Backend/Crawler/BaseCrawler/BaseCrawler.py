@@ -15,9 +15,10 @@ class RawTask(BaseModel):
     Title: str = "N/A"           # Title of the post
     Type: str = "N/A"            # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
     Description: str = "N/A"     # Description or brief summary of the post
-    Date: str = "N/A"            # Creation date of the post
-    Deadline: str = "N/A"        # Assignment deadline (if applicable)
-    Course: str = "N/A"          # Course associated with the post (if applicable)
+    CreateDate: str = "N/A"      # Creation date of the post
+    Duration: str = "N/A"        # Duration of the task or event
+    Deadline: str = "N/A"        # Assignment deadline
+    Course: str = "N/A"          # Course associated with the post
     Content: str = "N/A"         # Full content of the post
     Link: str = "N/A"            # Link to the original post
 
@@ -79,6 +80,7 @@ class BaseCrawler():
             self.last_post = self.get_last_post()
             print(f"🌐 Last crawled task: {self.last_post}\n")
             
-            raw_tasks: RawTask = self.browse_page(driver[0] if isinstance(driver, tuple) else driver)
+            driver = driver[0] if isinstance(driver, tuple) else driver
+            raw_tasks: list[RawTask] = self.browse_page(driver)
             self.set_last_post(raw_tasks)
         return raw_tasks
