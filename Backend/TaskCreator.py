@@ -6,16 +6,18 @@ from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
 from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
 from Backend.Crawler.OSACrawler import OSACrawler
+from Backend.Crawler.FBCrawler import FBCrawler
 
 
 class TaskCreator():
     def __init__(self):
         self.crawlers: dict[str, BaseCrawler] = {
-            "Portal": PortalCrawler(),
-            "Moodle": MoodleCrawler(),
-            "FIT": FITCrawler(),
-            "HCMUS": HCMUSCrawler(),
-            "OSA": OSACrawler()
+            # "Portal": PortalCrawler(),
+            # "Moodle": MoodleCrawler(),
+            # "FIT": FITCrawler(),
+            # "HCMUS": HCMUSCrawler(),
+            # "OSA": OSACrawler(),
+            "FB": FBCrawler()
         }
     
     def crawl_raw_text(self):

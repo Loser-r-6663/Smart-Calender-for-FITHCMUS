@@ -1,40 +1,39 @@
-from Backend.Crawler.BaseCrawler.BaseCrawler import PlaywrightCrawler
+from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 from dotenv import load_dotenv
 import os
 
 class FBCrawler(PlaywrightCrawler):
     def __init__(self):
+        self.history_file = None
         self.home_url="https://www.facebook.com/VNUHCM.US"
-        self.state_file
+        self.state_file="Backend/Crawler/State/FBState.json"
 
-    def check_state(self, p, cookies):
-        # Copied from MoodleCrawler :))
+    def check_state(self, cookies):
         if not cookies:
             return False, {"headless": False, "storage_state": None}
 
         browser_settings = {"headless": True, "storage_state": self.state_file}
         
         try:
-            self.login(p, browser_settings)
+            self.login(browser_settings)
             return True, browser_settings
         
         except ConnectionError:
-            return False, {"headless": False, "storage_state": self.state_file}
+            return False, {"headless": True, "storage_state": self.state_file}
     
-    def login(self, p, browser_settings):
+    def login(self, settings):
         # Access the page
-        browser, context, page = self.start_browser(p, browser_settings)
-        page.goto(self.home_url)
+        page, context, browser = self.launch_engine(self.home_url, settings)
 
-        # Initialize login checking variable (for code thẩm mỹ)
+        # Initialize login checking variable (thẩm mỹ)
         login_required = False
         login_notification = page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]')
         if login_notification.count() > 0:
             login_required = True
 
         if login_required:
-            if browser_settings["headless"]:
-                raise Exception("Thông báo: Code quá ngu nên ko biết cách đăng nhập tự động trong chế độ headless, hãy thử đăng nhập thủ công")
+            if settings["headless"]:
+                raise ConnectionError("please log in manually")
             # Semi-automatic login process for headed mode (headless=False)
             load_dotenv()
             username = os.getenv("FB_USERNAME")
@@ -44,18 +43,51 @@ class FBCrawler(PlaywrightCrawler):
             page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
 
             # 2-step verification, wait until the user enters the code sent via email
-            page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=30000)
+            page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
 
             # Store state file and close browser
             context.storage_state(path=self.state_file)
             browser.close()
-        
-    def interact(self, page):
-        # Access the page, wait for loading
-        page.goto(self.home_url)
-        try:
-            pass
-        except Exception as e:
-            print(f"Timeout waiting for posts to load: {e}")
-            return []
 
+    def scroll_fb(self,page):
+        pass
+        
+    def browse_page(self, page):
+        # Access the page
+        posts = page.locator('xpath=/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div/div[2]/div[3]/div').all()
+        print(f"Found {len(posts)} post(s)")
+        post_crawled = 0
+        raw_tasks = []
+        for post in posts:
+            raw_task = {
+                "Time": "N/A",
+                "Content": "N/A"
+            }
+            try:
+                # Get specific crawl zone in a post since html structure very complicated
+                post_crawl_zone = post.locator('xpath=./div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div')
+
+                # content container div tag (need to scroll)
+                content_container = post_crawl_zone.locator('xpath=./div[3]/div/div/div/div/div/span/div')
+
+                # Handle "read more button"
+                read_more_button = content_container.locator('xpath=./div/div[contains(@style,"text-align")]/div[contains(@role,"button")]')
+                if read_more_button.count() > 0:
+                    read_more_button.click
+                    page.wait_for_timeout(500)
+
+                # Get content
+                raw_task["Content"] = self.convert_to_markdown(content_container.inner_html())
+
+                # Get time
+                raw_task["Time"] = post_crawl_zone.locator('xpath=./div[2]/div/div[2]/div/div[2]/span/div/span[1]/span/span/div').inner_text()
+
+                raw_tasks.append(raw_task)
+            except Exception as e:
+                print(f"Error when crawling post: {e}")
+                return []
+        return raw_tasks
+
+# crawl_zone = /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div/div[2]/div[3]/div[1]/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div
+# content_container = /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div/div[2]/div[3]/div[1]/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div/div[3]/div/div/div/div/div/span/div
+# time

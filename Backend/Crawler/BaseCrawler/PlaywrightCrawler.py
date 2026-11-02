@@ -55,7 +55,7 @@ class PlaywrightCrawler(BaseCrawler):
         context = browser.new_context(storage_state=storage_state)
         page = context.new_page()
         
-        page.goto(url, wait_until="networkidle")
+        page.goto(url)
         return page, context, browser
     
     def browse_page(self, page: Page):
