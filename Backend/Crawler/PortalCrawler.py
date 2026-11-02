@@ -1,3 +1,4 @@
+from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 from dotenv import load_dotenv
 import os
@@ -39,40 +40,34 @@ class PortalCrawler(PlaywrightCrawler):
         browser.close()
     
     def browse_page(self, page):
-        table_selector = "table"
-        page.wait_for_selector(table_selector, timeout=10000)
+        page.wait_for_selector("table", timeout=10000)
+        rows = page.locator("table tr").all()
+        if not rows: return []
         
-        return page.evaluate("""
-            (selector) => {
-                const table = document.querySelector(selector);
-                if (!table) return [];
-                
-                // Get all rows
-                const rows = Array.from(table.querySelectorAll('tr'));
-                if (rows.length === 0) return [];
-                
-                // Extract headers from 'th' or fallback to default column names
-                const firstRow = rows[0];
-                const ths = firstRow.querySelectorAll('th');
-                
-                let headers, dataRows;
-                if (ths.length > 0) {
-                    headers = Array.from(ths).map(th => th.innerText.trim().replace(/\\s+/g, '_'));
-                    dataRows = rows.slice(1); // Skip header row
-                } else {
-                    const tds = firstRow.querySelectorAll('td');
-                    headers = Array.from({length: tds.length}, (_, i) => `Col_${i}`);
-                    dataRows = rows; // Keep all rows
-                }
-                
-                // Map rows to objects using headers as keys
-                return dataRows.map(row => {
-                    const tds = Array.from(row.querySelectorAll('td'));
-                    let obj = {};
-                    tds.forEach((td, i) => {
-                        obj[headers[i] || `Col_${i}`] = td.innerText.trim();
-                    });
-                    return obj;
-                }).filter(obj => Object.keys(obj).length > 0); // Remove empty rows
-            }
-        """, table_selector)
+        # Extract headers and table data
+        headers = rows[0].locator("th").all_inner_texts()
+        table = [
+            dict(zip(headers, row.locator("td").all_inner_texts()))
+            for row in rows[1:] if row.locator("td").count() > 0
+        ]
+        
+        # Process table data and create RawTask objects
+        raw_tasks: list[RawTask] = []
+        for row in table:
+            raw_task = RawTask(
+                Title=row["Tên MH"],
+                Course=row["Mã MH"],
+                Description="LT",
+                Duration=row["Lịch LT"],
+            )
+            raw_tasks.append(raw_task)
+            
+            if row["Lịch TH"]:
+                raw_task = RawTask(
+                    Title=f'{row["Mã MH"]} {row["Tên MH"]}',
+                    Description="TH",
+                    Duration=row["Lịch TH"],
+                )
+                raw_tasks.append(raw_task)
+        
+        return raw_tasks
