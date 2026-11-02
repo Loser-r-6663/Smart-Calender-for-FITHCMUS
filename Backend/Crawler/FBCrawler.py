@@ -53,6 +53,7 @@ class FBCrawler(PlaywrightCrawler):
         pass
         
     def browse_page(self, page):
+        page.wait_for_timeout(500)
         # Access the page
         posts = page.locator('xpath=/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div/div[2]/div[3]/div').all()
         print(f"Found {len(posts)} post(s)")
@@ -66,14 +67,22 @@ class FBCrawler(PlaywrightCrawler):
             try:
                 # Get specific crawl zone in a post since html structure very complicated
                 post_crawl_zone = post.locator('xpath=./div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div')
+                if post_crawl_zone.count() > 0:
+                    print(f"Found post crawl zone for post {post_crawled+1}")
+                else:
+                    print(f"Unable to find post crawl zone for post {post_crawled+1}")
+                    continue
 
-                # content container div tag (need to scroll)
+                # content container div tag (need to scroll) (error)
                 content_container = post_crawl_zone.locator('xpath=./div[3]/div/div/div/div/div/span/div')
+                if content_container.count() < 1:
+                    print(f"Unable to find content container for post {post_crawled+1}")
+                    continue
 
                 # Handle "read more button"
                 read_more_button = content_container.locator('xpath=./div/div[contains(@style,"text-align")]/div[contains(@role,"button")]')
                 if read_more_button.count() > 0:
-                    read_more_button.click
+                    read_more_button.click()
                     page.wait_for_timeout(500)
 
                 # Get content
@@ -83,9 +92,10 @@ class FBCrawler(PlaywrightCrawler):
                 raw_task["Time"] = post_crawl_zone.locator('xpath=./div[2]/div/div[2]/div/div[2]/span/div/span[1]/span/span/div').inner_text()
 
                 raw_tasks.append(raw_task)
+                post_crawled+=1
             except Exception as e:
                 print(f"Error when crawling post: {e}")
-                return []
+                continue
         return raw_tasks
 
 # crawl_zone = /html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div/div[2]/div[3]/div[1]/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div
