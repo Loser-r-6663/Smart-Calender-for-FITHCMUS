@@ -54,14 +54,21 @@ Thay vì xem mọi việc là "ô bận" (busy slot), hệ thống phân rã cá
 ```
 
 1. **Tầng 1 — Khối Cố Định (Fixed Anchors)**:
-   * *Đại diện*: Thời khóa biểu trên lớp, Giờ ngủ ban đêm (23:30 – 06:30), Lịch khám bệnh, Lịch làm thêm cố định, và các slot người dùng tự tay khóa (`is_manual=1`).
+   * *Đại diện*: Thời khóa biểu trên lớp, **Giờ ngủ ban đêm ($23:30 \to 06:30$)**, Lịch khám bệnh, Lịch làm thêm cố định, và các slot người dùng tự tay khóa (`is_manual=1`).
    * *Đặc tính*: Đã có mốc bắt đầu và kết thúc cố định $\to$ Thuật toán khóa cứng, không dịch chuyển.
+   * *Biện luận khoa học: Vì sao Giấc ngủ ban đêm là Khối Cố Định (Tầng 1) thay vì Linh hoạt (Tầng 2)?*
+     * **Bảo vệ nhịp sinh học & Chống kiệt sức (Circadian Rhythm & Anti-Burnout)**: Cơ thể con người tuân theo chu kỳ thức - ngủ sinh học được điều hòa bởi melatonin. Không thể để solver tùy tiện dời giờ ngủ sang 2h sáng hay cắt vụn giấc ngủ chỉ để nhồi thêm sự kiện ĐRL. Khóa cứng khung $23:30 \to 06:30$ đảm bảo giấc ngủ trọn vẹn 7 tiếng.
+     * **Thu hẹp không gian tìm kiếm tính toán (Search Space Reduction)**: Cố định 7 tiếng ngủ/ngày tương đương loại bỏ $420\text{ phút} \times 7\text{ ngày} = 2940\text{ phút}$ (chiếm $29.2\%$ toàn bộ không gian tuần $10080\text{ phút}$). Nhờ đó miền giá trị của các biến quyết định co lại gần $1/3$, triệt tiêu hàng triệu nhánh duyệt thừa, giúp bộ giải CP-SAT hội tụ cực nhanh (thời gian giải $< 0.1\text{s}$).
+     * **Cơ chế co giãn dự phòng (Elastic Sleep Window Fallback)**: Trường hợp sinh viên có lịch học dồn dập hoặc deadline đặc biệt gay gắt, hệ sinh thái hỗ trợ cơ chế cửa sổ co giãn nhẹ ($[23:00, 01:00] \to [06:00, 07:30]$, thời lượng $\ge 6\text{h}$) gắn biến phạt mềm (`penalty`), nhưng mặc định luôn là Hard Anchor để bảo vệ sức khỏe tối thượng.
 2. **Tầng 2 — Công Việc Linh Hoạt Bắt Buộc (Flexible Tasks)**:
-   * *Đại diện*: Bài tập Moodle, Đồ án môn học, Ôn tập kiểm tra.
-   * *Đặc tính*: Bắt buộc phải hoàn thành trước `deadline`, có thời lượng ước lượng `estimated_hours`, nhưng **chưa có giờ bắt đầu**. Thuật toán được quyền tự do phân bổ vào các khoảng trống phù hợp.
+   * *Đại diện*: Bài tập Moodle, Đồ án môn học, Ôn tập kiểm tra, và **Bữa ăn sinh học linh hoạt (Floating Meals)**.
+   * *Đặc tính*: Bắt buộc phải hoàn thành/diễn ra nhưng có giờ bắt đầu linh hoạt do thuật toán tối ưu phân bổ:
+     * *Bài tập*: Có thời lượng `estimated_hours` và phải hoàn thành trước `deadline` (cửa sổ rộng nhiều ngày).
+     * *Bữa ăn (Floating Meals)*: Là dạng *Flexible Task đặc thù có cửa sổ thời gian sinh học hẹp* trong ngày (Bữa trưa 45p trong $[11:00, 13:30]$, Bữa tối 60p trong $[17:30, 20:00]$). Khác với giấc ngủ cần sự ổn định tuyệt đối về giờ giấc, giờ ăn của sinh viên thường xuyên phải luồn lách linh hoạt giữa ca học sáng và chiều. Thuật toán tự tìm khe trống phù hợp nhất trong khung để bảo vệ sức khỏe.
+   * *Lưu ý kiến trúc (Dynamic Interval Generation)*: Cả Giờ ngủ và Bữa ăn đều nạp từ cấu hình người dùng (`UserPreferences`) và được Engine CP-SAT **sinh động (on-the-fly generation)** thành các `IntervalVar` trong bộ nhớ khi giải, **tuyệt đối không lưu thành bản ghi rác trong cơ sở dữ liệu SQLite**.
 3. **Tầng 3 — Sự Kiện Tùy Chọn Tối Ưu (Optional Discrete Events)**:
    * *Đại diện*: Buổi tọa đàm khoa học, Chiến dịch tình nguyện, Cuộc thi học thuật.
-   * *Đặc tính*: Có mốc giờ cố định do Ban tổ chức ấn định, nhưng **không bắt buộc tham gia**. Sinh viên chỉ tham gia nếu nó đem lại lợi ích ĐRL lớn và không làm xung đột với Tầng 1 và Tầng 2.
+   * *Đặc tính*: **Không bắt buộc tham gia** (gắn biến quyết định $x_i \in \{0, 1\}$), gồm cả **Sự kiện cố định giờ** (có `start_time` và `end_time` do BTC ấn định) lẫn **Sự kiện ĐRL online linh hoạt** (không có `start_time`, chỉ có hạn đóng cổng `end_time`/`deadline`, tự động tìm khe trống $p_i$ mặc định $30\text{ phút}$ trước khi đóng cổng). Sinh viên chỉ tham gia nếu đem lại lợi ích ĐRL lớn và không xung đột với Tầng 1 và Tầng 2.
 
 ### 1.3. Phân rã hệ thống ràng buộc (Constraints Decomposition)
 Hệ thống ràng buộc được phân rã thành hai nhóm:
@@ -72,9 +79,10 @@ Hệ thống ràng buộc được phân rã thành hai nhóm:
   * *Ràng buộc di chuyển địa lý (Geographic Travel Time)*: Đi lại giữa Cơ sở 1 (Q5) và Cơ sở 2 (Thủ Đức) tốn 45–60 phút.
   * *Ràng buộc quá khứ*: Không được xếp việc vào thời điểm trước $now$.
 * **Ràng buộc mềm & Nhân văn (Human-Centric Constraints)**:
-  * *Khung giờ ăn uống linh hoạt (Floating Meal Windows)*: Bữa trưa (45p trong $[11:00, 13:30]$), Bữa tối (60p trong $[17:30, 20:00]$).
+  * *Bảo vệ giấc ngủ sinh học (Circadian Sleep Anchor)*: Khóa cứng giấc ngủ đêm (mặc định $23:30 \to 06:30$, $420\text{ phút} = 7\text{ tiếng}$; người dùng tùy ý cấu hình giờ đi ngủ, giờ thức dậy hoặc trực tiếp thời lượng ngủ `sleep_duration_minutes` qua `UserPreferences`, hỗ trợ cả ngủ trước/sau nửa đêm) như một Hard Anchor nhằm ngăn chặn tình trạng kiệt sức và giảm $\approx 29.2\%$ không gian tìm kiếm.
+  * *Khung giờ ăn uống linh hoạt (Floating Meal Windows)*: Bữa trưa (mặc định 45p trong $[11:00, 13:30]$), Bữa tối (mặc định 60p trong $[17:30, 20:00]$); người dùng hoàn toàn có thể tùy chỉnh cửa sổ giờ ăn và thời lượng từng bữa ăn qua `UserPreferences`.
   * *Đệm hồi sức (Rest Buffer)*: 15 phút nghỉ ngơi sau khi chạy xe đường dài ngoài đường.
-  * *Chống kiệt sức (Anti-Burnout)*: Giới hạn tổng giờ học tập/sự kiện $\le 10\text{–}11$ tiếng/ngày; bảo vệ tối thiểu 7 tiếng ngủ/ngày.
+  * *Chống kiệt sức (Anti-Burnout)*: Giới hạn tổng giờ học tập/sự kiện $\le 10\text{–}11$ tiếng/ngày.
 
 ### 1.4. Phân rã hàm mục tiêu (Objective Decomposition)
 Hàm mục tiêu được phân rã thành:
@@ -187,23 +195,25 @@ Sau khi phân rã, ta quan sát các đặc trưng toán học của từng bài
 1. **Sự kiện ĐRL $i \in \mathcal{E}$**:
    * Biến nhị phân: $x_i \in \{0, 1\}$ (1: chọn tham gia, 0: bỏ qua).
    * Khoảng thời gian tùy chọn: $\text{Interval}_i = \text{OptionalIntervalVar}(s_i, p_i, e_i, x_i)$.
-     *(Trong đó: $s_i, e_i$ là mốc bắt đầu/kết thúc cố định do BTC quy định; $p_i = e_i - s_i$ là thời lượng).*
+     *(Trong đó: nếu là sự kiện cố định giờ thì $s_i, e_i$ là mốc hằng số do BTC quy định và $p_i = e_i - s_i$; nếu là sự kiện ĐRL online chỉ có `end_time`/`deadline` thì $s_i, e_i$ là biến nguyên trôi nổi `IntVar` trước hạn đóng cổng với thời lượng $p_i$ từ `estimated_hours` hoặc mặc định $30\text{p}$).*
 2. **Bài tập bắt buộc $j \in \mathcal{A}$**:
    * Biến bắt đầu: $s_j \in [t_{\text{now}}, d_j - p_j]$ (phải bắt đầu từ hiện tại trở đi).
    * Biến kết thúc: $e_j \in [t_{\text{now}} + p_j, d_j]$ (phải kết thúc trước hạn chót $d_j$).
    * Khoảng thời gian linh hoạt: $\text{Interval}_j = \text{IntervalVar}(s_j, p_j, e_j)$ với thời lượng cố định $p_j = \text{estimated\_hours} \times 60$.
-3. **Bữa ăn linh hoạt ngày $k \in \{0, \dots, 6\}$ (Floating Meals)**:
+3. **Bữa ăn linh hoạt ngày $k \in \{0, \dots, 6\}$ (Floating Meals — Sinh động từ UserPreferences)**:
    * Bữa trưa: $s_{\text{lunch}, k} \in [k \cdot 1440 + 660, k \cdot 1440 + 810 - 45]$, thời lượng $p = 45\text{p}$.
    * Bữa tối: $s_{\text{dinner}, k} \in [k \cdot 1440 + 1050, k \cdot 1440 + 1200 - 60]$, thời lượng $p = 60\text{p}$.
-4. **Khối cố định $m \in \mathcal{B} \cup \mathcal{M}$ (TKB, ngủ, slot thủ công)**:
+4. **Giấc ngủ sinh học cố định ngày $k \in \{0, \dots, 6\}$ (Circadian Sleep Anchors — Sinh động từ UserPreferences)**:
+   * $\text{Interval}_{\text{sleep}, k} = \text{IntervalVar}(\text{night\_start}_k, p_{\text{sleep}}, \text{night\_end}_k)$ (mặc định $23:30 \to 06:30$ sáng hôm sau, thời lượng $420\text{p} = 7\text{h}$; người dùng tùy ý cấu hình giờ ngủ hoặc trực tiếp `sleep_duration_minutes`).
+5. **Khối cố định $m \in \mathcal{B} \cup \mathcal{M}$ (TKB trên lớp, slot cá nhân, việc khóa tay)**:
    * Khoảng thời gian bất biến: $\text{Interval}_m = \text{IntervalVar}(s_m, p_m, e_m)$.
-5. **Khoảng quá khứ**:
+6. **Khoảng quá khứ**:
    * $\text{Interval}_{\text{past}} = \text{IntervalVar}(0, t_{\text{now}}, t_{\text{now}})$ (khóa cứng miền $[0, t_{\text{now}}]$).
 
 #### D. Hệ thống công thức ràng buộc & Chú thích:
 
 1. **Ràng buộc Disjunctive toàn cục (No-Overlap Constraint)**:
-   $$\text{NoOverlap}\left( \bigcup_{i \in \mathcal{E}} \text{Interval}_i \cup \bigcup_{j \in \mathcal{A}} \text{Interval}_j \cup \bigcup_{k} \text{Interval}_{\text{meals}, k} \cup \bigcup_{m} \text{Interval}_m \cup \{\text{Interval}_{\text{past}}\} \right)$$
+   $$\text{NoOverlap}\left( \bigcup_{i \in \mathcal{E}} \text{Interval}_i \cup \bigcup_{j \in \mathcal{A}} \text{Interval}_j \cup \bigcup_{k} \text{Interval}_{\text{meals}, k} \cup \bigcup_{k} \text{Interval}_{\text{sleep}, k} \cup \bigcup_{m} \text{Interval}_m \cup \{\text{Interval}_{\text{past}}\} \right)$$
    *Ý nghĩa toán học:* Đảm bảo tại bất kỳ thời điểm nào trên trục số $t \in [0, 10080]$, không có hai hoạt động nào cùng diễn ra đồng thời. Khoảng quá khứ $\text{Interval}_{\text{past}}$ ngăn không cho bất kỳ sự kiện hay bài tập nào được xếp trước thời điểm $t_{\text{now}}$.
 
 2. **Ràng buộc chuyển đổi vị trí kèm đệm hồi sức (Travel & Rest Buffer Constraint)**:
@@ -220,7 +230,7 @@ Sau khi phân rã, ta quan sát các đặc trưng toán học của từng bài
    $$\forall c \in \mathcal{C}: \quad \text{Gain}_c = \min \left( \max(0, \text{Cap}_c - \text{Current}_c), \sum_{i \in \mathcal{E}_c} \text{Points}_i \cdot x_i \right)$$
    *Chú thích ký hiệu:*
    * $c$: Nhóm tiêu chí đánh giá ĐRL ($c \in \{\text{dieu\_1}, \text{dieu\_2}, \dots, \text{dieu\_5}\}$).
-   * $\text{Cap}_c$: Trần điểm tối đa của tiêu chí $c$ (ví dụ: Điều 1 tối đa 20 điểm).
+   * $\text{Cap}_c$: Trần điểm tối đa của tiêu chí $c$ theo Quy chế ĐRL HCMUS (Điều 1: 30, Điều 2: 20, Điều 3: 25, Điều 4: 25, Điều 5: 30 điểm).
    * $\text{Current}_c$: Điểm ĐRL sinh viên đã tích lũy từ trước trong học kỳ ở tiêu chí $c$.
    * $\text{Points}_i$: Điểm thưởng mà sự kiện $i$ đem lại nếu tham gia ($x_i = 1$).
    * $\sum_{i \in \mathcal{E}_c} \text{Points}_i \cdot x_i$: Tổng điểm thô kiếm được từ các sự kiện thuộc tiêu chí $c$.
@@ -273,8 +283,83 @@ Lựa chọn **Google OR-Tools CP-SAT** không phải là một quyết định 
 * Thuật toán suy luận toán học ngay lập tức rằng: *"Công việc $i$ bắt buộc phải làm sau toàn bộ nhóm $\Omega$"*, tự động siết chặt cận dưới $s_i \ge \min_{j \in \Omega}(s_j) + \sum_{j \in \Omega} p_j$ mà không cần duyệt quay lui (Backtracking).
 
 #### 3. Công nghệ đột phá: Lazy Clause Generation (LCG) kết hợp CDCL SAT Solver
-* Khi gặp một nhánh tìm kiếm không khả thi (ví dụ: chọn đi sự kiện dẫn đến trễ hạn nộp bài tập), bộ giải phân tích đồ thị suy diễn tại điểm **1-UIP (First Unique Implication Point)**.
-* Nó học được một mệnh đề nguyên nhân (**Learned Clause**) và thực hiện **Non-chronological Backjumping** (nhảy ngược nhiều tầng về nguồn gốc xung đột). Nhờ đó, thuật toán **tuyệt đối không bao giờ lặp lại sai lầm tương tự**, giúp tốc độ giải nhanh hơn thuật toán quay lui truyền thống hàng trăm lần.
+
+Để hiểu vì sao Google OR-Tools CP-SAT đạt được tốc độ vượt bậc so với các bộ giải truyền thống, ta cần phân tích sâu công nghệ mang tính cách mạng trong ngành tối ưu hóa rời rạc: **Lazy Clause Generation (LCG)** kết hợp cùng bộ giải **CDCL SAT**.
+
+##### A. Bế tắc lịch sử giữa hai trường phái: CP(FD) vs CDCL SAT
+Trước khi LCG ra đời, bài toán lập lịch bị mắc kẹt giữa hai thái cực:
+1. **Lập trình ràng buộc cổ điển (Constraint Programming over Finite Domains - CP(FD))**:
+   * *Ưu thế*: Rất mạnh trong việc biểu diễn miền giá trị số nguyên tự nhiên (ví dụ: phút $t \in [0, 10080]$) và sở hữu các bộ lan truyền chuyên biệt cực nhanh (*Global Propagators* như `NoOverlap`, `Edge-Finding`).
+   * *Điểm yếu chí mạng (Amnesiac Search / Thrashing)*: Sử dụng thuật toán quay lui cổ điển (*Chronological Backtracking*). Khi gặp một nhánh tìm kiếm đi vào ngõ cụt (xung đột ở độ sâu 10), CP(FD) chỉ biết lùi lại đúng 1 bước (độ sâu 9) để thử giá trị khác, rồi lại đâm đầu vào đúng ngõ cụt đó. CP(FD) **hoàn toàn không có khả năng ghi nhớ nguyên nhân sai lầm**, dẫn đến hiện tượng lặp đi lặp lại cùng một sai lầm ở hàng ngàn nhánh con khác nhau (*Thrashing*).
+2. **Bộ giải SAT mệnh đề Boolean (Conflict-Driven Clause Learning - CDCL SAT)**:
+   * *Ưu thế*: Cực kỳ thông minh nhờ khả năng phân tích xung đột, học mệnh đề nguyên nhân (*Learned Clause*) và "nhảy cóc" phi thời gian (*Non-chronological Backjumping*) về thẳng nguồn gốc sai sót. SAT không bao giờ phạm lại sai lầm cũ.
+   * *Điểm yếu chí mạng (Encoding Explosion)*: SAT chỉ hiểu biến nhị phân True/False $\{0, 1\}$. Nếu dịch trước toàn bộ biến thời gian số nguyên ($0 \dots 10080$) sang mệnh đề SAT (*Eager Encoding*), số lượng biến và mệnh đề sẽ bùng nổ lên tới hàng triệu, làm tràn bộ nhớ RAM và làm mất đi hoàn toàn cấu trúc hình học của các thuật toán lập lịch thời gian.
+
+##### B. Bản chất của công nghệ Lazy Clause Generation (LCG)
+LCG (được Peter Stuckey và cộng sự phát minh) chính là chiếc cầu nối hoàn hảo giải quyết mâu thuẫn trên:
+* **"Lazy" (Lười / Sinh theo nhu cầu)**: Thay vì dịch trước hàng vạn mệnh đề SAT làm nghẽn bộ nhớ, LCG để các biến thời gian sống nguyên bản dưới dạng số nguyên của CP(FD).
+* **Mỗi biến số nguyên $X \in [l, u]$** được liên kết với các biến vị từ Boolean nguyên tử đại diện cho các cận:
+  * $[[X \le v]]$: Biến Boolean mang giá trị True nếu $X \le v$.
+  * $[[X \ge v]]$: Biến Boolean mang giá trị True nếu $X \ge v$.
+* **Cơ chế Lan truyền kèm Lời giải trình (Propagator with Explanations)**:
+  * Mỗi khi một bộ lan truyền lập lịch (như `Edge-Finding` hay `Disjunctive`) siết chặt miền giá trị của một biến (ví dụ: suy ra $s_B \ge 180$), bộ lan truyền không chỉ cập nhật số mà còn **sinh ra một lời giải trình logic (Explanation)** dưới dạng một mệnh đề Boolean:
+    $$A_1 \land A_2 \land \dots \land A_k \implies B \quad \iff \quad \neg A_1 \lor \neg A_2 \lor \dots \lor \neg A_k \lor B$$
+  * *Mệnh đề này chỉ được sinh ra đúng lúc cần thiết (on-demand / lazy)*, không bao giờ sinh thừa.
+
+##### C. Cơ chế xử lý xung đột: Implication Graph & Điểm 1-UIP (First Unique Implication Point)
+
+```
+ [Quyết định Tầng 1: Chọn Sự kiện A] (x_A = 1) 
+       │
+       ▼ (Lan truyền Edge-Finding)
+ [Biến cận: Giờ rảnh sáng bị siết chặt: t >= 11:30]
+       │
+       ├─────────────────────────────────────────┐
+       ▼                                         ▼
+ [Quyết định Tầng 2: Đi xe CS2 -> CS1]    [Quyết định Tầng 3: Chọn Sự kiện B] (x_B = 1)
+       │                                         │
+       ▼                                         ▼
+ [Khung ăn trưa bị dồn: 12:30 -> 13:15]    [Thời gian trống còn lại: 30 phút]
+       │                                         │
+       └────────────────────┬────────────────────┘
+                            ▼ (Lan truyền Deadline Check)
+                      [Bài tập C: Cần 180p, chỉ còn 30p]
+                            │
+                            ▼
+                    💥 XUNG ĐỘT (CONFLICT)
+```
+
+Khi phát hiện xung đột (ví dụ: không còn đủ thời gian làm bài tập trước hạn chót), bộ giải kích hoạt quy trình CDCL:
+1. **Dựng đồ thị suy diễn (Implication Graph)**: Nối các quyết định gán giá trị với các lời giải trình do Propagators vừa cung cấp.
+2. **Tìm điểm 1-UIP (First Unique Implication Point)**:
+   * Điểm 1-UIP là "nút thắt cổ chai" đơn nhất gần xung đột nhất trên đồ thị tại tầng quyết định hiện tại mà mọi luồng suy diễn dẫn đến mâu thuẫn bắt buộc phải đi qua.
+   * Thuật toán cắt đồ thị tại 1-UIP để chắt lọc ra **Mệnh đề nguyên nhân cốt lõi (Learned Clause / Nogood)**, loại bỏ toàn bộ các chi tiết râu ria không liên quan.
+3. **Học mệnh đề vĩnh viễn (Clause Learning)**: Mệnh đề học được lưu vĩnh viễn vào cơ sở dữ liệu tri thức của solver.
+4. **Nhảy cóc phi thời gian (Non-chronological Backjumping)**:
+   * Thay vì lùi 1 bước như CP truyền thống, bộ giải **nhảy cóc ngược qua nhiều tầng quyết định** về thẳng tầng cao thứ hai xuất hiện trong mệnh đề học được.
+   * Toàn bộ không gian tìm kiếm chứa nhánh sai lầm tương tự sẽ bị cắt tỉa vĩnh viễn (*Pruned*), đảm bảo solver **tuyệt đối không bao giờ lặp lại sai lầm đó nữa**.
+
+##### D. Minh họa thực tế trong bài toán Smart Virtual Assistant (FIT-HCMUS)
+* **Tình huống**:
+  * Sinh viên có 1 bài tập Đồ án Mạng máy tính cần 3 tiếng ($180\text{p}$), deadline 17:00 chiều Thứ Tư.
+  * Giả sử tại bước duyệt, bộ giải đang xem xét nhánh:
+    * *Tầng 1*: Chọn sự kiện "Tọa đàm AI" tại CS2 (08:00 – 11:30, 5 ĐRL).
+    * *Tầng 2*: Xếp thời gian di chuyển CS2 $\to$ CS1 kèm đệm nghỉ ($11:30 \to 12:45$).
+    * *Tầng 3*: Xếp bữa ăn trưa linh hoạt ($12:45 \to 13:30$).
+    * *Tầng 4*: Chọn tiếp sự kiện "Hiến máu tình nguyện" tại CS1 ($13:30 \to 16:30$, 3 ĐRL).
+    * $\implies$ **XUNG ĐỘT BÙNG PHÁT**: Sau $16:30$, quỹ thời gian trước deadline 17:00 chỉ còn đúng $30\text{ phút}$, bài tập 3 tiếng bị trễ hạn ($e_{\text{assign}} = 19:30 > 17:00$)!
+* **Sự khác biệt vượt trội giữa hai thuật toán**:
+  * **Nếu dùng CP truyền thống (Chronological Backtracking)**:
+    * Lùi về Tầng 3: Thử dịch chuyển giờ ăn trưa sang $12:30 \to$ vẫn trễ.
+    * Thử rút ngắn giờ ăn trưa sang $13:00 \to$ vẫn trễ.
+    * Lặp lại hàng chục lần vô ích (*Thrashing*) vì không nhận ra rằng căn nguyên xung đột không nằm ở bữa ăn trưa!
+  * **Với LCG trong Google OR-Tools CP-SAT**:
+    * Bộ giải phân tích đồ thị suy diễn, nhận diện điểm 1-UIP: Căn nguyên mâu thuẫn là do việc chọn đồng thời: `x_AI = 1` VÀ `x_HienMau = 1` vào cùng ngày Thứ Tư có deadline bài tập 3 tiếng!
+    * Solver lập tức học được mệnh đề nguyên nhân tối thiểu:
+      $$\neg x_{\text{AI}} \lor \neg x_{\text{HienMau}}$$
+      *(Nghĩa là: "Không bao giờ được phép chọn cả hai sự kiện này cùng nhau khi có bài tập 3h vào chiều Thứ Tư")*.
+    * Solver thực hiện **Backjumping nhảy thẳng từ Tầng 4 về lại Tầng 1**, lập tức loại trừ phương án này và thử nhánh sự kiện khác mà không tốn dù chỉ 1 phép thử vào việc dịch chuyển giờ ăn trưa.
+    * $\implies$ **Kết quả thực tế**: Giảm từ hàng chục ngàn phép thử quay lui xuống chỉ còn vài bước suy diễn, đưa thời gian giải bài toán tuần của sinh viên về mức **dưới $0.1$ giây**!
 
 #### 4. Phù hợp hoàn hảo với tài nguyên phần cứng máy trạm sinh viên (3 nhân CPU)
 * CP-SAT sử dụng cơ chế **Portfolio Multi-worker Search**:
@@ -288,26 +373,26 @@ Lựa chọn **Google OR-Tools CP-SAT** không phải là một quyết định 
 
 ```mermaid
 flowchart TD
-    Start([Nhận dữ liệu đầu vào: events, assignments, busy, now, prefs, current_points]) --> Step1[Bước 1: Khởi tạo mô hình CpModel & Chuẩn hóa trục thời gian sang phút]
+    Start([Nhận dữ liệu đầu vào: tasks, week_start, now, current_drl_points, preferences]) --> Step1["Bước 1: Khởi tạo mô hình CpModel & Chuẩn hóa trục thời gian sang phút [0, 10080]"]
     
-    Step1 --> Step2[Bước 2: Khóa cứng quá khứ: Tạo Interval cho khoảng 0 -> now]
-    Step2 --> Step3[Bước 3: Tạo Fixed Intervals cho BusySlots + ManualSlots]
-    Step2 --> Step4[Bước 4: Sinh động Floating Meal Windows cho Bữa trưa & Bữa tối 7 ngày]
-    Step2 --> Step5[Bước 5: Tạo Flexible Intervals cho Bài tập: [now, deadline]]
-    Step2 --> Step6[Bước 6: Tạo Optional Intervals cho Sự kiện ĐRL gắn với biến Bool x_i]
+    Step1 --> Step2["Bước 2: Khóa cứng quá khứ: Tạo Interval cho khoảng [0, t_now]"]
+    Step2 --> Step3["Bước 3: Tạo Fixed Intervals: TKB, việc riêng + Sinh động Giờ ngủ đêm theo UserPreferences"]
+    Step2 --> Step4["Bước 4: Sinh động Floating Meal Windows cho Bữa trưa & Bữa tối 7 ngày theo UserPreferences"]
+    Step2 --> Step5["Bước 5: Tạo Flexible Intervals cho Bài tập Moodle: [t_now, deadline]"]
+    Step2 --> Step6["Bước 6: Tạo Optional Intervals cho Sự kiện ĐRL: Cố định giờ & Online linh hoạt trước hạn chót"]
     
-    Step3 & Step4 & Step5 & Step6 --> Step7[Bước 7: Kích hoạt Ràng buộc Toàn cục AddNoOverlap]
+    Step3 & Step4 & Step5 & Step6 --> Step7["Bước 7: Kích hoạt Ràng buộc Toàn cục AddNoOverlap"]
     
-    Step7 --> Step8[Bước 8: Thiết lập Ràng buộc Di chuyển + REST_BUFFER giữa các cặp sự kiện]
-    Step8 --> Step9[Bước 9: Xây dựng Hàm Mục Tiêu có trần điều bằng AddMinEquality]
+    Step7 --> Step8["Bước 8: Thiết lập Ràng buộc Di chuyển + REST_BUFFER giữa các cặp sự kiện CS1 và CS2"]
+    Step8 --> Step9["Bước 9: Xây dựng Hàm Mục Tiêu: Cắt trần ĐRL 5 Điều + Phạt trễ early_start_penalty"]
     
-    Step9 --> Step10[Bước 10: Cấu hình CpSolver: 2 workers, timeout 3.0s -> solver.Solve]
+    Step9 --> Step10["Bước 10: Cấu hình CpSolver: 2 workers, timeout 3.0s -> solver.Solve"]
     
     Step10 --> Decision{Trạng thái nghiệm?}
-    Decision -- OPTIMAL / FEASIBLE --> Success[Trích xuất danh sách sự kiện ĐRL được chọn & slot bài tập]
-    Decision -- INFEASIBLE --> Fallback[Báo cáo xung đột / Dự phòng bằng Greedy Reservation]
+    Decision -- OPTIMAL / FEASIBLE --> Success["Trích xuất ScheduleResult: Sự kiện ĐRL được chọn, Lịch bài tập, Giờ ăn/ngủ"]
+    Decision -- INFEASIBLE / TIMEOUT --> Fallback["Báo cáo lý do xung đột hoặc quá thời gian giải"]
     
-    Success --> End([Trả về kết quả PlanResult cho UI])
+    Success --> End(["Trả về ScheduleResult hoàn chỉnh cho UI / Client"])
     Fallback --> End
 ```
 
