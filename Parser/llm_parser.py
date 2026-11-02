@@ -6,7 +6,7 @@ from typing import Any, Callable, Sequence
 from .errors import ProviderSchemaError, UnsupportedPayloadError
 from .extraction_schema import parse_envelope
 from .gemini_client import GeminiGateway
-from .models import RawCrawlerInput, SourcePlatform, TaskCandidate, TaskStatus, TaskType
+from .models import DRLCategory, RawCrawlerInput, SourcePlatform, TaskCandidate, TaskStatus, TaskType
 from .prompts import build_prompt
 from .time import normalize_datetime
 
@@ -51,6 +51,11 @@ class LLMParser:
                 data["type"] = TaskType(getattr(item, "type", None))
             except (TypeError, ValueError) as exc:
                 raise ProviderSchemaError("Gemini returned an invalid task type") from exc
+            try:
+                category = getattr(item, "drl_category", None)
+                data["drl_category"] = None if category is None else DRLCategory(category)
+            except (TypeError, ValueError) as exc:
+                raise ProviderSchemaError("Gemini returned an invalid DRL category") from exc
             if data["title"] is None:
                 raise ProviderSchemaError("Gemini returned a task without a title")
             for field in ("registration_start", "registration_end", "start_time", "end_time", "deadline"):
@@ -63,7 +68,7 @@ class LLMParser:
                         data[field] = normalize_datetime(data[field])
                     except (AttributeError, TypeError, ValueError) as exc:
                         raise ProviderSchemaError("Gemini returned an invalid datetime") from exc
-            result.append(TaskCandidate(**data, drl_category=None, status=TaskStatus.ACTIVE,
+            result.append(TaskCandidate(**data, status=TaskStatus.ACTIVE,
                 is_manual=False, source_url=raw.source_url, source_platform=raw.source_platform or SourcePlatform.CUSTOM,
                 embedding=None, updated_at=captured, id=None))
         return tuple(result)

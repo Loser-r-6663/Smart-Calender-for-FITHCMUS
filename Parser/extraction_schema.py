@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 TaskTypeValue = Literal["class", "assignment", "exam", "event", "personal", "tuition"]
+DRLCategoryValue = Literal["dieu_1", "dieu_2", "dieu_3", "dieu_4", "dieu_5"]
 
 
 class ExtractedTask(BaseModel):
@@ -25,6 +26,7 @@ class ExtractedTask(BaseModel):
     deadline: datetime | None = None
     estimated_hours: float | None = None
     training_points: int | None = None
+    drl_category: DRLCategoryValue | None = None
     recurrence: str | None = None
 
 

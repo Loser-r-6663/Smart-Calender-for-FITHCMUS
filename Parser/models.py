@@ -23,8 +23,11 @@ class TaskStatus(str, Enum):
 
 
 class DRLCategory(str, Enum):
-    # Categories will be defined once the authoritative DRL rules/schema are confirmed.
-    pass
+    DIEU_1 = "dieu_1"
+    DIEU_2 = "dieu_2"
+    DIEU_3 = "dieu_3"
+    DIEU_4 = "dieu_4"
+    DIEU_5 = "dieu_5"
 
 
 class SourcePlatform(str, Enum):
