@@ -1,4 +1,4 @@
-"""Concise typed errors for the optional Gemini boundary."""
+"""Concise typed errors for optional LLM provider boundaries."""
 
 
 class ParserError(Exception): pass

@@ -1,17 +1,16 @@
 """Small adapter around google-genai; no SDK import occurs at module import time."""
 
-from typing import Any, Protocol
+from typing import Any
 import random
 import time
 
 from .config import GeminiConfig
 from .errors import (ProviderAuthenticationError, ProviderError, ProviderEmptyResponseError,
                      ProviderPermissionError, ProviderRequestError, ProviderSchemaError)
-from .extraction_schema import ExtractionEnvelope, parse_envelope
+from .extraction_schema import parse_envelope, provider_schema
+from .llm_gateway import LLMGateway
 
-
-class GeminiGateway(Protocol):
-    def extract(self, prompt: str) -> Any: ...
+GeminiGateway = LLMGateway
 
 
 class GeminiClient:
@@ -41,7 +40,7 @@ class GeminiClient:
                         "temperature": self.config.temperature,
                         "max_output_tokens": self.config.max_output_tokens,
                         "response_mime_type": "application/json",
-                        "response_schema": ExtractionEnvelope,
+                        "response_schema": provider_schema(),
                     },
                 )
                 parsed = getattr(response, "parsed", None)

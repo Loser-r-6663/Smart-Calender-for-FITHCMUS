@@ -35,5 +35,20 @@ class ExtractionEnvelope(BaseModel):
     tasks: list[ExtractedTask] = Field(default_factory=list)
 
 
+def provider_schema() -> dict[str, Any]:
+    def remove_additional_properties(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: remove_additional_properties(item)
+                for key, item in value.items()
+                if key != "additionalProperties"
+            }
+        if isinstance(value, list):
+            return [remove_additional_properties(item) for item in value]
+        return value
+
+    return remove_additional_properties(ExtractionEnvelope.model_json_schema())
+
+
 def parse_envelope(value: Any) -> ExtractionEnvelope:
     return value if isinstance(value, ExtractionEnvelope) else ExtractionEnvelope.model_validate(value)

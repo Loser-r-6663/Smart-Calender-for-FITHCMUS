@@ -15,13 +15,23 @@ from .models import (
     TaskType,
 )
 from .parser import NaturalLanguageAnalyzer, Parser, TextFeatures
-from .time import GMT_PLUS_7, normalize_datetime
-from .validation import (
-    ValidationIssue,
-    ValidationResult,
-    ValidationSeverity,
-    Validator,
+from .config import OpenAICompatibleConfig
+from .factory import create_llm_gateway
+from .llm_gateway import LLMGateway
+from .openai_compatible_client import OpenAICompatibleClient
+from .raw_deduplication import (
+    InMemoryRawFingerprintStore,
+    RawDedupAction,
+    RawDedupReason,
+    RawDeduplicationError,
+    RawDeduplicationResult,
+    RawDuplicateChecker,
+    RawFingerprint,
+    RawFingerprintStore,
+    canonicalize_url,
+    fingerprint_raw_input,
 )
+from .time import GMT_PLUS_7, normalize_datetime
 
 __all__ = [
     "DedupAction",
@@ -38,10 +48,20 @@ __all__ = [
     "TaskStatus",
     "TaskType",
     "TextFeatures",
-    "ValidationIssue",
-    "ValidationResult",
-    "ValidationSeverity",
-    "Validator",
     "normalize_datetime",
     "adapt_crawl_results",
+    "InMemoryRawFingerprintStore",
+    "RawDedupAction",
+    "RawDedupReason",
+    "RawDeduplicationError",
+    "RawDeduplicationResult",
+    "RawDuplicateChecker",
+    "RawFingerprint",
+    "RawFingerprintStore",
+    "canonicalize_url",
+    "fingerprint_raw_input",
+    "LLMGateway",
+    "OpenAICompatibleConfig",
+    "OpenAICompatibleClient",
+    "create_llm_gateway",
 ]
