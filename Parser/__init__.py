@@ -5,6 +5,7 @@ other task-layer responsibilities.
 """
 
 from .deduplication import DedupAction, DeduplicationResult, DuplicateChecker
+from .crawler_adapter import CrawlerAdapterError, adapt_crawl_results
 from .models import (
     DRLCategory,
     RawCrawlerInput,
@@ -25,6 +26,7 @@ from .validation import (
 __all__ = [
     "DedupAction",
     "DeduplicationResult",
+    "CrawlerAdapterError",
     "DRLCategory",
     "DuplicateChecker",
     "GMT_PLUS_7",
@@ -41,4 +43,5 @@ __all__ = [
     "ValidationSeverity",
     "Validator",
     "normalize_datetime",
+    "adapt_crawl_results",
 ]
