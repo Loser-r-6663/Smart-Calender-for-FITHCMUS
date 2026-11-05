@@ -9,7 +9,8 @@ POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
 READ_MORE_BUTTON_SELECTOR = 'xpath=//div[contains(@role,"button")]'
-TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]'
+TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]/div[2]'
+HREF_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]//a'
 LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href, "/permalink/") or contains(@href, "/story.php") or contains(@href, "/photos/") or contains(@href, "/videos/")]'
 
 
@@ -116,7 +117,7 @@ class FBCrawler(PlaywrightCrawler):
                     raw_task.CreateDate = time_element_container.inner_text()
                     
                     # Find <a> tag(s)
-                    link_element = time_element_container.locator('xpath=//a')
+                    link_element = post_crawl_zone.locator(HREF_SELECTOR)
                     
                     if link_element.count() == 0:
                         # NOTE: Fallback and do second try (will mostly fail)
