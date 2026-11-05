@@ -21,6 +21,20 @@ class RawTask(BaseModel):
     Course: str = "N/A"          # Course associated with the post
     Content: str = "N/A"         # Full content of the post
     Link: str = "N/A"            # Link to the original post
+    
+    def __repr__(self):
+        value = f"\nRawTask(\n" \
+        f"\tTitle: {self.Title}\n" \
+        f"\tType: {self.Type}\n" \
+        f"\tDescription: {self.Description}\n" \
+        f"\tCreateDate: {self.CreateDate}\n" \
+        f"\tDuration: {self.Duration}\n" \
+        f"\tDeadline: {self.Deadline}\n" \
+        f"\tCourse: {self.Course}\n" \
+        f"\tContent: {(r := self.Content.__repr__())[:500] + ('...' if len(r) > 500 else '')}\n" \
+        f"\tLink: {self.Link}\n" \
+        ")\n"
+        return value
 
 
 class BaseCrawler():
