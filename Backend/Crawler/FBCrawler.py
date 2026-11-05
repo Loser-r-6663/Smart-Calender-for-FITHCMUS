@@ -73,12 +73,12 @@ class FBCrawler(PlaywrightCrawler):
                 page.evaluate("window.scrollBy(0, 800);")
                 page.wait_for_timeout(2000)
                 if page.locator(current_post_xpath).count() == 0:
-                    print("No more post to crawl. Stopped the crawling process.")
                     break
             
-            # Define raw task
-            raw_task = RawTask()
             try:
+                # Define raw task
+                raw_task = RawTask()
+                
                 # Get post
                 post = page.locator(current_post_xpath)
                 post.scroll_into_view_if_needed()
@@ -88,8 +88,6 @@ class FBCrawler(PlaywrightCrawler):
                 post_crawl_zone.scroll_into_view_if_needed()
                 if post_crawl_zone.count() == 0:
                     raise Exception(f"Unable to find post crawl zone for post no.{post_crawled}")
-                else:
-                    print(f"Found post crawl zone for post no.{post_crawled}")
                 
                 # Content container div tag
                 content_container = post_crawl_zone.locator(CONTENT_CONTAINER_SELECTOR)
@@ -152,16 +150,10 @@ class FBCrawler(PlaywrightCrawler):
                     raise Exception(f"Unable to find time container for post no.{post_crawled}")
                 
                 # Check if the post has already been scraped during the previous scraping session
-                if self.last_post and raw_task.Link == self.last_post:
-                    print(f"post no.{post_crawled} has already been crawled from previous scraping session")
-                    break
+                if self.last_post and raw_task.Link == self.last_post: break
                 
                 # Add to result
                 raw_tasks.append(raw_task)
-                print(f"Successfully crawled post no.{post_crawled}")
-            
-            except Exception as e:
-                print(f"Error when crawling post: {e}\nMoving on to next post")
-                continue
+            except Exception: pass
         
         return raw_tasks[::-1]

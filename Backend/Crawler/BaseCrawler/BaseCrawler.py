@@ -24,15 +24,15 @@ class RawTask(BaseModel):
     
     def __repr__(self):
         value = f"\nRawTask(\n" \
-        f"\tTitle: {self.Title}\n" \
-        f"\tType: {self.Type}\n" \
-        f"\tDescription: {self.Description}\n" \
-        f"\tCreateDate: {self.CreateDate}\n" \
-        f"\tDuration: {self.Duration}\n" \
-        f"\tDeadline: {self.Deadline}\n" \
-        f"\tCourse: {self.Course}\n" \
-        f"\tContent: {(r := self.Content.__repr__())[:500] + ('...' if len(r) > 500 else '')}\n" \
-        f"\tLink: {self.Link}\n" \
+        f"\tTitle: {self.Title.__repr__()}\n" \
+        f"\tType: {self.Type.__repr__()}\n" \
+        f"\tDescription: {self.Description.__repr__()}\n" \
+        f"\tCreateDate: {self.CreateDate.__repr__()}\n" \
+        f"\tDuration: {self.Duration.__repr__()}\n" \
+        f"\tDeadline: {self.Deadline.__repr__()}\n" \
+        f"\tCourse: {self.Course.__repr__()}\n" \
+        f"\tContent: {self.Content.__repr__()}\n" \
+        f"\tLink: {self.Link.__repr__()}\n" \
         ")\n"
         return value
 
