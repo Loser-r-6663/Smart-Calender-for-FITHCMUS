@@ -9,7 +9,7 @@ POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
 READ_MORE_BUTTON_SELECTOR = 'xpath=//div[contains(@role,"button")]'
-TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div/span[1]/span/span'
+TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]'
 LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href, "/permalink/") or contains(@href, "/story.php") or contains(@href, "/photos/") or contains(@href, "/videos/")]'
 
 
