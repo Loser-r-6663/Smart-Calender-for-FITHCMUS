@@ -1,18 +1,3 @@
-"""
-Phân hệ Lập lịch Tối ưu Điểm Rèn Luyện (ĐRL) bằng Thuật toán Nhánh Cận (Branch and Bound).
-Thiết kế theo các bước Tư duy Tính toán (Computational Thinking):
-1. Decomposition (Phân rã):
-   - Bài toán con 1: Tách lịch học tập cố định (bảng tasks: class, exam, personal).
-   - Bài toán con 2: Lọc sơ bộ tính khả thi (loại sự kiện bị đè vào giờ học, thiếu giờ di chuyển).
-   - Bài toán con 3: Nhánh cận (Branch & Bound) chọn tập sự kiện ĐRL đạt tổng điểm cao nhất mà không xung đột.
-2. Pattern Recognition (Nhận diện mẫu):
-   - Weighted Interval Scheduling có ràng buộc xung đột thời gian và trần điểm theo 5 Điều.
-3. Algorithm Design (Thuật toán):
-   - Precompute Next Compatible Jump: Mảng nhảy cóc tính trước O(1) triệt tiêu hoàn toàn vòng lặp tìm kiếm trong đệ quy.
-   - Warm start bằng Greedy heuristic để lấy cận dưới chất lượng cao ngay từ đầu.
-   - 3 tầng cắt tỉa: Tỉa xung đột thời gian & di chuyển, Tỉa trần điểm 5 Điều, Tỉa cận trên (Category Upper Bound).
-"""
-
 from __future__ import annotations
 
 import time
