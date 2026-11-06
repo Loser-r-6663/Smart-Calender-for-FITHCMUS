@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Set
 # 1. HẰNG SỐ QUY CHẾ ĐIỂM RÈN LUYỆN (HCMUS DRL CAPS & INFO)
 # =============================================================================
 
+MAX_TOTAL_DRL: int = 100  # Quy chuẩn trần toàn cục theo quy chế ĐHKHTN (thang 100)
+
 DEFAULT_DRL_CAPS: Dict[str, int] = {
     "dieu_1": 30,  # 1. Tham gia học tập và nghiên cứu khoa học (Tối đa: 30 điểm)
     "dieu_2": 20,  # 2. Chấp hành nội quy, quy chế và các quy định (Tối đa: 20 điểm)
@@ -138,6 +140,18 @@ class BranchAndBoundResult:
     execution_time_seconds: float
     nodes_explored: int
     total_candidates_considered: int
+    global_cap: Optional[int] = MAX_TOTAL_DRL
+
+    @property
+    def raw_total_drl(self) -> int:
+        """Tổng điểm 5 Điều tích lũy."""
+        return sum(self.final_drl.values())
+
+    @property
+    def final_total_drl(self) -> int:
+        """Điểm Rèn Luyện chính thức sau khi áp dụng trần toàn cục (thang 100)."""
+        raw = self.raw_total_drl
+        return min(self.global_cap, raw) if self.global_cap is not None else raw
 
     def print_summary(self) -> None:
         """In báo cáo kết quả chi tiết, trực quan."""
@@ -158,7 +172,11 @@ class BranchAndBoundResult:
             cap = self.drl_caps[cat]
             print(f"{cat:<10} | {cat_name:<38} | {init_p:>6} đ | {f'+{gain} đ':>8} | {final_p:>11} đ | {cap:>8} đ")
         print("-" * 84)
-        print(f">>> TỔNG ĐIỂM RÈN LUYỆN THỰC TẾ TĂNG THÊM: +{self.total_drl_gained} ĐIỂM <<<")
+        raw_total = self.raw_total_drl
+        official_final = self.final_total_drl
+        print(f">>> TỔNG ĐIỂM 5 ĐIỀU TÍCH LŨY: {raw_total} ĐIỂM (TĂNG +{self.total_drl_gained} ĐIỂM) <<<")
+        if self.global_cap is not None:
+            print(f">>> ĐIỂM RÈN LUYỆN CHÍNH THỨC GHI NHẬN (TRẦN TOÀN CỤC {self.global_cap} ĐIỂM): {official_final} ĐIỂM <<<")
 
         print(f"\n[II] DANH SÁCH {len(self.selected_events)} HOẠT ĐỘNG ĐRL ĐƯỢC CHỌN (KHÔNG TRÙNG GIỜ HỌC & TỐI ĐA ĐIỂM):")
         if not self.selected_events:

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Tái xuất (re-export) các thực thể dữ liệu và hàm tiện ích từ branch_and_bound_models
 from .branch_and_bound_models import (
     DEFAULT_DRL_CAPS,
+    MAX_TOTAL_DRL,
     DRL_CATEGORY_NAMES,
     DRL_CATEGORY_FULL_NAMES,
     DRL_CATEGORY_CRITERIA,
@@ -36,9 +37,11 @@ class BranchAndBoundScheduler:
         self,
         drl_caps: Optional[Dict[str, int]] = None,
         campus_travel_minutes: int = 60,
+        global_cap: Optional[int] = MAX_TOTAL_DRL,
     ):
         self.drl_caps = dict(drl_caps or DEFAULT_DRL_CAPS)
         self.campus_travel_minutes = campus_travel_minutes
+        self.global_cap = global_cap
 
     def schedule(
         self,
@@ -60,6 +63,22 @@ class BranchAndBoundScheduler:
             for cat, pts in initial_drl.items():
                 if cat in curr_drl:
                     curr_drl[cat] = min(max(0, int(pts)), self.drl_caps[cat])
+
+        init_total = sum(curr_drl.values())
+        if self.global_cap is not None and init_total >= self.global_cap:
+            exec_duration = time.perf_counter() - start_exec_time
+            return BranchAndBoundResult(
+                status="OPTIMAL",
+                selected_events=[],
+                total_drl_gained=0,
+                initial_drl=curr_drl,
+                final_drl=curr_drl,
+                drl_caps=self.drl_caps,
+                execution_time_seconds=exec_duration,
+                nodes_explored=0,
+                total_candidates_considered=0,
+                global_cap=self.global_cap,
+            )
 
         # ---------------------------------------------------------------------
         # BÀI TOÁN CON 1: TÁCH LỊCH HỌC CỐ ĐỊNH & SỰ KIỆN ĐRL ỨNG VIÊN
@@ -198,15 +217,25 @@ class BranchAndBoundScheduler:
             tr = get_travel_buffer_minutes(last_loc_greedy, ev["location"], self.campus_travel_minutes) if last_end_greedy else 0
             if last_end_greedy is None or ev["start_time"] >= last_end_greedy + timedelta(minutes=tr):
                 cat = ev["drl_category"]
-                gain = min(ev["training_points"], self.drl_caps[cat] - greedy_pts[cat])
+                cat_gap = self.drl_caps[cat] - greedy_pts[cat]
+                if self.global_cap is not None:
+                    global_gap = self.global_cap - sum(greedy_pts.values())
+                    effective_gap = min(cat_gap, global_gap)
+                else:
+                    effective_gap = cat_gap
+
+                gain = min(ev["training_points"], effective_gap)
                 if gain > 0:
                     greedy_pts[cat] += gain
                     best_score += gain
                     best_selection.append((ev, gain))
                     last_end_greedy = ev["end_time"]
                     last_loc_greedy = ev["location"]
+                    if self.global_cap is not None and sum(greedy_pts.values()) >= self.global_cap:
+                        break
 
         nodes_count = 0
+        best_duration = sum((ev["end_time"] - ev["start_time"]).total_seconds() for ev, _ in best_selection)
 
         # 2. HÀM TÌM KIẾM NHÁNH CẬN VỚI BƯỚC NHẢY ĐÃ TÍNH TRƯỚC (PRECOMPUTED JUMP)
         def search(
@@ -215,12 +244,18 @@ class BranchAndBoundScheduler:
             current_points: Dict[str, int],
             score: int,
         ) -> None:
-            nonlocal best_score, best_selection, nodes_count
+            nonlocal best_score, best_selection, best_duration, nodes_count
             nodes_count += 1
 
-            if score > best_score:
+            current_duration = sum((ev["end_time"] - ev["start_time"]).total_seconds() for ev, _ in current_selected)
+            if score > best_score or (score == best_score and current_duration < best_duration):
                 best_score = score
                 best_selection = list(current_selected)
+                best_duration = current_duration
+
+            # Cắt tỉa chạm trần toàn cục (Global Cap Pruning): Đã đạt trần thì không cần duyệt sâu thêm
+            if self.global_cap is not None and sum(current_points.values()) >= self.global_cap:
+                return
 
             if current_idx >= total_candidates:
                 return
@@ -231,6 +266,9 @@ class BranchAndBoundScheduler:
                 gap = self.drl_caps[cat] - current_points[cat]
                 if gap > 0:
                     potential += min(gap, remaining_by_cat[cat][current_idx])
+            if self.global_cap is not None:
+                potential = min(potential, self.global_cap - sum(current_points.values()))
+
             if score + potential <= best_score:
                 return
 
@@ -242,12 +280,19 @@ class BranchAndBoundScheduler:
                     gap = self.drl_caps[cat] - current_points[cat]
                     if gap > 0:
                         quick_pot += min(gap, remaining_by_cat[cat][i])
+                if self.global_cap is not None:
+                    quick_pot = min(quick_pot, self.global_cap - sum(current_points.values()))
+
                 if score + quick_pot <= best_score:
                     break  # Vì i tăng dần, remaining points chỉ có thể giảm
 
                 ev = feasible_events[i]
                 cat = ev["drl_category"]
-                gain = min(ev["training_points"], self.drl_caps[cat] - current_points[cat])
+                cat_gap = self.drl_caps[cat] - current_points[cat]
+                if self.global_cap is not None:
+                    cat_gap = min(cat_gap, self.global_cap - sum(current_points.values()))
+
+                gain = min(ev["training_points"], cat_gap)
                 if gain <= 0:
                     continue
 
@@ -289,6 +334,7 @@ class BranchAndBoundScheduler:
             execution_time_seconds=exec_duration,
             nodes_explored=nodes_count,
             total_candidates_considered=total_candidates,
+            global_cap=self.global_cap,
         )
 
 
@@ -297,6 +343,7 @@ __all__ = [
     "BranchAndBoundResult",
     "ScheduledDRLEvent",
     "DEFAULT_DRL_CAPS",
+    "MAX_TOTAL_DRL",
     "DRL_CATEGORY_NAMES",
     "DRL_CATEGORY_FULL_NAMES",
     "DRL_CATEGORY_CRITERIA",

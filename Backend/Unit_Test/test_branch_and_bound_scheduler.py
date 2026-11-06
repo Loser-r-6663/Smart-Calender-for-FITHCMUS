@@ -249,6 +249,40 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertGreater(result.total_drl_gained, 0, "Phải chọn được các sự kiện tốt nhất!")
         print(f"\n[Test Scalability] 40 sự kiện giải trong {result.execution_time_seconds * 1000:.2f} ms | Duyệt {result.nodes_explored} nút | ĐRL tăng: +{result.total_drl_gained}đ")
 
+    def test_case_7_global_cap_100(self):
+        """Kiểm tra: Ràng buộc trần toàn cục 100 điểm (Quy chế ĐHKHTN)."""
+        # Sinh viên đã có 92 điểm tổng cộng (dieu_1: 28, dieu_2: 18, dieu_3: 20, dieu_4: 16, dieu_5: 10)
+        initial_drl = {
+            "dieu_1": 28,  # trần 30
+            "dieu_2": 18,  # trần 20
+            "dieu_3": 20,  # trần 25
+            "dieu_4": 16,  # trần 25
+            "dieu_5": 10,  # trần 30
+        }
+        # Có 3 sự kiện hợp lệ trong tuần, mỗi sự kiện 5đ (tổng 15đ)
+        tasks = [
+            {
+                "id": f"event-cap-{i}",
+                "title": f"Sự kiện #{i}",
+                "type": "event",
+                "start_time": datetime(2026, 11, 2 + i, 14, 0, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 2 + i, 16, 0, tzinfo=TZ_HCM),
+                "location": "ONLINE",
+                "training_points": 5,
+                "drl_category": "dieu_4",  # Điều 4 còn thiếu 9đ
+            }
+            for i in range(3)
+        ]
+
+        result = self.scheduler.schedule(tasks, initial_drl=initial_drl)
+
+        # Sinh viên đang có 92đ, chỉ cần 8đ là chạm trần 100đ
+        # Sự kiện 1 (5đ) + Sự kiện 2 (3đ hiệu dụng) = 8đ -> đạt 100đ
+        # Thuật toán không chọn sự kiện 3 vì đã đạt trần toàn cục 100đ!
+        self.assertEqual(result.total_drl_gained, 8, "Chỉ được cộng 8đ để chạm trần 100đ!")
+        self.assertEqual(result.final_total_drl, 100, "Tổng ĐRL cuối cùng phải là 100đ!")
+        self.assertEqual(len(result.selected_events), 2, "Chỉ chọn 2 sự kiện vừa đủ đạt 100đ, không xếp thừa!")
+
 
 if __name__ == "__main__":
     unittest.main()
