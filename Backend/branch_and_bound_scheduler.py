@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from .branch_and_bound_models import (
     DEFAULT_DRL_CAPS,
     DRL_CATEGORY_NAMES,
+    DRL_CATEGORY_FULL_NAMES,
+    DRL_CATEGORY_CRITERIA,
     FIXED_TASK_TYPES,
     BranchAndBoundResult,
     ScheduledDRLEvent,
@@ -296,6 +298,8 @@ __all__ = [
     "ScheduledDRLEvent",
     "DEFAULT_DRL_CAPS",
     "DRL_CATEGORY_NAMES",
+    "DRL_CATEGORY_FULL_NAMES",
+    "DRL_CATEGORY_CRITERIA",
     "FIXED_TASK_TYPES",
     "get_travel_buffer_minutes",
     "normalize_location",

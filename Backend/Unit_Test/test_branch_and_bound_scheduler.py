@@ -126,7 +126,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertEqual(result.total_drl_gained, 6)
 
     def test_case_3_submodular_category_capping(self):
-        """Kiểm tra: Trần điểm 5 Điều (Điều 1 trần 25, có 22 thì chỉ được cộng tối đa 3 điểm)."""
+        """Kiểm tra: Trần điểm 5 Điều (Điều 1 trần 30, có 27 thì chỉ được cộng tối đa 3 điểm)."""
         tasks = [
             {
                 "id": "event-dieu1-10d",
@@ -140,14 +140,14 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             },
         ]
 
-        # Sinh viên đã có 22 điểm ở Điều 1 (trần 25)
-        initial_drl = {"dieu_1": 22}
+        # Sinh viên đã có 27 điểm ở Điều 1 (trần 30)
+        initial_drl = {"dieu_1": 27}
         result = self.scheduler.schedule(tasks, initial_drl=initial_drl)
 
         self.assertEqual(len(result.selected_events), 1)
         selected_ev = result.selected_events[0]
-        self.assertEqual(selected_ev.points_gained, 3, "Chỉ được cộng 3 điểm vì trần Điều 1 là 25!")
-        self.assertEqual(result.final_drl["dieu_1"], 25)
+        self.assertEqual(selected_ev.points_gained, 3, "Chỉ được cộng 3 điểm vì trần Điều 1 là 30!")
+        self.assertEqual(result.final_drl["dieu_1"], 30)
         self.assertEqual(result.total_drl_gained, 3)
 
     def test_case_4_conflict_between_drl_events(self):

@@ -15,19 +15,52 @@ from typing import Any, Dict, List, Optional, Set
 # =============================================================================
 
 DEFAULT_DRL_CAPS: Dict[str, int] = {
-    "dieu_1": 25,  # 1. Chấp hành pháp luật và nội quy, quy chế nhà trường (Tối đa: 25 điểm)
-    "dieu_2": 20,  # 2. Tinh thần và thái độ trong học tập, NCKH (Tối đa: 20 điểm)
-    "dieu_3": 20,  # 3. Chính trị - Xã hội, Thể thao, Văn nghệ (Tối đa: 20 điểm)
-    "dieu_4": 15,  # 4. Trách nhiệm công dân trong quan hệ cộng đồng (Tối đa: 15 điểm)
-    "dieu_5": 20,  # 5. Cán bộ lớp, đoàn thể, khen thưởng (Tối đa: 20 điểm)
+    "dieu_1": 30,  # 1. Tham gia học tập và nghiên cứu khoa học (Tối đa: 30 điểm)
+    "dieu_2": 20,  # 2. Chấp hành nội quy, quy chế và các quy định (Tối đa: 20 điểm)
+    "dieu_3": 25,  # 3. Hoạt động chính trị - xã hội, VH-VN, TD-TT; phòng chống tội phạm & tệ nạn (Tối đa: 25 điểm)
+    "dieu_4": 25,  # 4. Hành động hướng đến xây dựng và phát triển cộng đồng (Tối đa: 25 điểm)
+    "dieu_5": 30,  # 5. Các nội dung khuyến khích (Tối đa: 30 điểm)
 }
 
 DRL_CATEGORY_NAMES: Dict[str, str] = {
-    "dieu_1": "1. Chấp hành pháp luật & nội quy",
-    "dieu_2": "2. Học tập & nghiên cứu khoa học",
-    "dieu_3": "3. Chính trị - xã hội, văn thể mỹ",
-    "dieu_4": "4. Quan hệ cộng đồng, tình nguyện",
-    "dieu_5": "5. Cán bộ lớp, đoàn thể, khen thưởng",
+    "dieu_1": "1. Học tập & NCKH",
+    "dieu_2": "2. Chấp hành nội quy, quy chế",
+    "dieu_3": "3. Chính trị - xã hội, văn thể mỹ, PCTP",
+    "dieu_4": "4. Xây dựng & phát triển cộng đồng",
+    "dieu_5": "5. Các nội dung khuyến khích",
+}
+
+DRL_CATEGORY_FULL_NAMES: Dict[str, str] = {
+    "dieu_1": "Tham gia học tập và nghiên cứu khoa học",
+    "dieu_2": "Chấp hành nội quy, quy chế và các quy định",
+    "dieu_3": "Tham gia các hoạt động chính trị - xã hội, văn hóa - văn nghệ, thể dục - thể thao; phòng chống tội phạm và các tệ nạn xã hội",
+    "dieu_4": "Hành động hướng đến xây dựng và phát triển cộng đồng",
+    "dieu_5": "Các nội dung khuyến khích",
+}
+
+DRL_CATEGORY_CRITERIA: Dict[str, List[str]] = {
+    "dieu_1": [
+        "Chấp hành các quy định liên quan đến học vụ và khảo thí",
+        "Có kết quả học tập tốt và tiến bộ trong mỗi học kỳ",
+        "Tích cực tham gia NCKH và các hoạt động học thuật",
+    ],
+    "dieu_2": [
+        "Chấp hành nội quy và các quy định được áp dụng trong Nhà trường",
+    ],
+    "dieu_3": [
+        "Tham gia các hoạt động chính trị - xã hội, văn hóa - văn nghệ, thể dục - thể thao",
+        "Phòng chống tội phạm và các tệ nạn xã hội",
+        "Xây dựng, quảng bá hình ảnh Nhà trường và ĐHQG-HCM",
+    ],
+    "dieu_4": [
+        "Chấp hành pháp luật",
+        "Tham gia các hoạt động tình nguyện hướng đến cộng đồng, xã hội",
+    ],
+    "dieu_5": [
+        "Thành tích đặc biệt xuất sắc trong học tập, rèn luyện và nhận được khen thưởng",
+        "Có tinh thần vượt khó vươn lên trong học tập và cuộc sống",
+        "Có hoàn cảnh đặc biệt",
+    ],
 }
 
 FIXED_TASK_TYPES: Set[str] = {"class", "exam", "personal"}
@@ -114,17 +147,17 @@ class BranchAndBoundResult:
         print("=" * 88)
 
         print("\n[I] ĐỐI SOÁT ĐIỂM RÈN LUYỆN 5 ĐIỀU (QUY CHẾ ĐHKHTN - ĐHQG-HCM):")
-        print("-" * 78)
-        print(f"{'Tiêu chí':<10} | {'Tên tiêu chí':<35} | {'Hiện có':<8} | {'Cộng thêm':<10} | {'Tổng sau tuần':<13} | {'Trần tối đa':<10}")
-        print("-" * 78)
+        print("-" * 84)
+        print(f"{'Tiêu chí':<10} | {'Tên tiêu chí':<38} | {'Hiện có':<8} | {'Cộng thêm':<10} | {'Tổng sau tuần':<13} | {'Trần tối đa':<10}")
+        print("-" * 84)
         for cat in sorted(self.drl_caps.keys()):
             cat_name = DRL_CATEGORY_NAMES.get(cat, cat)
             init_p = self.initial_drl.get(cat, 0)
             final_p = self.final_drl.get(cat, init_p)
             gain = final_p - init_p
             cap = self.drl_caps[cat]
-            print(f"{cat:<10} | {cat_name:<35} | {init_p:>6} đ | {f'+{gain} đ':>8} | {final_p:>11} đ | {cap:>8} đ")
-        print("-" * 78)
+            print(f"{cat:<10} | {cat_name:<38} | {init_p:>6} đ | {f'+{gain} đ':>8} | {final_p:>11} đ | {cap:>8} đ")
+        print("-" * 84)
         print(f">>> TỔNG ĐIỂM RÈN LUYỆN THỰC TẾ TĂNG THÊM: +{self.total_drl_gained} ĐIỂM <<<")
 
         print(f"\n[II] DANH SÁCH {len(self.selected_events)} HOẠT ĐỘNG ĐRL ĐƯỢC CHỌN (KHÔNG TRÙNG GIỜ HỌC & TỐI ĐA ĐIỂM):")

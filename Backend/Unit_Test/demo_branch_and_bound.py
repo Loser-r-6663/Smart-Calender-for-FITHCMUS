@@ -108,7 +108,7 @@ def main():
             "end_time": datetime(2026, 11, 3, 11, 30, tzinfo=TZ_HCM),
             "location": "CS2 - Hội trường Linh Trung",
             "training_points": 5,
-            "drl_category": "dieu_2",
+            "drl_category": "dieu_1",
             "status": "active",
         },
         {
@@ -119,7 +119,7 @@ def main():
             "end_time": datetime(2026, 11, 4, 11, 0, tzinfo=TZ_HCM),
             "location": "CS1 - Tòa F",
             "training_points": 10,
-            "drl_category": "dieu_2",
+            "drl_category": "dieu_1",
             "status": "active",
         },
         {
@@ -179,12 +179,12 @@ def main():
         },
         {
             "id": "event-8-online-deadline",
-            "title": "Thi trắc nghiệm trực tuyến Tìm hiểu Pháp luật & Nội quy",
+            "title": "Thi trắc nghiệm trực tuyến Tìm hiểu Nội quy & Quy chế Nhà trường",
             "type": "event",
             "deadline": datetime(2026, 11, 5, 22, 0, tzinfo=TZ_HCM),
             "location": "Online - MyAloha",
             "training_points": 3,
-            "drl_category": "dieu_1",
+            "drl_category": "dieu_2",
             "status": "active",
         },
     ]
@@ -194,13 +194,13 @@ def main():
     # -------------------------------------------------------------------------
     scheduler = BranchAndBoundScheduler(campus_travel_minutes=60)
 
-    # Điểm rèn luyện hiện có của sinh viên (theo thang 100 của Điều 17)
+    # Điểm rèn luyện hiện có của sinh viên theo 5 Điều
     initial_drl = {
-        "dieu_1": 18,  # Chấp hành pháp luật & nội quy: 18/25đ
-        "dieu_2": 17,  # Học tập & NCKH: 17/20đ (chỉ còn thiếu 3đ để chạm trần 20đ)
-        "dieu_3": 12,  # Chính trị - xã hội, văn thể mỹ: 12/20đ
-        "dieu_4": 8,   # Quan hệ cộng đồng, tình nguyện: 8/15đ
-        "dieu_5": 5,   # Cán bộ lớp, đoàn thể: 5/20đ
+        "dieu_1": 22,  # Học tập & NCKH: 22/30đ (còn thiếu 8đ để chạm trần 30đ)
+        "dieu_2": 17,  # Chấp hành nội quy, quy chế: 17/20đ (chỉ còn thiếu 3đ để chạm trần 20đ)
+        "dieu_3": 18,  # Chính trị - xã hội, văn thể mỹ: 18/25đ
+        "dieu_4": 15,  # Hành động hướng đến cộng đồng: 15/25đ
+        "dieu_5": 10,  # Các nội dung khuyến khích: 10/30đ
     }
 
     result = scheduler.schedule(tasks_from_database, initial_drl=initial_drl)
