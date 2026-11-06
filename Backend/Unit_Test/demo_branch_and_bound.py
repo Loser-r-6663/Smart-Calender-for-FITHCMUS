@@ -3,7 +3,11 @@ Demo Lập lịch Tối ưu Điểm Rèn Luyện (ĐRL) bằng Thuật toán Nh�
 Mô phỏng thực tế tuần sinh viên FIT - HCMUS (02/11/2026 -> 08/11/2026):
 - Dữ liệu đầu vào chuẩn hóa 100% theo Schema bảng tasks của PostgreSQL Database.
 - Tự động lọc qua lịch học cố định và thời gian di chuyển giữa 2 cơ sở (CS1 <-> CS2).
-- Tối đa hóa ĐRL thực nhận dựa trên trần điểm 5 Điều của ĐHKHTN.
+- Áp dụng Mô hình Trần Kép (Double Capping):
+  + Trần 5 Tiêu chí thành phần: Điều 1 (30đ), Điều 2 (20đ), Điều 3 (25đ), Điều 4 (25đ), Điều 5 (30đ).
+  + Trần toàn cục tối đa 100 điểm theo Quy chế ĐHKHTN (Global Cap = 100).
+- Cơ chế Dừng sớm (Early Stopping): Khi sinh viên đã đủ 100 điểm, thuật toán dừng chọn thêm sự kiện,
+  bảo vệ trọn vẹn quỹ thời gian nghỉ ngơi cuối tuần cho sinh viên.
 """
 
 import sys
@@ -192,9 +196,11 @@ def main():
     # -------------------------------------------------------------------------
     # 2. KHỞI TẠO BỘ LẬP LỊCH & THỰC THI THUẬT TOÁN NHÁNH CẬN
     # -------------------------------------------------------------------------
-    scheduler = BranchAndBoundScheduler(campus_travel_minutes=60)
+    # Mặc định global_cap=100 (Trần toàn cục tối đa 100 điểm theo Quy chế ĐHKHTN)
+    scheduler = BranchAndBoundScheduler(campus_travel_minutes=60, global_cap=100)
 
-    # Điểm rèn luyện hiện có của sinh viên theo 5 Điều
+    # Điểm rèn luyện hiện có của sinh viên theo 5 Điều (Tổng hiện có: 82 điểm)
+    # Mục tiêu tối đa: Sinh viên chỉ cần thêm đúng 18 điểm để chạm mốc tuyệt đối 100 điểm
     initial_drl = {
         "dieu_1": 22,  # Học tập & NCKH: 22/30đ (còn thiếu 8đ để chạm trần 30đ)
         "dieu_2": 17,  # Chấp hành nội quy, quy chế: 17/20đ (chỉ còn thiếu 3đ để chạm trần 20đ)
