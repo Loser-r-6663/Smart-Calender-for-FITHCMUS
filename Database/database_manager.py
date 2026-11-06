@@ -65,12 +65,14 @@ class DatabaseManager:
 
     def set_daily_task(
         self,
+        user_id: int,
         work_date: date,
         task_id: str,
         is_completed_today: bool = False,
     ) -> dict[str, Any]:
         return self._run(
             self.daily_tasks.set_for_date,
+            user_id,
             work_date,
             task_id,
             is_completed_today,
@@ -83,13 +85,20 @@ class DatabaseManager:
 
     def set_daily_task_completion(
         self,
+        user_id: int,
         work_date: date,
         task_id: str,
         is_completed: bool,
     ) -> dict[str, Any] | None:
         return self._run(
-            self.daily_tasks.set_completion, work_date, task_id, is_completed
+            self.daily_tasks.set_completion,
+            user_id,
+            work_date,
+            task_id,
+            is_completed,
         )
 
-    def remove_daily_task(self, work_date: date, task_id: str) -> bool:
-        return self._run(self.daily_tasks.remove, work_date, task_id)
+    def remove_daily_task(
+        self, user_id: int, work_date: date, task_id: str
+    ) -> bool:
+        return self._run(self.daily_tasks.remove, user_id, work_date, task_id)

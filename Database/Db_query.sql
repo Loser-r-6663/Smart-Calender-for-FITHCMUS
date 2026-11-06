@@ -80,10 +80,14 @@ CREATE TABLE IF NOT EXISTS user_tasks (
 );
 
 CREATE TABLE IF NOT EXISTS daily_tasks (
+    user_id INT NOT NULL,
     work_date DATE NOT NULL,
-    task_id VARCHAR(64) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    task_id VARCHAR(64) NOT NULL,
     is_completed_today BOOLEAN NOT NULL DEFAULT FALSE,
-    PRIMARY KEY (work_date, task_id)
+    PRIMARY KEY (user_id, work_date, task_id),
+    FOREIGN KEY (user_id, task_id)
+        REFERENCES user_tasks(user_id, task_id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline

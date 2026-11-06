@@ -52,9 +52,11 @@ lần. Khi xóa user hoặc task, liên kết tương ứng được xóa theo k
 
 ### `daily_tasks`
 
-Lưu task được đưa vào lịch theo ngày và trạng thái `is_completed_today`. Mỗi
-cặp `(work_date, task_id)` chỉ có một bản ghi. Khi truy vấn lịch ngày theo user,
-API chỉ trả về task đã được gán cho user đó.
+Lưu task trong lịch riêng của từng user và trạng thái `is_completed_today`.
+Mỗi bộ `(user_id, work_date, task_id)` chỉ có một bản ghi, nên hai user có thể
+có trạng thái hoàn thành khác nhau cho cùng task và ngày. Khóa ngoại ghép
+`(user_id, task_id)` yêu cầu task phải được gán cho user trước khi thêm vào lịch.
+Bỏ gán task sẽ xóa các lịch ngày tương ứng.
 
 ## 3. Cài đặt và cấu hình
 
@@ -80,6 +82,17 @@ Tạo database `task_manager_db` trong PostgreSQL nếu database chưa tồn t�
 Sau đó chạy nội dung `Db_query.sql` bằng pgAdmin hoặc `psql` để tạo các bảng và
 chỉ mục. Script sử dụng `CREATE TABLE IF NOT EXISTS`, nên có thể chạy lại để
 khởi tạo các bảng còn thiếu; script không tự sửa schema của bảng đã tồn tại.
+
+Nếu database đã có `daily_tasks` theo schema cũ, hãy sao lưu database rồi chạy
+migration một lần thay vì chỉ chạy lại `Db_query.sql`:
+
+```powershell
+psql -h localhost -U postgres -d task_manager_db -f Database/migrations/001_daily_tasks_per_user.sql
+```
+
+Migration sao chép mỗi lịch cũ cho tất cả user đang được gán task đó; trạng thái
+hoàn thành cũ được giữ lại cho từng user. Bản ghi lịch không có user nào được
+gán sẽ bị loại bỏ vì trước đây chúng cũng không xuất hiện trong lịch của user.
 
 ## 4. Khởi chạy REST API
 
@@ -168,9 +181,9 @@ Body tạo user:
 | Phương thức | Đường dẫn | Chức năng |
 |---|---|---|
 | `GET` | `/users/{user_id}/daily-tasks?work_date=YYYY-MM-DD` | Xem task trong ngày của user |
-| `PUT` | `/daily-tasks/{work_date}/{task_id}` | Thêm task vào ngày hoặc cập nhật trạng thái |
-| `PATCH` | `/daily-tasks/{work_date}/{task_id}/completion` | Đổi trạng thái hoàn thành |
-| `DELETE` | `/daily-tasks/{work_date}/{task_id}` | Xóa task khỏi ngày |
+| `PUT` | `/users/{user_id}/daily-tasks/{work_date}/{task_id}` | Thêm task vào lịch user hoặc cập nhật trạng thái |
+| `PATCH` | `/users/{user_id}/daily-tasks/{work_date}/{task_id}/completion` | Đổi trạng thái hoàn thành |
+| `DELETE` | `/users/{user_id}/daily-tasks/{work_date}/{task_id}` | Xóa task khỏi lịch user |
 
 Body thêm/cập nhật task trong ngày:
 
@@ -204,10 +217,23 @@ Ngày trong đường dẫn và query dùng định dạng `YYYY-MM-DD`.
 
 - Mỗi thao tác database chạy trong một transaction riêng; lỗi sẽ rollback
   transaction.
-- Xóa user sẽ xóa các liên kết gán task của user. Xóa task sẽ xóa liên kết
-  user-task và daily-task tương ứng.
-- Việc tạo task trong `daily_tasks` không tự gán task cho user. Để task xuất
-  hiện trong kết quả `/users/{user_id}/daily-tasks`, trước hết hãy gán task cho
-  user bằng endpoint `PUT /users/{user_id}/tasks/{task_id}`.
+- Xóa user hoặc bỏ gán task sẽ xóa lịch ngày tương ứng. Xóa task sẽ xóa các
+  liên kết user-task và daily-task tương ứng.
+- Trước khi đưa task vào lịch của user, hãy gán task bằng endpoint
+  `PUT /users/{user_id}/tasks/{task_id}`. Database từ chối lịch cho task chưa
+  được gán cho user đó.
 - Có thể dùng `DatabaseManager` trực tiếp trong Python khi không cần HTTP API;
   REST API trong tài liệu này là lớp giao tiếp dành cho ứng dụng client.
+
+## 8. Chạy kiểm thử
+
+Từ thư mục gốc dự án, chạy:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Các kiểm thử hiện tại không cần kết nối PostgreSQL; chúng kiểm tra phạm vi
+`user_id` trong truy vấn repository và việc API truyền đúng user vào thao tác
+lịch. Cần chạy migration và kiểm thử tích hợp riêng trên database thử nghiệm
+để xác nhận hành vi PostgreSQL thực tế.

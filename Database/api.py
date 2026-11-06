@@ -235,34 +235,43 @@ def get_daily_tasks(
     return database.get_tasks_by_date(user_id, work_date)
 
 
-@app.put("/daily-tasks/{work_date}/{task_id}")
+@app.put("/users/{user_id}/daily-tasks/{work_date}/{task_id}")
 def set_daily_task(
     work_date: date,
     task_id: str,
     update: DailyTaskUpdate,
+    user_id: int = Path(ge=1),
     database: DatabaseManager = Depends(get_database_manager),
 ) -> dict[str, Any]:
-    return database.set_daily_task(work_date, task_id, update.is_completed_today)
+    return database.set_daily_task(
+        user_id, work_date, task_id, update.is_completed_today
+    )
 
 
-@app.patch("/daily-tasks/{work_date}/{task_id}/completion")
+@app.patch("/users/{user_id}/daily-tasks/{work_date}/{task_id}/completion")
 def set_daily_task_completion(
     work_date: date,
     task_id: str,
     update: CompletionUpdate,
+    user_id: int = Path(ge=1),
     database: DatabaseManager = Depends(get_database_manager),
 ) -> dict[str, Any]:
-    result = database.set_daily_task_completion(work_date, task_id, update.is_completed)
+    result = database.set_daily_task_completion(
+        user_id, work_date, task_id, update.is_completed
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Daily task not found")
     return result
 
 
-@app.delete("/daily-tasks/{work_date}/{task_id}", status_code=204)
+@app.delete(
+    "/users/{user_id}/daily-tasks/{work_date}/{task_id}", status_code=204
+)
 def remove_daily_task(
     work_date: date,
     task_id: str,
+    user_id: int = Path(ge=1),
     database: DatabaseManager = Depends(get_database_manager),
 ) -> None:
-    if not database.remove_daily_task(work_date, task_id):
+    if not database.remove_daily_task(user_id, work_date, task_id):
         raise HTTPException(status_code=404, detail="Daily task not found")
