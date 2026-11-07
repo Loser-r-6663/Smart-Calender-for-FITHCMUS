@@ -1,25 +1,8 @@
-"""Boundaries and value objects owned by the backend data processor.
+"""Stable public API for parsing, deduplication, and REST persistence."""
 
-This package does not own crawlers, persisted Tasks, databases, scheduling, or
-other task-layer responsibilities.
-"""
-
-from .deduplication import DedupAction, DeduplicationResult, DuplicateChecker
-from .crawler_adapter import CrawlerAdapterError, adapt_crawl_results
-from .models import (
-    DRLCategory,
-    RawCrawlerInput,
-    SourcePlatform,
-    TaskCandidate,
-    TaskStatus,
-    TaskType,
-)
-from .parser import NaturalLanguageAnalyzer, Parser, TextFeatures
-from .config import OpenAICompatibleConfig
-from .factory import create_llm_gateway
-from .llm_gateway import LLMGateway
-from .openai_compatible_client import OpenAICompatibleClient
-from .raw_deduplication import (
+from .adapters import CrawlerAdapterError, adapt_crawl_results
+from .api_client import DatabaseApiClient
+from .deduplication import (
     InMemoryRawFingerprintStore,
     RawDedupAction,
     RawDedupReason,
@@ -31,26 +14,71 @@ from .raw_deduplication import (
     canonicalize_url,
     fingerprint_raw_input,
 )
-from .time import GMT_PLUS_7, normalize_datetime
+from .errors import (
+    DatabaseApiConflictError,
+    DatabaseApiError,
+    DatabaseApiUnavailableError,
+    DatabaseApiValidationError,
+    ParserError,
+    ProviderError,
+)
+from .extraction import GMT_PLUS_7, LLMExtractor, LLMParser, normalize_datetime
+from .manager import (
+    ParserManager,
+    PipelineBatchResult,
+    PipelineItemResult,
+    PipelineStage,
+    StageError,
+    StageResult,
+    StageStatus,
+)
+from .models import (
+    DRLCategory,
+    RawCrawlerInput,
+    SourcePlatform,
+    TaskCandidate,
+    TaskStatus,
+    TaskType,
+)
+from .providers import (
+    ExtractionEnvelope,
+    ExtractedTask,
+    GeminiClient,
+    GeminiConfig,
+    LLMGateway,
+    OpenAICompatibleClient,
+    OpenAICompatibleConfig,
+    create_llm_gateway,
+    parse_envelope,
+    provider_schema,
+)
+
 
 __all__ = [
-    "DedupAction",
-    "DeduplicationResult",
     "CrawlerAdapterError",
+    "DatabaseApiClient",
+    "DatabaseApiConflictError",
+    "DatabaseApiError",
+    "DatabaseApiUnavailableError",
+    "DatabaseApiValidationError",
     "DRLCategory",
-    "DuplicateChecker",
+    "ExtractionEnvelope",
+    "ExtractedTask",
+    "GeminiClient",
+    "GeminiConfig",
     "GMT_PLUS_7",
-    "NaturalLanguageAnalyzer",
-    "Parser",
-    "RawCrawlerInput",
-    "SourcePlatform",
-    "TaskCandidate",
-    "TaskStatus",
-    "TaskType",
-    "TextFeatures",
-    "normalize_datetime",
-    "adapt_crawl_results",
     "InMemoryRawFingerprintStore",
+    "LLMExtractor",
+    "LLMGateway",
+    "LLMParser",
+    "OpenAICompatibleClient",
+    "OpenAICompatibleConfig",
+    "ParserError",
+    "ParserManager",
+    "PipelineBatchResult",
+    "PipelineItemResult",
+    "PipelineStage",
+    "RawCrawlerInput",
     "RawDedupAction",
     "RawDedupReason",
     "RawDeduplicationError",
@@ -58,10 +86,18 @@ __all__ = [
     "RawDuplicateChecker",
     "RawFingerprint",
     "RawFingerprintStore",
+    "SourcePlatform",
+    "StageError",
+    "StageResult",
+    "StageStatus",
+    "TaskCandidate",
+    "TaskStatus",
+    "TaskType",
+    "adapt_crawl_results",
     "canonicalize_url",
-    "fingerprint_raw_input",
-    "LLMGateway",
-    "OpenAICompatibleConfig",
-    "OpenAICompatibleClient",
     "create_llm_gateway",
+    "fingerprint_raw_input",
+    "normalize_datetime",
+    "parse_envelope",
+    "provider_schema",
 ]

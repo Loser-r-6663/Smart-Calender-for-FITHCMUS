@@ -1,4 +1,4 @@
-# Opted to use an adapter instead of natively adopting the crawler's input scheme so that LLMParser is reusable for crawler, file, manual, and test inputs instead of being coupled with the crawler.
+"""Adapt crawler manager output into deterministic raw parser envelopes."""
 
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
@@ -10,7 +10,7 @@ from .models import RawCrawlerInput, SourcePlatform
 
 
 class CrawlerAdapterError(ParserError):
-    """Raised when crawler manager output cannot be adapted safely."""
+    """Raised when crawler output cannot be adapted safely."""
 
 
 _RAW_TASK_FIELDS = (
@@ -45,28 +45,25 @@ def _json_value(value: Any) -> Any:
 def _record_data(record: object) -> Mapping[str, Any]:
     if isinstance(record, Mapping):
         return record
-
-    model_dump = getattr(record, "model_dump", None)
-    if callable(model_dump):
-        try:
-            data = model_dump()
-        except Exception as exc:
-            raise CrawlerAdapterError("record model_dump() failed") from exc
-        if isinstance(data, Mapping):
-            return data
-        raise CrawlerAdapterError("record model_dump() did not return a mapping")
-
-    legacy_dict = getattr(record, "dict", None)
-    if callable(legacy_dict):
-        try:
-            data = legacy_dict()
-        except Exception as exc:
-            raise CrawlerAdapterError("record dict() failed") from exc
-        if isinstance(data, Mapping):
-            return data
-        raise CrawlerAdapterError("record dict() did not return a mapping")
-
-    fields = {field: getattr(record, field) for field in _RAW_TASK_FIELDS if hasattr(record, field)}
+    for method_name in ("model_dump", "dict"):
+        method = getattr(record, method_name, None)
+        if callable(method):
+            try:
+                data = method()
+            except Exception as exc:
+                raise CrawlerAdapterError(
+                    f"record {method_name}() failed"
+                ) from exc
+            if isinstance(data, Mapping):
+                return data
+            raise CrawlerAdapterError(
+                f"record {method_name}() did not return a mapping"
+            )
+    fields = {
+        field: getattr(record, field)
+        for field in _RAW_TASK_FIELDS
+        if hasattr(record, field)
+    }
     if fields:
         return fields
     raise CrawlerAdapterError(f"unsupported record shape: {type(record).__name__}")
@@ -85,11 +82,11 @@ def adapt_crawl_results(
     *,
     captured_at: datetime | None = None,
 ) -> tuple[RawCrawlerInput, ...]:
-    """Flatten crawler source lists into parser-compatible JSON envelopes."""
+    """Flatten source lists into parser-compatible JSON envelopes."""
+
     if not isinstance(results, Mapping):
         raise CrawlerAdapterError("crawler results must be a mapping")
-    if captured_at is None:
-        captured_at = datetime.now(timezone.utc)
+    captured_at = captured_at or datetime.now(timezone.utc)
     if not isinstance(captured_at, datetime):
         raise CrawlerAdapterError("captured_at must be a datetime or None")
 
@@ -104,19 +101,22 @@ def adapt_crawl_results(
         platform = _PLATFORMS.get(source_alias.casefold(), SourcePlatform.CUSTOM)
         for record in records:
             data = _record_data(record)
-            normalized = _json_value(data)
             envelope = {
-                "record": normalized,
+                "record": _json_value(data),
                 "source": {"alias": source_alias, "platform": platform.value},
             }
-            payload = json.dumps(
-                envelope, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            adapted.append(
+                RawCrawlerInput(
+                    payload=json.dumps(
+                        envelope,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    source_platform=platform,
+                    source_alias=source_alias,
+                    captured_at=captured_at,
+                    source_url=_source_url(data),
+                )
             )
-            adapted.append(RawCrawlerInput(
-                payload=payload,
-                source_platform=platform,
-                source_alias=source_alias,
-                captured_at=captured_at,
-                source_url=_source_url(data),
-            ))
     return tuple(adapted)

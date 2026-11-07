@@ -50,12 +50,7 @@ class RawCrawlerInput:
 
 @dataclass(frozen=True, slots=True)
 class TaskCandidate:
-    """The 22-field data-processor output before Task-layer persistence.
-
-    ``id`` is optional because identity belongs to a later persistence/task
-    boundary. This is not the persisted ``Task`` entity. Datetime fields are
-    expected to use the GMT+7 rule in :mod:`smart_calendar.data_processing.time`.
-    """
+    """Immutable data-processor output before task persistence."""
 
     title: str
     type: TaskType
