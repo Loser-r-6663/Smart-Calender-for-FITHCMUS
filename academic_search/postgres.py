@@ -26,6 +26,11 @@ def compile_lookup(task_id: str, user_id: int):
     return f'{SELECT_TASK} WHERE t.id COLLATE "C" = %s AND {USER_SCOPE}', [task_id, user_id]
 
 
+def literal_contains_pattern(term: str):
+    """Escape the marker and LIKE wildcards before adding substring wildcards."""
+    return "%" + term.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+
+
 def compile_request(request: ValidatedRequest, user_id: int):
     """Compile bound values without validating or converting aware timestamps."""
     filters = request.filters
@@ -36,6 +41,10 @@ def compile_request(request: ValidatedRequest, user_id: int):
         params.extend(values)
 
     values_clause("t.status", filters["statuses"])
+    for term in request.terms:
+        clauses.append("(t.title ILIKE %s ESCAPE '!' OR t.description ILIKE %s ESCAPE '!')")
+        pattern = literal_contains_pattern(term)
+        params.extend([pattern, pattern])
     for key, column in (("types", "t.type"), ("source_platforms", "t.source_platform")):
         if key in filters:
             values_clause(column, filters[key])

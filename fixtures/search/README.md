@@ -190,7 +190,12 @@ cases. Its [configuration and cleanup instructions](../../docs/structured-search
 require a dedicated target and explicit opt-in. Skips/offline checks do not prove
 real database retrieval. The standalone validator above still checks fixture
 integrity independently.
-Keyword, hybrid and semantic retrieval remain future integration work.
+Production now accepts `keyword` for basic title/description substring matching.
+Those rules differ from this dataset's whole-token, accent-folding, four-field
+keyword/hybrid expectations. The original expected IDs remain unchanged and are
+not treated as assertions for the MVP. Its focused PostgreSQL cases are documented
+in the [Search contract](../../docs/structured-search.md#requests-and-filters).
+Semantic retrieval remains future work.
 
 | Required case | Query IDs / supporting records |
 | --- | --- |

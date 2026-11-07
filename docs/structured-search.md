@@ -111,7 +111,8 @@ Search itself returns Python values and does not implement an HTTP endpoint.
 
 `academic_search/validation.py` validates requests without a database connection.
 `validate_request()` returns an immutable `ValidatedRequest`: enum lists become
-tuples, defaults are explicit, and timestamps become aware UTC `datetime` values.
+tuples, keyword text becomes an immutable term tuple, defaults are explicit, and
+timestamps become aware UTC `datetime` values.
 It accepts free-text `course` and provides a database-compatible task-ID normalizer
 (trim surrounding whitespace, reject NUL/empty values, maximum 64 characters).
 It does not validate complete task payloads or execute queries.
@@ -120,9 +121,71 @@ It does not validate complete task payloads or execute queries.
 psycopg2 `%s` parameters and maps database rows. It binds aware datetimes directly;
 SQLite timestamp integers and JSON payload decoding are absent from this path.
 
-Only `filters`, `sort`, `direction`, `limit`, and `offset` are accepted at the
-request's top level. Omitted `filters` means `{}`. Unknown fields, including
-`keyword` and `semantic_text`, are rejected instead of silently ignored.
+Only `keyword`, `filters`, `sort`, `direction`, `limit`, and `offset` are accepted
+at the request's top level. Omitted `filters` means `{}`. Unknown fields, including
+`query` and `semantic_text`, are rejected instead of silently ignored.
+
+`keyword` is the single text-query field, reused from the documented fixture
+vocabulary. It is now accepted by PostgreSQL SearchService; it previously raised
+a validation error. A supplied value must be a string without NUL (PostgreSQL text
+cannot store NUL). Validation trims outer whitespace and splits on whitespace,
+including repeated spaces, tabs and newlines. Missing, empty or whitespace-only
+text adds no predicate and preserves structured-only behavior. Explicit null,
+numbers, booleans and collections raise `SearchValidationError`.
+
+Each nonempty term must appear as a case-insensitive **literal substring** in
+`title` or `description`. Terms combine with AND; the two fields combine with OR
+for each term. Terms may match different fields, in any order, or within a word.
+Null or empty descriptions do not prevent a title match. Audience, location,
+course and other fields are not text-search targets. Quotes and words such as
+`AND`/`OR` are ordinary text; no phrase syntax, Boolean parser, natural-language
+constraints or training-point extraction is applied.
+
+PostgreSQL uses parameterized `ILIKE` patterns with `ESCAPE '!'`: literal `!`,
+`%` and `_` are escaped before surrounding each term with substring wildcards.
+Backslashes and apostrophes remain bound data. Predicates are grouped as
+`(title matches term1 OR description matches term1) AND (...) AND filters`,
+including the existing owner scope and active status default. Filtering precedes
+pagination. Ordering, null placement and ID ties are unchanged; there is no
+relevance score or fallback when no term matches.
+
+Accents are retained, without accent folding or Unicode normalization: `tình`
+does not become `tinh`. Case conversion follows the database's active locale,
+as specified by [PostgreSQL ILIKE](https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-LIKE).
+The default text collation must support Vietnamese Unicode case pairs; do not
+apply the ASCII `C` collation used for ID ordering to keyword predicates.
+Dedicated integration cases assert Vietnamese uppercase/lowercase matches and
+accent sensitivity; deployment-locale behavior remains unverified without a live run.
+
+With the existing test tasks assigned to the caller's user, a text-only request:
+
+```python
+results = search.search_tasks({"keyword": "CSC10004 Lab", "sort": "id"})
+```
+
+returns IDs `["asg-csc10004-lab", "asg-overdue"]`. Reversing the terms has the
+same matches; the overdue task remains active. Combined text and filters:
+
+```python
+results = search.search_tasks({
+    "keyword": "Lab",
+    "filters": {
+        "course": "CSC10005",
+        "types": ["assignment"],
+        "deadline_within": ["2026-10-30T00:00:00+07:00", "2026-10-31T00:00:00+07:00"],
+    },
+    "sort": "id",
+})
+```
+
+returns `["asg-csc10005-lab"]` for that dataset. Results remain task dictionaries;
+these examples list their IDs for comparison.
+
+The historical fixture keyword/hybrid expectations use whole tokens, accent
+folding, and four text fields. Those are different rules from this MVP's
+accent-sensitive title/description substrings. Their original expected results
+are preserved, not relabeled as verified production keyword results. The explicit
+SQLite demo remains structured-only and rejects `keyword`, including blank text.
 
 Different filter categories combine with **AND**. Values within each supported
 list combine with **OR**. Lists must be nonempty and contain unique valid values;
@@ -257,8 +320,10 @@ validates the projection, not the complete database payload contract.
 
 The tests exercise nine structured fixture expectations plus boundaries,
 sorting, pagination, validation and update/delete visibility. Keyword, hybrid
-and semantic requests remain unsupported. The PostgreSQL SQL/row/error/ownership
-tests use mocks, so they do not verify execution on a PostgreSQL server. Dataset details and compatibility gaps belong in the
+and semantic benchmark requests are not evaluated by the SQLite adapter.
+Production keyword matching uses the rules above; semantic retrieval is unsupported.
+The offline PostgreSQL SQL/row/error/ownership tests use mocks, so they do not
+verify execution on a PostgreSQL server. Dataset details and compatibility gaps belong in the
 [fixture README](../fixtures/search/README.md#dataset-contract-and-database-compatibility).
 
 ## Current database task-payload contract
@@ -445,6 +510,9 @@ missing dates, overlaps, equivalent offsets, microseconds, stable sorting,
 null ordering, pagination and empty results. It verifies committed manager
 update/cancel/create/delete visibility, owner isolation/shared assignments,
 validation errors and real query failures with retained database-error causes.
+Keyword cases add same-field/cross-field terms, null/empty descriptions, Vietnamese
+case pairs and accents, literal wildcards/operators, all six types, combined
+filters, owner scope, sorting/pagination, blank inputs and query failures.
 It never mocks query execution or substitutes SQLite. Offline setup-guard and
 fixture-adapter tests are separate and do not count as real PostgreSQL checks.
 

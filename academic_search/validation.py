@@ -61,12 +61,17 @@ class ValidatedRequest:
     direction: str
     limit: int
     offset: int
+    terms: tuple[str, ...] = ()
 
 
 def validate_request(request):
     """Return a detached, immutable request without accessing a database."""
     check(isinstance(request, Mapping), "request must be a mapping")
-    check(set(request) <= {"filters", "sort", "direction", "limit", "offset"}, "unknown request field; text search is unsupported")
+    check(set(request) <= {"keyword", "filters", "sort", "direction", "limit", "offset"}, "unknown request field")
+    keyword = request.get("keyword", "")
+    check(isinstance(keyword, str), "keyword must be a string")
+    check("\x00" not in keyword, "keyword cannot contain NUL")
+    terms = tuple(keyword.strip().split())
     filters = request.get("filters", {})
     check(isinstance(filters, Mapping) and set(filters) <= FILTER_KEYS, "unknown filter")
     sort = request.get("sort", "deadline")
@@ -109,4 +114,4 @@ def validate_request(request):
         normalized[key] = (start, end)
     if "registration_open_at" in filters:
         normalized["registration_open_at"] = parse_instant(filters["registration_open_at"])
-    return ValidatedRequest(MappingProxyType(normalized), sort, direction, limit, offset)
+    return ValidatedRequest(MappingProxyType(normalized), sort, direction, limit, offset, terms)

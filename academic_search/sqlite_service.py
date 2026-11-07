@@ -38,6 +38,8 @@ class SQLiteRequest:
 
 def validate_sqlite_request(request):
     """Validate the legacy SQLite vocabulary without aliasing course text."""
+    if isinstance(request, Mapping):
+        check("keyword" not in request, "unknown request field; text search is unsupported")
     if not isinstance(request, Mapping) or not isinstance(request.get("filters", {}), Mapping):
         return SQLiteRequest(validate_request(request))
     filters = dict(request.get("filters", {}))

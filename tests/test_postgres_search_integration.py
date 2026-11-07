@@ -307,6 +307,111 @@ class PostgreSQLSearchIntegrationTests(unittest.TestCase):
         self.assertEqual(self.ids({"types": ["personal"]}), ["personal-study"])
         self.assertEqual([row["id"] for row in other.search_tasks({"sort": "id"})], ["other-private", "personal-study"])
 
+    def test_keyword_existing_fixture_examples_and_blank_requests(self):
+        expected = ["asg-csc10004-lab", "asg-overdue"]
+        for text in ("CSC10004 Lab", "lab cSc10004", "  CSC10004\t\n  Lab  "):
+            with self.subTest(text=text):
+                self.assertEqual(self.ids(keyword=text), expected)
+        self.assertEqual([row["id"] for row in self.search.search_tasks({"keyword": "CSC10004 Lab"})],
+                         ["asg-overdue", "asg-csc10004-lab"])
+        self.assertEqual(self.ids({"course": "CSC10005", "types": ["assignment"],
+                                   "deadline_within": DAY, "min_training_points": 0}, keyword="Lab"),
+                         ["asg-csc10005-lab"])
+        self.assertEqual(self.ids(keyword="CSC10004 pineapple"), [])
+        self.assertEqual(self.ids(keyword="HỌC PHÍ"), ["fee-hk1", "fee-installment", "fee-mixed"])
+        self.assertEqual(self.ids(keyword="hoc phi"), [])
+        for text in ("", " ", "\t\n\u00a0"):
+            with self.subTest(blank=text):
+                self.assertEqual(self.search.search_tasks({"keyword": text}), self.search.search_tasks({}))
+                self.assertEqual(self.ids({"course": "CSC10004"}, keyword=text),
+                                 ["asg-csc10004-lab", "asg-csc10004-project", "asg-overdue", "class-csc10004"])
+
+    def test_keyword_title_description_terms_nulls_and_vietnamese(self):
+        self.variant("text-title-only", title="Aurora register", description=None)
+        self.variant("text-description-only", title="Plain bulletin", description="Aurora register")
+        self.variant("text-cross", title="Aurora", description="register")
+        self.variant("text-empty-description", title="Aurora register", description="")
+        self.variant("text-missing-term", title="Aurora", description=None)
+        self.variant("text-other-fields", title="Unrelated entry", description=None,
+                     target_audience="Aurora register", location="Aurora register")
+        expected = ["text-cross", "text-description-only", "text-empty-description", "text-title-only"]
+        for text in ("aurora register", "REGISTER AURORA", " \tAurora\n register  ", "uro giste"):
+            with self.subTest(text=text):
+                self.assertEqual(self.ids(keyword=text), expected)
+        self.assertEqual(self.ids(keyword="aurora register absent"), [])
+        self.assertIsNone(self.search.get_task_by_id("text-title-only")["description"])
+        self.assertEqual(self.search.get_task_by_id("text-empty-description")["description"], "")
+        self.variant("text-vietnamese", title="TÌNH", description="NGUYỆN")
+        self.assertEqual(self.ids(keyword="tình nguyện"), ["text-vietnamese"])
+        self.assertEqual(self.ids(keyword="nguyện tình"), ["text-vietnamese"])
+        self.assertEqual(self.ids(keyword="tinh nguyen"), [])
+
+    def test_keyword_literal_wildcards_quotes_operators_and_sql_looking_text(self):
+        self.variant("text-literals", title="O'Reilly rate_100% ! \\ ' OR 1=1 --", description=None)
+        self.variant("text-wildcard-decoy", title="rateX100Z", description="ordinary text")
+        for text in ("%", "_", "!", "\\", "O'Reilly", "rate_100%", "' OR 1=1 --"):
+            with self.subTest(text=text):
+                self.assertEqual(self.ids(keyword=text), ["text-literals"])
+        self.assertEqual(self.ids(keyword="!!"), [])
+        self.variant("text-plain-words", title="cobalt lantern", description=None)
+        self.assertEqual(self.ids(keyword="cobalt OR lantern"), [])
+        self.variant("text-literal-operator", title="cobalt OR lantern", description=None)
+        self.assertEqual(self.ids(keyword="cobalt OR lantern"), ["text-literal-operator"])
+        self.variant("text-quotes", title='"cobalt" lantern', description=None)
+        self.assertEqual(self.ids(keyword='"cobalt" lantern'), ["text-quotes"])
+
+    def test_keyword_all_types_combined_filters_status_and_owner_scope(self):
+        instant = datetime.fromisoformat(CLOCK)
+        for kind in ("class", "assignment", "exam", "event", "personal", "tuition"):
+            self.variant("keyword-" + kind, original="personal-study", type=kind,
+                         title="TextAllTypes marker", description=None, course="All types",
+                         deadline=instant if kind in {"assignment", "tuition"} else None)
+        self.assertEqual(self.ids(keyword="textalltypes"), ["keyword-assignment", "keyword-class",
+                         "keyword-event", "keyword-exam", "keyword-personal", "keyword-tuition"])
+        self.assertEqual(self.ids({"types": ["assignment", "tuition"]}, keyword="textalltypes"),
+                         ["keyword-assignment", "keyword-tuition"])
+        fields = dict(original="personal-study", title="needle", description=None, course="Text course",
+                      deadline=instant, training_points=5, drl_category="dieu_3", target_audience="K26",
+                      location="CS1 room", source_platform="custom")
+        self.variant("keyword-good", **fields)
+        self.variant("keyword-wrong-course", **{**fields, "title": "Plain", "description": "needle", "course": "Other"})
+        self.variant("keyword-wrong-status", **{**fields, "status": "done"})
+        self.variant("keyword-wrong-date", **{**fields, "deadline": datetime.fromisoformat(DAY[1])})
+        self.variant("keyword-wrong-points", **{**fields, "training_points": 0, "drl_category": None})
+        self.variant("keyword-other-owner", owner=self.other_id,
+                     **{**fields, "title": "Plain", "description": "needle"})
+        filters = {"types": ["personal"], "course": "Text course", "min_training_points": 5,
+                   "max_training_points": 5, "deadline_within": DAY, "source_platform": "custom",
+                   "target_audience": "K26", "location_prefix": "CS1"}
+        self.assertEqual(self.ids(filters, keyword="needle"), ["keyword-good"])
+        self.assertEqual(self.ids({**filters, "statuses": ["done"]}, keyword="needle"), ["keyword-wrong-status"])
+        self.assertIsNone(self.search.get_task_by_id("keyword-other-owner"))
+
+    def test_keyword_ordering_pagination_validation_and_database_failures(self):
+        instant = datetime.fromisoformat(CLOCK)
+        for suffix, deadline in (("a", instant - timedelta(days=1)), ("b", instant), ("c", instant), ("d", None)):
+            self.variant("keyword-sort-" + suffix, original="personal-study", title="PaginationMarker",
+                         description=None, deadline=deadline)
+        self.assertEqual(self.ids(keyword="paginationmarker", sort="deadline"),
+                         ["keyword-sort-a", "keyword-sort-b", "keyword-sort-c", "keyword-sort-d"])
+        self.assertEqual(self.ids(keyword="paginationmarker", sort="deadline", direction="desc"),
+                         ["keyword-sort-b", "keyword-sort-c", "keyword-sort-a", "keyword-sort-d"])
+        self.assertEqual(self.ids(keyword="paginationmarker", sort="deadline", direction="desc", limit=2, offset=1),
+                         ["keyword-sort-c", "keyword-sort-a"])
+        self.assertEqual(self.ids(keyword="missing paginationmarker"), [])
+        for value in (None, True, 42, [], {}, "bad\x00text"):
+            with self.subTest(value=value), self.assertRaises(SearchValidationError):
+                self.search.search_tasks({"keyword": value})
+        self.connection.rollback()
+        with self.connection.cursor() as cursor:
+            cursor.execute("SET LOCAL search_path TO pg_catalog")
+        with self.assertRaises(SearchDatabaseError) as caught:
+            self.search.search_tasks({"keyword": "paginationmarker"})
+        self.assertIsInstance(caught.exception.__cause__, self.pg_error)
+        self.connection.rollback()
+        self.assertEqual(self.ids(keyword="paginationmarker"),
+                         ["keyword-sort-a", "keyword-sort-b", "keyword-sort-c", "keyword-sort-d"])
+
     def test_invalid_requests_are_validation_errors(self):
         for request in ({"filters": {"course_code": "CSC10004"}}, {"filters": {"types": []}},
                         {"filters": {"statuses": ["completed"]}}, {"limit": True}, {"offset": -1},

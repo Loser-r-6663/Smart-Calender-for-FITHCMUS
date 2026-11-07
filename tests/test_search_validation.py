@@ -51,7 +51,7 @@ class RequestValidationTests(unittest.TestCase):
         self.assertEqual(request.filters["registration_open_at"], parse_instant("2026-10-30T05:00:00Z"))
 
     def test_invalid_requests_fail_without_a_connection(self):
-        invalid = [None, [], {"keyword": "tuition"}, {"filters": None},
+        invalid = [None, [], {"query": "tuition"}, {"filters": None},
                    {"filters": {"unknown": 1}}, {"filters": {"course_code": "CSC10004"}},
                    {"sort": "title"}, {"direction": "ASC"}, {"limit": True},
                    {"limit": 101}, {"offset": -1}, {"offset": "0"},
