@@ -2,6 +2,7 @@
 
 import ast
 import logging
+import os
 from pathlib import Path
 import re
 import sys
@@ -10,15 +11,56 @@ from typing import Any
 from dotenv import load_dotenv
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from Parser import ParserManager, PipelineStage, RawCrawlerInput, StageStatus
+from Backend.Parser import (
+    ParserManager,
+    PipelineStage,
+    RawCrawlerInput,
+    RawDedupAction,
+    RawDedupReason,
+    StageStatus,
+)
 
 
 DEFAULT_INPUT = ROOT / "Backend" / "Crawler" / "RawTasks.txt"
 LOGGER = logging.getLogger("pipeline_demo")
+_COLORS_ENABLED = False
+
+
+class _Ansi:
+    CYAN = "\033[36m"
+    DIM_BLUE = "\033[2;34m"
+    GREEN = "\033[32m"
+    BRIGHT_GREEN = "\033[92m"
+    RED = "\033[31m"
+    YELLOW = "\033[33m"
+    BRIGHT_YELLOW = "\033[93m"
+    MAGENTA = "\033[35m"
+    RESET = "\033[0m"
+
+
+def _configure_colors(stream: Any = None) -> None:
+    global _COLORS_ENABLED
+    stream = sys.stdout if stream is None else stream
+    _COLORS_ENABLED = bool(stream.isatty()) and "NO_COLOR" not in os.environ
+
+
+def _color(text: str, code: str, enabled: bool | None = None) -> str:
+    enabled = _COLORS_ENABLED if enabled is None else enabled
+    return f"{code}{text}{_Ansi.RESET}" if enabled else text
+
+
+def _status_color(status: StageStatus) -> str:
+    return {
+        StageStatus.SUCCESS: _Ansi.GREEN,
+        StageStatus.FAILED: _Ansi.RED,
+        StageStatus.SKIPPED: _Ansi.YELLOW,
+    }[status]
+
+
 _TASK_START = re.compile(r"(?m)^[ \t]*RawTask\(")
 _FIELD = re.compile(r"^[ \t]*([A-Za-z_]\w*)[ \t]*:[ \t]*(.*)$")
 _STAGE_LABELS = {
@@ -65,15 +107,26 @@ class LoggingParserManager(ParserManager):
     ):
         label = _STAGE_LABELS[stage]
         context = LoggingParserManager._stage_context(value)
-        LOGGER.info("stage=%s label=%r%s status=started", stage.value.upper(), label, context)
+        label_text = _color(label, _Ansi.MAGENTA) if stage is PipelineStage.PARSE else label
+        LOGGER.info(
+            "%s label='%s'%s %s",
+            _color(
+                f"stage={stage.value.upper()}",
+                _Ansi.DIM_BLUE if stage is not PipelineStage.PARSE else _Ansi.MAGENTA,
+            ),
+            label_text,
+            context,
+            _color("status=started", _Ansi.CYAN),
+        )
         result = ParserManager._stage(stage, value, operation)
         if result.status is StageStatus.FAILED:
             error = result.error
             LOGGER.info(
-                "stage=%s label=%r%s status=failed elapsed_ms=%.1f error=%s: %s",
-                stage.value.upper(),
-                label,
+                "%s label='%s'%s %s elapsed_ms=%.1f error=%s: %s",
+                _color(f"stage={stage.value.upper()}", _Ansi.RED),
+                label_text,
                 context,
+                _color("status=failed", _Ansi.RED),
                 result.elapsed_ms,
                 error.type,
                 error.message,
@@ -84,16 +137,54 @@ class LoggingParserManager(ParserManager):
                 stage is PipelineStage.CANDIDATE_DEDUP
                 and result.status is StageStatus.SUCCESS
             ):
-                completion = (
-                    f" kept={len(result.output)}"
-                    f" removed={len(result.input) - len(result.output)}"
+                kept = len(result.output)
+                removed = len(result.input) - kept
+                completion = f" kept={kept} removed={removed}"
+                if removed > 0:
+                    LOGGER.info(
+                        "%s",
+                        _color(
+                            f"event=CANDIDATE_DUPLICATES removed={removed} kept={kept}",
+                            _Ansi.BRIGHT_YELLOW,
+                        ),
+                    )
+            if stage is PipelineStage.DUPLICATE and result.status is StageStatus.SUCCESS:
+                dedup = result.output
+                if (
+                    dedup.action is RawDedupAction.SKIP
+                    and dedup.reason in {
+                        RawDedupReason.UNCHANGED_URL,
+                        RawDedupReason.DUPLICATE_CONTENT,
+                    }
+                ):
+                    LOGGER.info(
+                        "%s",
+                        _color(
+                            f"event=RAW_DUPLICATE_SKIP reason={dedup.reason.name}",
+                            _Ansi.BRIGHT_YELLOW,
+                        ),
+                    )
+                elif dedup.reason is RawDedupReason.CHANGED_URL_CONTENT:
+                    LOGGER.info(
+                        "%s",
+                        _color("event=CHANGED_URL_CONTENT action=REPROCESS", _Ansi.CYAN),
+                    )
+            if stage is PipelineStage.SEND and result.status is StageStatus.SUCCESS:
+                task_id = value.get("id", "?") if isinstance(value, dict) else "?"
+                title = value.get("title", "unknown") if isinstance(value, dict) else "unknown"
+                LOGGER.info(
+                    "%s",
+                    _color(
+                        f"event=PERSISTED task_id={task_id} title={title!r}",
+                        _Ansi.BRIGHT_GREEN,
+                    ),
                 )
             LOGGER.info(
-                "stage=%s label=%r%s status=%s elapsed_ms=%.1f%s",
-                stage.value.upper(),
-                label,
+                "%s label='%s'%s %s elapsed_ms=%.1f%s",
+                _color(f"stage={stage.value.upper()}", _status_color(result.status)),
+                label_text,
                 context,
-                result.status.value,
+                _color(f"status={result.status.value}", _status_color(result.status)),
                 result.elapsed_ms,
                 completion,
             )
@@ -207,7 +298,7 @@ def _log_item(index: int, item: Any) -> None:
         "item=%d source=%s status=%s stages=[%s] candidates=%d kept=%d removed=%d persisted=%d ids=%s%s",
         index,
         source,
-        item.status.value,
+        _color(item.status.value, _status_color(item.status)),
         stages,
         len(item.candidates),
         dedup_count,
@@ -219,6 +310,7 @@ def _log_item(index: int, item: Any) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_colors()
     logging.basicConfig(
         level=logging.INFO,
         format="%(levelname)s %(message)s",
@@ -238,12 +330,18 @@ def main(argv: list[str] | None = None) -> int:
     for index, item in enumerate(batch.items, 1):
         _log_item(index, item)
     LOGGER.info(
-        "batch processed=%d skipped=%d failed=%d persisted=%d status=%s",
-        batch.processed,
-        batch.skipped,
-        batch.failed,
-        batch.persisted,
-        batch.status.value,
+        "%s",
+        _color(
+            "batch processed=%d skipped=%d failed=%d persisted=%d status=%s"
+            % (
+                batch.processed,
+                batch.skipped,
+                batch.failed,
+                batch.persisted,
+                batch.status.value,
+            ),
+            _Ansi.RED if batch.status is StageStatus.FAILED else _Ansi.GREEN,
+        ),
     )
     return 0 if batch.failed == 0 and batch.status is not StageStatus.FAILED else 1
 
@@ -252,6 +350,7 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
+        _configure_colors()
         logging.basicConfig(
             level=logging.ERROR,
             format="%(levelname)s %(message)s",
