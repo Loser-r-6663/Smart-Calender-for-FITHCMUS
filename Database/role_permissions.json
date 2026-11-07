@@ -1,0 +1,12 @@
+{
+  "roles": {
+    "admin": {
+      "api_key_env": "ADMIN_API_KEY",
+      "permissions": ["*"]
+    },
+    "llm": {
+      "api_key_env": "LLM_API_KEY",
+      "permissions": ["tasks:create"]
+    }
+  }
+}

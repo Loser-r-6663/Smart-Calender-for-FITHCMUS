@@ -5,33 +5,11 @@ from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection
 
-from Database.validation import TaskData, validate_task_data
+from Database.task_config import TASK_FIELDS, current_task_timestamp
+from Database.task_validation import TaskData, validate_task_data
 
 
-_TASK_COLUMNS = {
-    "id",
-    "title",
-    "type",
-    "course_code",
-    "description",
-    "target_audience",
-    "location",
-    "registration_start",
-    "registration_end",
-    "start_time",
-    "end_time",
-    "deadline",
-    "estimated_hours",
-    "training_points",
-    "drl_category",
-    "recurrence",
-    "status",
-    "is_manual",
-    "source_url",
-    "source_platform",
-    "embedding",
-    "updated_at",
-}
+_TASK_COLUMNS = TASK_FIELDS
 
 
 class TaskRepository:
@@ -80,8 +58,11 @@ class TaskRepository:
             column: getattr(validated_task, column)
             for column in updates
         }
+        if updates.get("source_url") is not None:
+            updates["source_url"] = str(updates["source_url"])
         if validated_task.drl_category != existing_task["drl_category"]:
             updates["drl_category"] = validated_task.drl_category
+        updates["updated_at"] = current_task_timestamp()
 
         assignments = sql.SQL(", ").join(
             sql.SQL("{} = {}").format(sql.Identifier(column), sql.Placeholder())

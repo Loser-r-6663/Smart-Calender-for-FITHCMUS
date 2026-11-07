@@ -4,7 +4,7 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection
 
-from Database.validation import UserData, validate_user_data
+from Database.user_validation import UserData, validate_user_data
 
 
 class UserRepository:

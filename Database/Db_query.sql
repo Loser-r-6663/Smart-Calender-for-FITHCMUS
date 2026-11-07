@@ -3,10 +3,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     id VARCHAR(64) PRIMARY KEY CHECK (btrim(id) <> ''),
     title VARCHAR(255) NOT NULL,
     type VARCHAR(30) NOT NULL,
-    course_code VARCHAR(20),
+    course TEXT,
     description TEXT,
-    target_audience VARCHAR(100),
-    location VARCHAR(100),
+    target_audience TEXT,
+    location TEXT,
     registration_start TIMESTAMPTZ,
     registration_end TIMESTAMPTZ,
     start_time TIMESTAMPTZ,
@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     is_manual BOOLEAN NOT NULL DEFAULT FALSE,
     source_url TEXT,
     source_platform VARCHAR(50) NOT NULL DEFAULT 'custom',
-    embedding TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT tasks_title_length CHECK (
         char_length(title) BETWEEN 2 AND 255 AND btrim(title) <> ''
@@ -28,8 +27,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     CONSTRAINT tasks_type_valid CHECK (
         type IN ('class', 'assignment', 'exam', 'event', 'personal', 'tuition')
     ),
-    CONSTRAINT tasks_course_code_valid CHECK (
-        course_code IS NULL OR course_code ~ '^[A-Z]{3}[0-9]{5}$'
+    CONSTRAINT tasks_course_valid CHECK (
+        course IS NULL OR btrim(course) <> ''
     ),
     CONSTRAINT tasks_registration_range CHECK (
         registration_start IS NULL
@@ -63,14 +62,30 @@ CREATE TABLE IF NOT EXISTS tasks (
     )
 );
 
+-- CREATE TABLE IF NOT EXISTS does not add columns to an existing table.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS course TEXT;
+ALTER TABLE tasks ALTER COLUMN course TYPE TEXT;
+ALTER TABLE tasks ALTER COLUMN target_audience TYPE TEXT;
+ALTER TABLE tasks ALTER COLUMN location TYPE TEXT;
+ALTER TABLE tasks DROP COLUMN IF EXISTS course_code;
+ALTER TABLE tasks DROP COLUMN IF EXISTS embedding;
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_course_code_valid;
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_course_valid;
+ALTER TABLE tasks ADD CONSTRAINT tasks_course_valid CHECK (
+    course IS NULL OR btrim(course) <> ''
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL CHECK (btrim(username) <> ''),
-    email VARCHAR(100) UNIQUE NOT NULL CHECK (
+    email TEXT UNIQUE NOT NULL CHECK (
         email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$'
     ),
-    full_name VARCHAR(100)
+    full_name TEXT
 );
+
+ALTER TABLE users ALTER COLUMN email TYPE TEXT;
+ALTER TABLE users ALTER COLUMN full_name TYPE TEXT;
 
 CREATE TABLE IF NOT EXISTS user_tasks (
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -88,6 +103,7 @@ CREATE TABLE IF NOT EXISTS daily_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline
     ON tasks(deadline) WHERE deadline IS NOT NULL;
+DROP INDEX IF EXISTS idx_tasks_course;
 CREATE INDEX IF NOT EXISTS idx_tasks_course
-    ON tasks(course_code) WHERE course_code IS NOT NULL;
+    ON tasks(course) WHERE course IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_status_type ON tasks(status, type);

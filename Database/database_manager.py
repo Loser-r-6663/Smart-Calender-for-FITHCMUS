@@ -4,8 +4,11 @@ from typing import Any, TypeVar
 
 from Database.daily_tasks import DailyTaskRepository
 from Database.db_connection import DatabaseConnection
+from Database.daily_task_objects import DailyTaskObject
+from Database.task_objects import TaskObject
 from Database.tasks import TaskRepository
 from Database.user_tasks import UserTaskRepository
+from Database.user_objects import UserObject, UserTaskObject
 from Database.users import UserRepository
 
 
@@ -27,8 +30,9 @@ class DatabaseManager:
     def create_task(self, task_data: Mapping[str, Any]) -> dict[str, Any]:
         return self._run(self.tasks.create, task_data)
 
-    def get_task(self, task_id: str) -> dict[str, Any] | None:
-        return self._run(self.tasks.get_by_id, task_id)
+    def get_task(self, task_id: str) -> TaskObject | None:
+        record = self._run(self.tasks.get_by_id, task_id)
+        return TaskObject.from_record(record) if record is not None else None
 
     def update_task(
         self, task_id: str, updates: Mapping[str, Any]
@@ -43,8 +47,9 @@ class DatabaseManager:
     ) -> dict[str, Any]:
         return self._run(self.users.create, username, email, full_name)
 
-    def get_user(self, user_id: int) -> dict[str, Any] | None:
-        return self._run(self.users.get_by_id, user_id)
+    def get_user(self, user_id: int) -> UserObject | None:
+        record = self._run(self.users.get_by_id, user_id)
+        return UserObject.from_record(record) if record is not None else None
 
     def update_user(
         self, user_id: int, updates: Mapping[str, Any]
@@ -57,8 +62,9 @@ class DatabaseManager:
     def assign_task(self, user_id: int, task_id: str) -> bool:
         return self._run(self.user_tasks.assign, user_id, task_id)
 
-    def get_user_tasks(self, user_id: int) -> list[dict[str, Any]]:
-        return self._run(self.user_tasks.get_for_user, user_id)
+    def get_user_tasks(self, user_id: int) -> list[UserTaskObject]:
+        records = self._run(self.user_tasks.get_for_user, user_id)
+        return [UserTaskObject.from_record(record) for record in records]
 
     def unassign_task(self, user_id: int, task_id: str) -> bool:
         return self._run(self.user_tasks.unassign, user_id, task_id)
@@ -78,8 +84,11 @@ class DatabaseManager:
 
     def get_tasks_by_date(
         self, user_id: int, work_date: date
-    ) -> list[dict[str, Any]]:
-        return self._run(self.daily_tasks.get_for_user_date, user_id, work_date)
+    ) -> list[DailyTaskObject]:
+        records = self._run(
+            self.daily_tasks.get_for_user_date, user_id, work_date
+        )
+        return [DailyTaskObject.from_record(record) for record in records]
 
     def set_daily_task_completion(
         self,
