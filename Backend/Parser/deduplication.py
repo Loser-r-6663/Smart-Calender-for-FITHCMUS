@@ -278,11 +278,11 @@ def _candidate_identity(candidate: TaskCandidate) -> tuple[object, ...]:
     )
 
 
-def deduplicate_task_candidates(
+def deduplicate_task_candidates( 
+    #Second deduplication stage where we compare the LLM's output to see if it's a duplicate, compares each field to one another.
     candidates: Sequence[TaskCandidate],
 ) -> tuple[TaskCandidate, ...]:
     """Keep the first candidate from each conservative structural title group."""
-    # Candidate deduplication after AI parses: prevents one response from producing duplicate or near-duplicate tasks.
     if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
         raise CandidateDeduplicationError(
             "candidates must be a sequence of TaskCandidate values"
@@ -290,7 +290,7 @@ def deduplicate_task_candidates(
     retained: list[TaskCandidate] = []
     identities: list[tuple[object, ...]] = []
     titles: list[str] = []
-    for candidate in candidates:
+    for candidate in candidates: 
         if not isinstance(candidate, TaskCandidate):
             raise CandidateDeduplicationError(
                 "candidates must be a sequence of TaskCandidate values"
@@ -301,6 +301,7 @@ def deduplicate_task_candidates(
             identity == previous_identity
             and (
                 title == previous_title
+                # Detect minor differences such as minor punctuation, spacing, or wording through gestalt pattern matching in Python's standard library.
                 or SequenceMatcher(None, title, previous_title).ratio() >= 0.90
             )
             for previous_identity, previous_title in zip(identities, titles)
