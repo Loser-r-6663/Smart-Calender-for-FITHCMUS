@@ -56,7 +56,7 @@ class TaskCandidate:
     # Candidates are immutable between extraction and persistence.
     title: str
     type: TaskType
-    course_code: str | None = None
+    course: str | None = None
     description: str | None = None
     target_audience: str | None = None
     location: str | None = None

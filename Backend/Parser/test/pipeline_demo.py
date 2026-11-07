@@ -22,6 +22,7 @@ from Backend.Parser import (
     RawDedupAction,
     RawDedupReason,
     StageStatus,
+    UNKNOWN_DEADLINE,
 )
 
 
@@ -107,7 +108,11 @@ class LoggingParserManager(ParserManager):
     ):
         label = _STAGE_LABELS[stage]
         context = LoggingParserManager._stage_context(value)
-        label_text = _color(label, _Ansi.MAGENTA) if stage is PipelineStage.PARSE else label
+        label_text = (
+            _color(label, _Ansi.MAGENTA)
+            if stage is PipelineStage.PARSE
+            else label
+        )
         LOGGER.info(
             "%s label='%s'%s %s",
             _color(
@@ -171,14 +176,29 @@ class LoggingParserManager(ParserManager):
                     )
             if stage is PipelineStage.SEND and result.status is StageStatus.SUCCESS:
                 task_id = value.get("id", "?") if isinstance(value, dict) else "?"
-                title = value.get("title", "unknown") if isinstance(value, dict) else "unknown"
+                title = (
+                    value.get("title", "unknown")
+                    if isinstance(value, dict)
+                    else "unknown"
+                )
                 LOGGER.info(
                     "%s",
                     _color(
-                        f"event=PERSISTED task_id={task_id} title={title!r}",
+                        f"event=TASK_CREATED task_id={task_id} title={title!r}",
                         _Ansi.BRIGHT_GREEN,
                     ),
                 )
+            if stage is PipelineStage.PREPARE and result.status is StageStatus.SUCCESS:
+                candidate = value.get("candidate") if isinstance(value, dict) else None
+                if result.output.get("deadline") == UNKNOWN_DEADLINE.isoformat():
+                    LOGGER.info(
+                        _color(
+                            "event=DEADLINE_FALLBACK_APPLIED "
+                            f"type={candidate.type.value} "
+                            f"deadline={UNKNOWN_DEADLINE.isoformat()}",
+                            _Ansi.BRIGHT_YELLOW,
+                        )
+                    )
             LOGGER.info(
                 "%s label='%s'%s %s elapsed_ms=%.1f%s",
                 _color(f"stage={stage.value.upper()}", _status_color(result.status)),

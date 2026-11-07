@@ -151,6 +151,8 @@ activemq-data/
 
 # Environments
 .env
+.parser-dedup.json
+.parser-dedup.json.tmp
 .envrc
 .venv
 env/

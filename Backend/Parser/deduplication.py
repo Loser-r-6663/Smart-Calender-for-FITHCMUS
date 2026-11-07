@@ -7,7 +7,10 @@ from difflib import SequenceMatcher
 import hashlib
 import json
 import math
+import os
 import re
+from pathlib import Path
+from datetime import datetime, timezone
 import unicodedata
 from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -62,7 +65,7 @@ class InMemoryRawFingerprintStore:
     """Process-local storage for successful raw fingerprints."""
 
     def __init__(self) -> None:
-        # This store intentionally covers one process run, not durable deduplication so this might be changed later if we need to document the fingerprints.
+        # This injected store remains useful for isolated and offline tests; production uses JSON.
         self._by_url: dict[str, RawFingerprint] = {}
         self._by_content_hash: dict[str, RawFingerprint] = {}
 
@@ -77,6 +80,121 @@ class InMemoryRawFingerprintStore:
         if fingerprint.canonical_url is not None:
             self._by_url[fingerprint.canonical_url] = fingerprint
         self._by_content_hash.setdefault(fingerprint.content_hash, fingerprint)
+
+
+class JsonRawFingerprintStore:
+    """Atomic durable JSON-backed storage for raw fingerprints in one process."""
+
+    _VERSION = 1
+
+    def __init__(self, path: str | Path = ".parser-dedup.json") -> None:
+        self.path = Path(path)
+        self._state: dict[str, Any] = self._load()
+
+    @staticmethod
+    def _invalid(message: str) -> RawDeduplicationError:
+        return RawDeduplicationError(f"invalid raw deduplication state: {message}")
+
+    @classmethod
+    def _validate_timestamp(cls, value: object) -> None:
+        if not isinstance(value, str):
+            raise cls._invalid("remembered_at must be an ISO UTC string")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise cls._invalid("remembered_at must be an ISO UTC string") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+            raise cls._invalid("remembered_at must be an ISO UTC string")
+
+    @classmethod
+    def _validate_entry(cls, value: object, *, content: bool) -> None:
+        if not isinstance(value, dict):
+            raise cls._invalid("entries must be objects")
+        required = {"canonical_url", "remembered_at"} if content else {"content_hash", "remembered_at"}
+        if set(value) != required:
+            raise cls._invalid("entry shape is invalid")
+        if content:
+            if value["canonical_url"] is not None and not isinstance(value["canonical_url"], str):
+                raise cls._invalid("canonical_url must be a string or null")
+        elif not isinstance(value["content_hash"], str) or not value["content_hash"]:
+            raise cls._invalid("content_hash must be a non-empty string")
+        cls._validate_timestamp(value["remembered_at"])
+
+    def _load(self) -> dict[str, Any]:
+        try:
+            exists = self.path.exists()
+        except OSError as exc:
+            raise self._invalid("state file cannot be accessed") from exc
+        if not exists:
+            return {"version": self._VERSION, "content_hashes": {}, "urls": {}}
+        try:
+            with self.path.open("r", encoding="utf-8") as state_file:
+                state = json.load(state_file)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise self._invalid("file is not valid JSON") from exc
+        if (
+            not isinstance(state, dict)
+            or set(state) != {"version", "content_hashes", "urls"}
+            or state.get("version") != self._VERSION
+        ):
+            raise self._invalid("unsupported version or root shape")
+        content_hashes = state.get("content_hashes")
+        urls = state.get("urls")
+        if not isinstance(content_hashes, dict) or not isinstance(urls, dict):
+            raise self._invalid("content_hashes and urls must be objects")
+        for content_hash, entry in content_hashes.items():
+            if not isinstance(content_hash, str) or not content_hash:
+                raise self._invalid("content hash keys must be non-empty strings")
+            self._validate_entry(entry, content=True)
+        for canonical_url, entry in urls.items():
+            if not isinstance(canonical_url, str) or not canonical_url:
+                raise self._invalid("URL keys must be non-empty strings")
+            self._validate_entry(entry, content=False)
+            if entry["content_hash"] not in content_hashes:
+                raise self._invalid("URL entry references an unknown content hash")
+        return {"version": self._VERSION, "content_hashes": content_hashes, "urls": urls}
+
+    def find_by_url(self, canonical_url: str) -> RawFingerprint | None:
+        entry = self._state["urls"].get(canonical_url)
+        return None if entry is None else RawFingerprint(canonical_url, entry["content_hash"])
+
+    def find_by_content_hash(self, content_hash: str) -> RawFingerprint | None:
+        entry = self._state["content_hashes"].get(content_hash)
+        return None if entry is None else RawFingerprint(entry["canonical_url"], content_hash)
+
+    def _write(self, state: dict[str, object]) -> None:
+        temporary = self.path.with_name(self.path.name + ".tmp")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with temporary.open("w", encoding="utf-8") as state_file:
+                json.dump(state, state_file, ensure_ascii=False, indent=2)
+                state_file.write("\n")
+                state_file.flush()
+                os.fsync(state_file.fileno())
+            os.replace(temporary, self.path)
+        except (OSError, TypeError, ValueError) as exc:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+            raise RawDeduplicationError("could not persist raw deduplication state") from exc
+
+    def remember(self, fingerprint: RawFingerprint) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        content_hashes = dict(self._state["content_hashes"])
+        urls = dict(self._state["urls"])
+        content_hashes.setdefault(
+            fingerprint.content_hash,
+            {"canonical_url": fingerprint.canonical_url, "remembered_at": now},
+        )
+        if fingerprint.canonical_url is not None:
+            urls[fingerprint.canonical_url] = {
+                "content_hash": fingerprint.content_hash,
+                "remembered_at": now,
+            }
+        state = {"version": self._VERSION, "content_hashes": content_hashes, "urls": urls}
+        self._write(state)
+        self._state = state
 
 
 class RawDuplicateChecker:
@@ -151,7 +269,7 @@ def _candidate_identity(candidate: TaskCandidate) -> tuple[object, ...]:
             ) from exc
     return (
         candidate.type.value,
-        _normalize_string(candidate.course_code or ""),
+        _normalize_string(candidate.course or ""),
         temporal,
         _normalize_string(candidate.recurrence or ""),
         _normalize_string(candidate.location or ""),

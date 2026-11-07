@@ -8,7 +8,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .errors import (
+    DatabaseApiAuthenticationError,
+    ConfigurationError,
     DatabaseApiConflictError,
+    DatabaseApiPermissionError,
     DatabaseApiRequestError,
     DatabaseApiUnavailableError,
     DatabaseApiValidationError,
@@ -21,6 +24,7 @@ class DatabaseApiClient:
         base_url: str | None = None,
         timeout_seconds: float | None = None,
         opener: Any = None,
+        api_key: str | None = None,
     ) -> None:
         self.base_url = (
             base_url or os.getenv("DATABASE_API_URL", "http://127.0.0.1:8000")
@@ -31,6 +35,13 @@ class DatabaseApiClient:
             else float(os.getenv("DATABASE_API_TIMEOUT_SECONDS", "10"))
         )
         self._opener = opener or urlopen
+        self.api_key = (
+            api_key
+            if api_key is not None
+            else os.getenv("DATABASE_API_KEY", "")
+        )
+        if not self.api_key:
+            raise ConfigurationError("DATABASE_API_KEY is required")
 
     @staticmethod
     def _detail(raw: bytes | str | None) -> str:
@@ -55,7 +66,10 @@ class DatabaseApiClient:
         request = Request(
             self.base_url + path,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
             method=method,
         )
         response = None
@@ -77,6 +91,16 @@ class DatabaseApiClient:
                 raise DatabaseApiValidationError(detail) from exc
             if exc.code == 409:
                 raise DatabaseApiConflictError(detail) from exc
+            if exc.code == 401:
+                raise DatabaseApiAuthenticationError(
+                    "database API authentication failed"
+                ) from exc
+            if exc.code == 403:
+                raise DatabaseApiPermissionError(
+                    "database API permission denied"
+                ) from exc
+            if exc.code == 503:
+                raise DatabaseApiUnavailableError("database API is unavailable") from exc
             raise DatabaseApiRequestError(detail) from exc
         except (ConnectionError, TimeoutError, socket.timeout, URLError, OSError) as exc:
             raise DatabaseApiUnavailableError("database API is unavailable") from exc

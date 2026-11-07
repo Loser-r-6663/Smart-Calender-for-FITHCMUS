@@ -6,6 +6,7 @@ from .api_client import DatabaseApiClient
 from .deduplication import (
     CandidateDeduplicationError,
     InMemoryRawFingerprintStore,
+    JsonRawFingerprintStore,
     RawDedupAction,
     RawDedupReason,
     RawDeduplicationError,
@@ -19,13 +20,15 @@ from .deduplication import (
 )
 from .errors import (
     DatabaseApiConflictError,
+    DatabaseApiAuthenticationError,
+    DatabaseApiPermissionError,
     DatabaseApiError,
     DatabaseApiUnavailableError,
     DatabaseApiValidationError,
     ParserError,
     ProviderError,
 )
-from .extraction import GMT_PLUS_7, LLMExtractor, LLMParser, normalize_datetime
+from .extraction import GMT_PLUS_7, UNKNOWN_DEADLINE, LLMExtractor, LLMParser, normalize_datetime
 from .manager import (
     ParserManager,
     PipelineBatchResult,
@@ -62,6 +65,8 @@ __all__ = [
     "CandidateDeduplicationError",
     "DatabaseApiClient",
     "DatabaseApiConflictError",
+    "DatabaseApiAuthenticationError",
+    "DatabaseApiPermissionError",
     "DatabaseApiError",
     "DatabaseApiUnavailableError",
     "DatabaseApiValidationError",
@@ -71,7 +76,9 @@ __all__ = [
     "GeminiClient",
     "GeminiConfig",
     "GMT_PLUS_7",
+    "UNKNOWN_DEADLINE",
     "InMemoryRawFingerprintStore",
+    "JsonRawFingerprintStore",
     "LLMExtractor",
     "LLMGateway",
     "LLMParser",

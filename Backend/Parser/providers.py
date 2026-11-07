@@ -12,7 +12,7 @@ from typing import Any, Callable, Literal, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .errors import (
     ConfigurationError,
@@ -71,7 +71,7 @@ class ExtractedTask(BaseModel):
 
     title: str | None = None
     type: TaskTypeValue | None = None
-    course_code: str | None = None
+    course: str | None = None
     description: str | None = None
     target_audience: str | None = None
     location: str | None = None
@@ -122,6 +122,23 @@ def parse_envelope(value: Any) -> ExtractionEnvelope:
     return ExtractionEnvelope.model_validate(value)
 
 
+def _safe_schema_diagnostic(exc: Exception, output_chars: int | None = None) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return (
+            f"category=json message={str(exc)[:120]} line={exc.lineno} "
+            f"column={exc.colno} position={exc.pos} output_chars={output_chars or 0}"
+        )
+    if isinstance(exc, ValidationError):
+        details = []
+        for error in exc.errors(include_input=False)[:5]:
+            path = ".".join(str(part) for part in error.get("loc", ())) or "root"
+            details.append(
+                f"{path}:{error.get('type', 'invalid')}:{str(error.get('msg', 'invalid'))[:100]}"
+            )
+        return "category=pydantic " + "; ".join(details)
+    return f"category=validation type={type(exc).__name__}"
+
+
 class LLMGateway(Protocol):
     def extract(self, prompt: str) -> Any: ...
 
@@ -147,7 +164,7 @@ class GeminiConfig:
     api_key: str = field(default="", repr=False)
     model: str = DEFAULT_GEMINI_MODEL
     max_input_chars: int = 30000
-    max_output_tokens: int = 4096
+    max_output_tokens: int = 8192
     timeout_seconds: float = 30.0
     retries: int = 2
     temperature: float = 0.0
@@ -179,11 +196,13 @@ class OpenAICompatibleConfig:
     base_url: str = DEFAULT_OPENAI_BASE_URL
     model: str = DEFAULT_OPENAI_MODEL
     max_input_chars: int = 30000
-    max_output_tokens: int = 4096
+    max_output_tokens: int = 8192
     timeout_seconds: float = 30.0
     retries: int = 2
     temperature: float = 0.0
     response_format: str = "json_object"
+    output_retries: int = 1
+    length_retry_tokens: int = 8192
 
     def __post_init__(self) -> None:
         if not self.base_url.strip() or not self.model.strip():
@@ -198,6 +217,8 @@ class OpenAICompatibleConfig:
             raise ConfigurationError(
                 "OpenAI-compatible temperature must be between 0 and 2"
             )
+        if self.output_retries < 0 or self.length_retry_tokens <= 0:
+            raise ConfigurationError("OpenAI-compatible output retry settings are invalid")
 
     @classmethod
     def from_env(cls, require_key: bool = True) -> "OpenAICompatibleConfig":
@@ -209,11 +230,13 @@ class OpenAICompatibleConfig:
             base_url=os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
             model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
             max_input_chars=_env_number("OPENAI_MAX_INPUT_CHARS", "30000", int),
-            max_output_tokens=_env_number("OPENAI_MAX_OUTPUT_TOKENS", "4096", int),
+            max_output_tokens=_env_number("OPENAI_MAX_OUTPUT_TOKENS", "8192", int),
             timeout_seconds=_env_number("OPENAI_TIMEOUT_SECONDS", "30.0", float),
             retries=_env_number("OPENAI_RETRIES", "2", int),
             temperature=_env_number("OPENAI_TEMPERATURE", "0.0", float),
             response_format=os.getenv("OPENAI_RESPONSE_FORMAT", "json_object"),
+            output_retries=_env_number("OPENAI_OUTPUT_RETRIES", "1", int),
+            length_retry_tokens=_env_number("OPENAI_LENGTH_RETRY_TOKENS", "8192", int),
         )
 
 
@@ -257,18 +280,16 @@ class GeminiClient:
                 if parsed is not None:
                     try:
                         return parse_envelope(parsed)
-                    except Exception as exc:
-                        raise ProviderSchemaError(
-                            "Gemini response did not match the extraction schema"
-                        ) from exc
+                    except (ValidationError, json.JSONDecodeError) as exc:
+                        raise ProviderSchemaError(_safe_schema_diagnostic(exc)) from exc
                 text = getattr(response, "text", None)
                 if not text:
                     raise ProviderEmptyResponseError("Gemini returned an empty response")
                 try:
                     return parse_envelope(json.loads(text))
-                except Exception as exc:
+                except (ValidationError, json.JSONDecodeError) as exc:
                     raise ProviderSchemaError(
-                        "Gemini response did not match the extraction schema"
+                        _safe_schema_diagnostic(exc, len(text))
                     ) from exc
             except ProviderError:
                 raise
@@ -315,12 +336,12 @@ class OpenAICompatibleClient:
         self._sleep = sleep
         self._random = random_value
 
-    def _body(self, prompt: str) -> dict[str, Any]:
+    def _body(self, prompt: str, max_tokens: int | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self.config.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_output_tokens,
+            "max_tokens": max_tokens or self.config.max_output_tokens,
         }
         if self.config.response_format == "json_schema":
             body["response_format"] = {
@@ -370,10 +391,10 @@ class OpenAICompatibleClient:
             f"(finish_reason={safe_finish_reason}, alternate_fields={alternatives})"
         )
 
-    def _request(self, prompt: str) -> str:
+    def _request_once(self, prompt: str, max_tokens: int | None = None) -> str:
         request = Request(
             chat_completions_url(self.config.base_url),
-            data=json.dumps(self._body(prompt)).encode("utf-8"),
+            data=json.dumps(self._body(prompt, max_tokens)).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {self.config.api_key}",
                 "Content-Type": "application/json",
@@ -398,7 +419,7 @@ class OpenAICompatibleClient:
             raise ProviderRequestError(
                 f"OpenAI-compatible request failed with HTTP {exc.code}"
             ) from exc
-        except (TimeoutError, socket.timeout) as exc:
+        except (ConnectionError, OSError, TimeoutError, socket.timeout) as exc:
             raise TimeoutError from exc
         except URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)):
@@ -411,54 +432,90 @@ class OpenAICompatibleClient:
             if callable(close):
                 close()
 
+    def _request(self, prompt: str, max_tokens: int | None = None) -> str:
+        """Execute transport retries without consuming an output retry."""
+        for attempt in range(self.config.retries + 1):
+            try:
+                return self._request_once(prompt, max_tokens)
+            except (ProviderAuthenticationError, ProviderPermissionError):
+                raise
+            except (TimeoutError, ProviderRequestError) as exc:
+                cause = exc.__cause__
+                status = getattr(cause, "code", None)
+                retryable = (
+                    isinstance(exc, TimeoutError)
+                    or isinstance(cause, URLError) and not isinstance(cause, HTTPError)
+                    or status == 429
+                    or isinstance(status, int) and status >= 500
+                )
+                if not retryable or attempt >= self.config.retries:
+                    raise
+                self._sleep(min(8.0, 0.5 * 2**attempt) + self._random() * 0.25)
+
+    @staticmethod
+    def _validation_message(exc: ValidationError) -> str:
+        details = []
+        for error in exc.errors(include_input=False)[:5]:
+            path = ".".join(str(part) for part in error.get("loc", ())) or "root"
+            details.append(
+                f"{path}:{error.get('type', 'invalid')}:"
+                f"{str(error.get('msg', 'invalid'))[:100]}"
+            )
+        return "category=pydantic " + "; ".join(details)
+
     def extract(self, prompt: str) -> Any:
         if len(prompt) > self.config.max_input_chars:
             raise ProviderRequestError(
                 "OpenAI-compatible input exceeds configured limit"
             )
+        output_prompt = prompt
         last: Exception | None = None
-        for attempt in range(self.config.retries + 1):
+        retry_tokens: int | None = None
+        for output_attempt in range(self.config.output_retries + 1):
             try:
-                response = json.loads(self._request(prompt))
+                raw_response = self._request(output_prompt, retry_tokens)
+                try:
+                    response = json.loads(raw_response)
+                except json.JSONDecodeError as exc:
+                    raise ProviderSchemaError(
+                        "category=json "
+                        f"message={str(exc)[:120]} line={exc.lineno} "
+                        f"column={exc.colno} position={exc.pos} "
+                        f"finish_reason=unknown output_chars={len(raw_response)}"
+                    ) from exc
                 choices = response.get("choices") if isinstance(response, dict) else None
-                if not choices:
+                if not isinstance(choices, list) or not choices:
                     raise ProviderEmptyResponseError(
-                        "OpenAI-compatible response has no choices"
+                        "OpenAI-compatible response has no choices array"
                     )
-                content = self._content(choices[0]).strip()
-                if content.startswith("```"):
-                    lines = content.splitlines()
-                    if len(lines) >= 2 and lines[-1].strip() == "```":
-                        content = "\n".join(lines[1:-1]).strip()
-                if not content:
-                    raise ProviderEmptyResponseError(
-                        "OpenAI-compatible response has empty content"
+                choice = choices[0]
+                if not isinstance(choice, dict):
+                    raise ProviderSchemaError(
+                        "OpenAI-compatible response has an invalid first choice"
                     )
-                return parse_envelope(json.loads(content))
-            except (
-                ProviderAuthenticationError,
-                ProviderPermissionError,
-                ProviderSchemaError,
-                ProviderEmptyResponseError,
-            ):
-                raise
-            except (TimeoutError, ProviderRequestError) as exc:
+                if choice.get("finish_reason") == "length":
+                    raise ProviderSchemaError("category=length finish_reason=length")
+                content = self._content(choice).strip()
+                try:
+                    return parse_envelope(json.loads(content))
+                except json.JSONDecodeError as exc:
+                    raise ProviderSchemaError(
+                        "category=json "
+                        f"message={str(exc)[:120]} line={exc.lineno} "
+                        f"column={exc.colno} position={exc.pos} "
+                        f"finish_reason={choice.get('finish_reason', 'unknown')} "
+                        f"output_chars={len(content)}"
+                    ) from exc
+                except ValidationError as exc:
+                    raise ProviderSchemaError(self._validation_message(exc)) from exc
+            except (ProviderSchemaError, ProviderEmptyResponseError) as exc:
                 last = exc
-                status = getattr(exc.__cause__, "code", None)
-                retryable = status == 429 or isinstance(status, int) and status >= 500
-                if isinstance(exc, ProviderRequestError) and not retryable:
-                    raise
-            except Exception as exc:
-                raise ProviderSchemaError(
-                    "OpenAI-compatible response did not match the extraction schema"
-                ) from exc
-            if attempt >= self.config.retries:
-                raise ProviderRequestError(
-                    "OpenAI-compatible request failed"
-                ) from last
-            # Retry transient failures with bounded exponential backoff and jitter.
-            self._sleep(min(8.0, 0.5 * 2**attempt) + self._random() * 0.25)
-        raise ProviderRequestError("OpenAI-compatible request failed") from last
+                if "finish_reason=length" in str(exc):
+                    retry_tokens = self.config.length_retry_tokens
+            if output_attempt >= self.config.output_retries:
+                raise last or ProviderSchemaError("OpenAI-compatible output failed")
+            output_prompt = prompt + "\nReturn only valid JSON matching the requested shape, without analysis."
+        raise ProviderSchemaError("OpenAI-compatible output failed")
 
 
 def create_llm_gateway(provider: str | None = None) -> LLMGateway:

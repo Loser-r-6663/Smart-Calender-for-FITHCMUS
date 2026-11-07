@@ -46,6 +46,14 @@ class DatabaseApiUnavailableError(DatabaseApiError):
     pass
 
 
+class DatabaseApiAuthenticationError(DatabaseApiError):
+    pass
+
+
+class DatabaseApiPermissionError(DatabaseApiError):
+    pass
+
+
 class DatabaseApiValidationError(DatabaseApiError):
     pass
 

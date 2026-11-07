@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+import os
 from datetime import datetime
 import time
 from typing import Any, Callable, Iterable, Mapping
@@ -12,13 +13,12 @@ from .adapters import adapt_crawl_results
 from .api_client import DatabaseApiClient
 from .deduplication import (
     deduplicate_task_candidates,
-    InMemoryRawFingerprintStore,
+    JsonRawFingerprintStore,
     RawDedupAction,
     RawDuplicateChecker,
     RawFingerprint,
 )
-from .errors import DatabaseApiConflictError
-from .extraction import LLMExtractor
+from .extraction import LLMExtractor, UNKNOWN_DEADLINE
 from .models import RawCrawlerInput, TaskCandidate
 from .providers import create_llm_gateway
 
@@ -119,9 +119,14 @@ class ParserManager:
 
     @classmethod
     def from_env(cls, **kwargs: Any) -> "ParserManager":
+        database_api = DatabaseApiClient()
         extractor = LLMExtractor(create_llm_gateway())
-        checker = RawDuplicateChecker(InMemoryRawFingerprintStore())
-        return cls(extractor, checker, DatabaseApiClient(), **kwargs)
+        checker = RawDuplicateChecker(
+            JsonRawFingerprintStore(
+                os.getenv("PARSER_DEDUP_STATE_PATH", ".parser-dedup.json")
+            )
+        )
+        return cls(extractor, checker, database_api, **kwargs)
 
     @staticmethod
     def _stage(
@@ -199,18 +204,19 @@ class ParserManager:
 
         def prepare() -> dict[str, Any]:
             fields = (
-                "title", "type", "course_code", "description", "target_audience",
+                "title", "type", "course", "description", "target_audience",
                 "location", "registration_start", "registration_end", "start_time",
                 "end_time", "deadline", "estimated_hours", "training_points",
                 "drl_category", "recurrence", "status", "is_manual", "source_url",
                 "source_platform", "updated_at",
             )
             data = {field: getattr(candidate, field) for field in fields}
-            data["embedding"] = (
-                json.dumps(candidate.embedding, separators=(",", ":"))
-                if candidate.embedding is not None
-                else None
-            )
+            if (
+                candidate.type.value in {"assignment", "tuition"}
+                and candidate.deadline is None
+            ):
+                # Temporary cross-component sentinel; the scheduler must treat this as unknown.
+                data["deadline"] = UNKNOWN_DEADLINE
             data["id"] = self.id_factory(fingerprint, candidate_index)
             # Convert domain enums and datetimes at the API serialization boundary.
             return {
@@ -239,19 +245,8 @@ class ParserManager:
         def send() -> Any:
             if self.database_api is None:
                 raise RuntimeError("database API client is not configured")
-            try:
-                return self.database_api.create_task(payload)
-            except DatabaseApiConflictError:
-                # A matching existing task makes a repeated send idempotent.
-                existing = self.database_api.get_task(payload["id"])
-                if not isinstance(existing, Mapping):
-                    raise DatabaseApiConflictError(
-                        "database conflict lookup returned a non-object response"
-                    )
-                fields = ("id", "title", "type", "course_code", "source_platform")
-                if all(existing.get(field) == payload.get(field) for field in fields):
-                    return dict(existing)
-                raise
+            # Conflict recovery is intentionally disabled until read permission/idempotency is settled.
+            return self.database_api.create_task(payload)
 
         return self._stage(PipelineStage.SEND, payload, send)
 
@@ -360,6 +355,15 @@ class ParserManager:
                 persisted.append(dict(sent.output))
 
         if not candidates:
+            remembered = self.remember_fingerprint(duplicate.output.fingerprint)
+            stages.append(remembered)
+            if remembered.status is StageStatus.FAILED:
+                return PipelineItemResult(
+                    raw=raw,
+                    stages=tuple(stages),
+                    status=StageStatus.FAILED,
+                    error=remembered.error,
+                )
             return PipelineItemResult(
                 raw=raw,
                 stages=tuple(stages),
