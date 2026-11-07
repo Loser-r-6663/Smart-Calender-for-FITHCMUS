@@ -64,9 +64,14 @@ have deadlines. The class is one materialized occurrence; recurrence expansion
 is outside this dataset.
 
 `validate.py` checks this fixture contract, not `task_schema.json`. Passing it does
-not prove database compatibility. A future PostgreSQL test adapter needs explicit
-field and recurrence mappings that preserve each expectation; it must not send
-these records unchanged to database creation. Production searches query database
+not prove database compatibility. The test-only adapter in
+`tests/postgres_search_support.py` explicitly maps `course_code` to controlled
+`course` text, removes null `embedding`, maps `NONE` to null and `WEEKLY:FRI` to
+`T6 07:30-11:00`, and parses aware timestamps. IDs, numeric points and the nine
+structured-query expected-ID sets remain unchanged. It rejects unknown points
+instead of converting them to zero. These adapted records are validated by the
+Database repository during real integration setup; the original JSON files are
+not rewritten. Production searches query database
 state directly and require no JSON-to-SQLite import.
 
 ## Clock, date, missing-value, and status policies
@@ -179,7 +184,12 @@ The explicit `academic_search.sqlite_service.SearchService` exercises all nine
 existing structured-query expectations through an in-memory SQLite adapter. The
 [production search service](../../docs/structured-search.md) queries PostgreSQL
 through the selected DatabaseManager and does not import this dataset.
-The standalone validator above still checks fixture integrity independently.
+The dedicated PostgreSQL suite reuses those same nine expected-ID sets through
+an explicit schema adapter and adds boundary, ordering, mutation and ownership
+cases. Its [configuration and cleanup instructions](../../docs/structured-search.md#dedicated-postgresql-integration-tests)
+require a dedicated target and explicit opt-in. Skips/offline checks do not prove
+real database retrieval. The standalone validator above still checks fixture
+integrity independently.
 Keyword, hybrid and semantic retrieval remain future integration work.
 
 | Required case | Query IDs / supporting records |

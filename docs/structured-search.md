@@ -372,22 +372,85 @@ The PostgreSQL path does not coerce or import them. Unknown training-point polic
 still needs confirmation from the Database and training-point/scheduling teammates:
 the schema cannot preserve the null-versus-zero distinction from SQLite tests.
 
-`tests/test_postgres_search_integration.py` is skipped unless
-`RUN_SEARCH_POSTGRES_INTEGRATION=1`. Use only a dedicated, already populated test
-database configured with the manager's `DB_*` settings. Provide `SEARCH_TEST_USER_ID`
-and `SEARCH_TEST_TASK_ID` identifying a pre-existing assigned task, then run:
+## Dedicated PostgreSQL integration tests
 
-```console
+`tests/test_postgres_search_integration.py` uses the real production SearchService,
+the exact `Database/DatabaseManager.py`, its task repository and PostgreSQL. The
+Database package/dependencies must be available on Python's import path. Provision
+a dedicated database ending in `_search_test` (for example `calendar_search_test`)
+and a test role with CONNECT and CREATE-schema privileges. Never point this suite
+at a shared development or production database.
+
+Set `SEARCH_TEST_DB_PASSWORD` privately in the process environment, then configure:
+
+```powershell
+$env:RUN_SEARCH_POSTGRES_INTEGRATION = "1"
+$env:SEARCH_TEST_DB_HOST = "localhost"
+$env:SEARCH_TEST_DB_NAME = "calendar_search_test"
+$env:SEARCH_TEST_DB_USER = "search_tester"
+$env:SEARCH_TEST_DB_PORT = "5432"
+$env:SEARCH_TEST_DB_CONFIRM = $env:SEARCH_TEST_DB_NAME
+python -X utf8 -m unittest discover -s tests -p test_postgres_search_integration.py -v
 python -X utf8 -m unittest discover -s tests -p test_postgres_search_integration.py -v
 ```
 
-The opt-in test uses the selected manager, a read-only repeatable-read transaction,
-SELECTs only, and owner-side rollback before closing. It does not seed records,
-clear data or run schema scripts. Without those prerequisites, only mocked
-PostgreSQL checks and real SQLite fixture tests are available; server-side syntax,
-driver adaptation, deployed schema compatibility and actual ownership isolation
-remain unverified. No configured dedicated database or PostgreSQL dependencies
-were available for live checks on 2026-11-08.
+All six `SEARCH_TEST_DB_*` values are required. Normal `DB_*` settings, dotenv
+values and the former `SEARCH_TEST_USER_ID`/`SEARCH_TEST_TASK_ID` are not used as
+test targets. Without opt-in, integration cases explicitly skip. With opt-in,
+missing/invalid settings, dependencies, source fingerprints or connectivity are
+setup errors, never successful integration results. Each invocation must use a
+fresh Python process: the suite refuses an existing manager singleton because its
+constructor ignores new connection settings after initialization.
+
+Before any DDL/data writes, the suite checks the database-name suffix and explicit
+confirmation, then verifies `current_database()`, `session_user`, host and port on
+the connected manager. It checks normalized source fingerprints for the reviewed
+`Db_query.sql`, `DatabaseManager.py` and `tasks.py` at Database revision
+`7aa63cfc5453a70a12b73b099c4f56e1dc583825`. Source drift requires reviewing those
+files and updating the test fingerprints; do not bypass the guard.
+
+Each case creates its own `search_it_<uuid>` schema and sets a search path containing
+only that schema and `pg_catalog`, excluding `public`. It runs the team's existing
+`Database/Db_query.sql` unchanged there, creates two test users, validates/inserts
+adapted fixture tasks through `TaskRepository.create`, and assigns base tasks only
+to the first user. Calendar links are created by selected-manager creation tests;
+normal search must also work without them. No database is created, no application
+schema is migrated, and no shared tables are cleared.
+
+Cleanup is registered before initialization/seeding. It rolls back pending/failed
+work, revalidates the target, and drops only the exact schema created by that case,
+then commits cleanup and verifies the schema is absent from `pg_namespace`.
+This removes rows even when manager writes committed them;
+transaction rollback alone would not suffice. The suite owns and closes its test
+connection after all cases. Cleanup failures fail the suite. An abruptly killed
+process may leave its uniquely named scratch schema; inspect that exact schema
+in the dedicated database before removing it, rather than sweeping other schemas.
+The second command above verifies repeatability and committed-write cleanup when
+a dedicated database is available.
+
+The test-only adapter in `tests/postgres_search_support.py` preserves fixture IDs,
+points and authored expected IDs. It maps controlled `course_code` values and
+filters to identical `course` text, omits null `embedding`, maps `NONE` to null and
+`WEEKLY:FRI` to `T6 07:30-11:00`, and parses aware timestamps. This is not a
+production course-identity mapping. Null training points are rejected by both
+Python and SQL tests; the current schema supports no unknown-points value.
+The nine original structured-query expectations remain unchanged. Mutation tests
+assert the same title/deadline, cancellation and deletion purposes; updated-time
+checks use a captured current-UTC window because repository updates generate
+`updated_at` instead of preserving the fixture scenario clock.
+
+The suite asserts exact IDs/order for lookup, all six types, combined filters,
+statuses, course text, points, half-open dates, registration closing inclusivity,
+missing dates, overlaps, equivalent offsets, microseconds, stable sorting,
+null ordering, pagination and empty results. It verifies committed manager
+update/cancel/create/delete visibility, owner isolation/shared assignments,
+validation errors and real query failures with retained database-error causes.
+It never mocks query execution or substitutes SQLite. Offline setup-guard and
+fixture-adapter tests are separate and do not count as real PostgreSQL checks.
+
+No dedicated target, Database runtime or PostgreSQL driver was available for live
+verification on 2026-11-08. The suite is implemented but PostgreSQL execution and
+two-run cleanup verification remain outstanding until that environment is supplied.
 
 ## Remaining integration decisions
 
