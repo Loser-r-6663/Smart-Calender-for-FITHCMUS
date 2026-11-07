@@ -2,6 +2,7 @@
 
 
 class ParserError(Exception):
+    # All parser failures share one base for simple boundary-level handling.
     pass
 
 

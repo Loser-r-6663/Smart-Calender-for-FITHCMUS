@@ -1,8 +1,9 @@
-"""Exact content and canonical source-URL deduplication for raw input."""
+"""Raw fingerprint and parsed task-candidate deduplication primitives."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from difflib import SequenceMatcher
 import hashlib
 import json
 import math
@@ -12,11 +13,15 @@ from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .errors import ParserError
-from .models import RawCrawlerInput
+from .models import RawCrawlerInput, TaskCandidate
 
 
 class RawDeduplicationError(ParserError):
     """Raised when raw input cannot be safely fingerprinted."""
+
+
+class CandidateDeduplicationError(ParserError):
+    """Raised when parsed task candidates cannot be safely deduplicated."""
 
 
 class RawDedupAction(str, Enum):
@@ -57,6 +62,7 @@ class InMemoryRawFingerprintStore:
     """Process-local storage for successful raw fingerprints."""
 
     def __init__(self) -> None:
+        # This store intentionally covers one process run, not durable deduplication so this might be changed later if we need to document the fingerprints.
         self._by_url: dict[str, RawFingerprint] = {}
         self._by_content_hash: dict[str, RawFingerprint] = {}
 
@@ -67,6 +73,7 @@ class InMemoryRawFingerprintStore:
         return self._by_content_hash.get(content_hash)
 
     def remember(self, fingerprint: RawFingerprint) -> None:
+        # Preserve the first content representative while allowing URL updates.
         if fingerprint.canonical_url is not None:
             self._by_url[fingerprint.canonical_url] = fingerprint
         self._by_content_hash.setdefault(fingerprint.content_hash, fingerprint)
@@ -78,6 +85,7 @@ class RawDuplicateChecker:
 
     def check(self, raw: RawCrawlerInput) -> RawDeduplicationResult:
         fingerprint = fingerprint_raw_input(raw)
+        # URL identity is checked first so a changed page at a known URL is processed.
         url_match = (
             self._store.find_by_url(fingerprint.canonical_url)
             if fingerprint.canonical_url is not None
@@ -97,6 +105,7 @@ class RawDuplicateChecker:
                 url_match,
             )
 
+        # A matching hash at another URL is the exact normalized duplicate case.
         content_match = self._store.find_by_content_hash(fingerprint.content_hash)
         if content_match is not None:
             return RawDeduplicationResult(
@@ -119,8 +128,70 @@ _WHITESPACE = re.compile(r"\s+")
 
 
 def _normalize_string(value: str) -> str:
+    # NFKC, collapsed whitespace, and casefold remove representational text noise.
     normalized = unicodedata.normalize("NFKC", value)
     return _WHITESPACE.sub(" ", normalized).strip().casefold()
+
+
+def _candidate_identity(candidate: TaskCandidate) -> tuple[object, ...]:
+    temporal = tuple(
+        getattr(candidate, field).isoformat() if getattr(candidate, field) else None
+        for field in (
+            "registration_start", "registration_end", "start_time",
+            "end_time", "deadline",
+        )
+    )
+    source_url = candidate.source_url
+    if source_url is not None:
+        try:
+            source_url = canonicalize_url(source_url)
+        except RawDeduplicationError as exc:
+            raise CandidateDeduplicationError(
+                "candidate source URL is not canonicalizable"
+            ) from exc
+    return (
+        candidate.type.value,
+        _normalize_string(candidate.course_code or ""),
+        temporal,
+        _normalize_string(candidate.recurrence or ""),
+        _normalize_string(candidate.location or ""),
+        candidate.source_platform.value,
+        source_url,
+    )
+
+
+def deduplicate_task_candidates(
+    candidates: Sequence[TaskCandidate],
+) -> tuple[TaskCandidate, ...]:
+    """Keep the first candidate from each conservative structural title group."""
+    # Candidate deduplication after AI parses: prevents one response from producing duplicate or near-duplicate tasks.
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
+        raise CandidateDeduplicationError(
+            "candidates must be a sequence of TaskCandidate values"
+        )
+    retained: list[TaskCandidate] = []
+    identities: list[tuple[object, ...]] = []
+    titles: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, TaskCandidate):
+            raise CandidateDeduplicationError(
+                "candidates must be a sequence of TaskCandidate values"
+            )
+        identity = _candidate_identity(candidate)
+        title = _normalize_string(candidate.title)
+        if any(
+            identity == previous_identity
+            and (
+                title == previous_title
+                or SequenceMatcher(None, title, previous_title).ratio() >= 0.90
+            )
+            for previous_identity, previous_title in zip(identities, titles)
+        ):
+            continue
+        retained.append(candidate)
+        identities.append(identity)
+        titles.append(title)
+    return tuple(retained)
 
 
 def canonicalize_url(url: str) -> str:
@@ -160,6 +231,7 @@ def canonicalize_url(url: str) -> str:
     if len(path) > 1:
         path = path.rstrip("/") or "/"
     query_pairs = [
+        # Tracking parameters do not identify the underlying source content.
         (key, item)
         for key, item in parse_qsl(parts.query, keep_blank_values=True)
         if not (
@@ -185,9 +257,11 @@ def _normalize_json(value: Any, *, top_level_record: bool = False) -> Any:
             raise RawDeduplicationError("JSON mappings must use string keys")
         normalized = {}
         for key, item in value.items():
+            # Link fields are envelope identity, not the record's content identity.
             if top_level_record and key in {"Link", "link", "source_url"}:
                 continue
             normalized[_normalize_string(key)] = _normalize_json(item)
+        # Sorted keys make equivalent JSON structures canonical before hashing.
         return {key: normalized[key] for key in sorted(normalized)}
     if isinstance(value, list):
         return [_normalize_json(item) for item in value]
@@ -197,6 +271,7 @@ def _normalize_json(value: Any, *, top_level_record: bool = False) -> Any:
 
 
 def fingerprint_raw_input(raw: RawCrawlerInput) -> RawFingerprint:
+    # Raw deduplication before AI: avoids paying to parse the same crawler record repeatedly.
     if not isinstance(raw, RawCrawlerInput):
         raise RawDeduplicationError("raw input must be a RawCrawlerInput")
     if isinstance(raw.payload, bytes):
@@ -218,6 +293,7 @@ def fingerprint_raw_input(raw: RawCrawlerInput) -> RawFingerprint:
         canonical_content = _normalize_string(payload)
     else:
         is_envelope = isinstance(parsed, dict) and "record" in parsed
+        # Hash only the record: source/capture envelope metadata must not create duplicates.
         content = parsed["record"] if is_envelope else parsed
         canonical_content = json.dumps(
             _normalize_json(content, top_level_record=is_envelope),
@@ -226,6 +302,7 @@ def fingerprint_raw_input(raw: RawCrawlerInput) -> RawFingerprint:
             separators=(",", ":"),
             allow_nan=False,
         )
+    # UTF-8 plus SHA-256 yields a deterministic fingerprint, not semantic similarity.
     content_hash = hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()
     canonical_url = (
         None if raw.source_url is None else canonicalize_url(raw.source_url)

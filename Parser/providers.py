@@ -44,6 +44,7 @@ def _clear_class_time_only(value: Any) -> Any:
         for field in ("start_time", "end_time")
         if isinstance(data.get(field), str) and _TIME_ONLY.fullmatch(data[field])
     ]
+    # Class time-only values lack a date, so preserve them as recurrence text instead.
     if not time_values:
         return data
 
@@ -65,6 +66,7 @@ def _clear_class_time_only(value: Any) -> Any:
 
 
 class ExtractedTask(BaseModel):
+    # Pydantic supplies shared validation for every provider response.
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
@@ -99,6 +101,7 @@ def provider_schema() -> dict[str, Any]:
     """Return the strict schema with provider-incompatible extras removed."""
 
     def sanitize(value: Any) -> Any:
+        # Some providers reject this JSON Schema keyword even though Pydantic emits it.
         if isinstance(value, dict):
             return {
                 key: sanitize(item)
@@ -113,6 +116,7 @@ def provider_schema() -> dict[str, Any]:
 
 
 def parse_envelope(value: Any) -> ExtractionEnvelope:
+    # Structured validation keeps provider-specific response handling at one boundary.
     if isinstance(value, ExtractionEnvelope):
         return value
     return ExtractionEnvelope.model_validate(value)
@@ -282,6 +286,7 @@ class GeminiClient:
                 )
                 if not transient or attempt >= self.config.retries:
                     raise ProviderRequestError("Gemini request failed") from exc
+                # Exponential backoff with jitter avoids synchronized retry bursts.
                 time.sleep(min(8.0, 0.5 * 2**attempt) + random.random() * 0.25)
         raise ProviderRequestError("Gemini request failed") from last
 
@@ -381,6 +386,7 @@ class OpenAICompatibleClient:
             raw = response.read()
             return raw.decode("utf-8") if isinstance(raw, bytes) else raw
         except HTTPError as exc:
+            # Translate transport-specific failures into the provider error contract.
             if exc.code == 401:
                 raise ProviderAuthenticationError(
                     "OpenAI-compatible authentication failed"
@@ -450,6 +456,7 @@ class OpenAICompatibleClient:
                 raise ProviderRequestError(
                     "OpenAI-compatible request failed"
                 ) from last
+            # Retry transient failures with bounded exponential backoff and jitter.
             self._sleep(min(8.0, 0.5 * 2**attempt) + self._random() * 0.25)
         raise ProviderRequestError("OpenAI-compatible request failed") from last
 

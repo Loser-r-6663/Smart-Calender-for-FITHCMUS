@@ -41,6 +41,7 @@ class SourcePlatform(str, Enum):
 class RawCrawlerInput:
     """An opaque envelope supplied by a crawler implementation elsewhere."""
 
+    # The payload remains opaque here so crawler-specific parsing stays isolated.
     payload: Any
     source_platform: SourcePlatform | None = None
     source_alias: str | None = None
@@ -52,6 +53,7 @@ class RawCrawlerInput:
 class TaskCandidate:
     """Immutable data-processor output before task persistence."""
 
+    # Candidates are immutable between extraction and persistence.
     title: str
     type: TaskType
     course_code: str | None = None

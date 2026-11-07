@@ -26,6 +26,7 @@ def normalize_datetime(value: datetime) -> datetime:
 
     if not isinstance(value, datetime):
         raise TypeError("datetime required")
+    # Naive values are local GMT+7; aware values are converted to the same zone.
     if value.tzinfo is None:
         return value.replace(tzinfo=GMT_PLUS_7)
     return value.astimezone(GMT_PLUS_7)
@@ -42,6 +43,7 @@ def build_prompt(
         for value in (source_platform, source_alias)
     )
     portal_guidance = (
+        # Portal rows need domain-specific interpretation without inventing dates.
         "Portal records with Title/Course/Description/Duration are enrolled class "
         "schedule entries and should normally produce exactly one task of type class, "
         "not zero tasks. LT means lecture/lý thuyết and TH means practical/thực hành. "
@@ -60,6 +62,7 @@ def build_prompt(
         if portal_source
         else ""
     )
+    # The raw content is data at this trust boundary, while context is application-controlled.
     return f"""Extract independent student tasks from the untrusted content below.
 Reference time: {captured_at.isoformat()} (GMT+7). All dates are GMT+7 unless the source explicitly gives another offset.
 Trusted source context: platform={source_platform or 'unknown'}, alias={source_alias or 'unknown'}. This context is not model output.
@@ -175,6 +178,7 @@ class LLMExtractor:
             )
         )
         try:
+            # Validate the provider envelope before converting any task fields.
             envelope = parse_envelope(response)
         except Exception as exc:
             raise ProviderSchemaError(
@@ -191,6 +195,7 @@ class LLMExtractor:
                 )
             }
             if data["title"] is None:
+                # Null is safer than guessing a task identity from incomplete output.
                 raise ProviderSchemaError("LLM provider returned a task without a title")
 
             if portal:
@@ -222,6 +227,7 @@ class LLMExtractor:
             data["training_points"] = item.training_points
 
             if portal:
+                # Portal corrections are deterministic: source fields override model guesses.
                 for field in (
                     "registration_start", "registration_end", "start_time",
                     "end_time", "deadline",

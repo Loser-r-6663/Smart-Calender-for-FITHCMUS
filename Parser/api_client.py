@@ -46,6 +46,7 @@ class DatabaseApiClient:
         return " ".join(str(detail).split())[:300]
 
     def _request(self, method: str, path: str, payload: Any = None) -> Any:
+        # Keep wire serialization compact and independent of caller object types.
         data = (
             None
             if payload is None
@@ -70,6 +71,7 @@ class DatabaseApiClient:
                     "database API returned invalid JSON"
                 ) from exc
         except HTTPError as exc:
+            # Preserve validation/conflict semantics while hiding urllib details.
             detail = self._detail(exc.read())
             if exc.code == 422:
                 raise DatabaseApiValidationError(detail) from exc

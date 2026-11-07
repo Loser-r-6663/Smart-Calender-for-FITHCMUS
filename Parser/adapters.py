@@ -25,6 +25,7 @@ _PLATFORMS = {
 
 
 def _json_value(value: Any) -> Any:
+    # Normalize crawler-specific sentinels and values to JSON-safe primitives.
     if value == "N/A":
         return None
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -43,6 +44,7 @@ def _json_value(value: Any) -> Any:
 
 
 def _record_data(record: object) -> Mapping[str, Any]:
+    # Accept mappings, common model APIs, and legacy attribute-shaped records.
     if isinstance(record, Mapping):
         return record
     for method_name in ("model_dump", "dict"):
@@ -101,12 +103,14 @@ def adapt_crawl_results(
         platform = _PLATFORMS.get(source_alias.casefold(), SourcePlatform.CUSTOM)
         for record in records:
             data = _record_data(record)
+            # Keep source metadata beside the record so downstream prompts retain context.
             envelope = {
                 "record": _json_value(data),
                 "source": {"alias": source_alias, "platform": platform.value},
             }
             adapted.append(
                 RawCrawlerInput(
+                    # Stable JSON makes equivalent crawler records compare identically.
                     payload=json.dumps(
                         envelope,
                         ensure_ascii=False,

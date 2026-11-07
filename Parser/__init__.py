@@ -1,8 +1,10 @@
 """Stable public API for parsing, deduplication, and REST persistence."""
 
+# Re-export the supported surface so callers need not depend on module layout.
 from .adapters import CrawlerAdapterError, adapt_crawl_results
 from .api_client import DatabaseApiClient
 from .deduplication import (
+    CandidateDeduplicationError,
     InMemoryRawFingerprintStore,
     RawDedupAction,
     RawDedupReason,
@@ -12,6 +14,7 @@ from .deduplication import (
     RawFingerprint,
     RawFingerprintStore,
     canonicalize_url,
+    deduplicate_task_candidates,
     fingerprint_raw_input,
 )
 from .errors import (
@@ -56,6 +59,7 @@ from .providers import (
 
 __all__ = [
     "CrawlerAdapterError",
+    "CandidateDeduplicationError",
     "DatabaseApiClient",
     "DatabaseApiConflictError",
     "DatabaseApiError",
@@ -95,6 +99,7 @@ __all__ = [
     "TaskType",
     "adapt_crawl_results",
     "canonicalize_url",
+    "deduplicate_task_candidates",
     "create_llm_gateway",
     "fingerprint_raw_input",
     "normalize_datetime",

@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterable, Mapping
 from .adapters import adapt_crawl_results
 from .api_client import DatabaseApiClient
 from .deduplication import (
+    deduplicate_task_candidates,
     InMemoryRawFingerprintStore,
     RawDedupAction,
     RawDuplicateChecker,
@@ -32,6 +33,7 @@ class PipelineStage(str, Enum):
     ADAPT = "adapt"
     DUPLICATE = "duplicate"
     PARSE = "parse"
+    CANDIDATE_DEDUP = "candidate_dedup"
     PREPARE = "prepare"
     API_HEALTH = "api_health"
     SEND = "send"
@@ -111,6 +113,7 @@ class ParserManager:
 
     @staticmethod
     def _default_id(fingerprint: RawFingerprint, candidate_index: int) -> str:
+        # Content plus candidate position gives a deterministic id for each task.
         value = f"{fingerprint.content_hash}:{candidate_index}"
         return "task-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
 
@@ -126,6 +129,7 @@ class ParserManager:
         value: Any,
         operation: Callable[[], Any],
     ) -> StageResult:
+        # Every operation is timed and captured so failures remain traceable by stage.
         started = time.perf_counter()
         try:
             output = operation()
@@ -172,6 +176,15 @@ class ParserManager:
             lambda: tuple(self.extractor.parse(raw)),
         )
 
+    def deduplicate_candidates(
+        self, candidates: tuple[TaskCandidate, ...]
+    ) -> StageResult:
+        return self._stage(
+            PipelineStage.CANDIDATE_DEDUP,
+            candidates,
+            lambda: deduplicate_task_candidates(candidates),
+        )
+
     def prepare_task(
         self,
         candidate: TaskCandidate,
@@ -199,6 +212,7 @@ class ParserManager:
                 else None
             )
             data["id"] = self.id_factory(fingerprint, candidate_index)
+            # Convert domain enums and datetimes at the API serialization boundary.
             return {
                 key: (
                     value.value
@@ -228,6 +242,7 @@ class ParserManager:
             try:
                 return self.database_api.create_task(payload)
             except DatabaseApiConflictError:
+                # A matching existing task makes a repeated send idempotent.
                 existing = self.database_api.get_task(payload["id"])
                 if not isinstance(existing, Mapping):
                     raise DatabaseApiConflictError(
@@ -254,6 +269,7 @@ class ParserManager:
     ) -> PipelineItemResult:
         stages: list[StageResult] = []
         if not api_already_checked:
+            # Fail before extraction to avoid paying LLM cost while persistence is down.
             health = self.check_api_health()
             stages.append(health)
             if health.status is StageStatus.FAILED:
@@ -294,7 +310,24 @@ class ParserManager:
                 error=parsed.error,
             )
 
+        candidate_dedup = self.deduplicate_candidates(parsed.output)
+        stages.append(candidate_dedup)
+        candidates = (
+            candidate_dedup.output
+            if candidate_dedup.status is StageStatus.SUCCESS
+            else ()
+        )
+        if candidate_dedup.status is StageStatus.FAILED:
+            return PipelineItemResult(
+                raw=raw,
+                stages=tuple(stages),
+                candidates=tuple(candidates),
+                status=StageStatus.FAILED,
+                error=candidate_dedup.error,
+            )
+
         persisted: list[dict[str, Any]] = []
+        # One raw record may intentionally yield several independent task candidates.
         for index, candidate in enumerate(candidates, 1):
             prepared = self.prepare_task(
                 candidate,
@@ -334,6 +367,7 @@ class ParserManager:
                 status=StageStatus.SKIPPED,
             )
 
+        # Remember input only after every candidate has persisted successfully.
         remembered = self.remember_fingerprint(duplicate.output.fingerprint)
         stages.append(remembered)
         if remembered.status is StageStatus.FAILED:
