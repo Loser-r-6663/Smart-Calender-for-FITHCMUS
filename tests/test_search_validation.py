@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from academic_search import SearchService, SearchValidationError
+from academic_search.sqlite_service import SearchService, SearchValidationError
 from academic_search.fixture_adapter import create_demo_database
-from academic_search.service import compile_request, validate_sqlite_request
+from academic_search.sqlite_service import compile_request, validate_sqlite_request
 from academic_search.validation import TYPES, parse_instant, validate_request, validate_task_id
 
 CLOCK = "2026-10-30T12:00:00+07:00"
@@ -117,7 +117,7 @@ class SQLiteCompilationTests(unittest.TestCase):
                            "event_overlaps": list(DAY)}, "sort": "id"}
         request = validate_sqlite_request(raw)
         raw["filters"]["event_overlaps"][0] = "bad"
-        with patch("academic_search.service.validate_request", side_effect=AssertionError("revalidation")), \
+        with patch("academic_search.sqlite_service.validate_request", side_effect=AssertionError("revalidation")), \
              patch("academic_search.validation.parse_instant", side_effect=AssertionError("reparsing")):
             sql, params = compile_request(request)
         results = [json.loads(row[0])["id"] for row in self.connection.execute(sql, params)]

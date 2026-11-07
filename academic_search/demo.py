@@ -4,7 +4,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .fixture_adapter import create_demo_database
-from .service import SearchService
+from .sqlite_service import SearchService
 
 CLOCK = "2026-10-30T12:00:00+07:00"
 WEEK = ["2026-10-26T00:00:00+07:00", "2026-11-02T00:00:00+07:00"]

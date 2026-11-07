@@ -2,7 +2,7 @@
 import json
 import sqlite3
 
-from .service import instant, validate_task_id
+from .sqlite_service import instant, validate_task_id
 from .validation import SOURCES, STATUSES, TIME_FIELDS, TYPES, check
 
 PROJECTION_FIELDS = ("id", "type", "course_code", "source_platform", "status", "training_points",

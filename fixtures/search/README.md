@@ -175,8 +175,10 @@ assumed authoritative; a crawler failure alone is not evidence of deletion.
 
 ## Coverage and future integration
 
-The [structured search service](../../docs/structured-search.md) now exercises all
-nine existing structured-query expectations through an in-memory SQLite adapter.
+The explicit `academic_search.sqlite_service.SearchService` exercises all nine
+existing structured-query expectations through an in-memory SQLite adapter. The
+[production search service](../../docs/structured-search.md) queries PostgreSQL
+through the selected DatabaseManager and does not import this dataset.
 The standalone validator above still checks fixture integrity independently.
 Keyword, hybrid and semantic retrieval remain future integration work.
 

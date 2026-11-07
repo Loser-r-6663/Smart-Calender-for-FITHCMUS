@@ -5,7 +5,7 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from academic_search import SearchService, SearchValidationError
+from academic_search.sqlite_service import SearchService, SearchValidationError
 from academic_search.fixture_adapter import create_demo_database, store_task
 
 ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "search"

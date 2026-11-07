@@ -1,8 +1,9 @@
 # Structured task search
 
-`academic_search` currently uses SQLite and the fixture vocabulary. The PostgreSQL
-port is not implemented. The current Search interface below is distinct from the
-agreed database task-payload schema and the proposed integration.
+`academic_search.SearchService` reads existing PostgreSQL `tasks` through the
+shared connection exposed by `Database/DatabaseManager.py`. It never imports
+fixtures, creates a database, or falls back to SQLite. All six task types are
+eligible by default: `class`, `assignment`, `exam`, `event`, `personal`, `tuition`.
 
 ## Reference revisions
 
@@ -11,7 +12,7 @@ Search baseline: `f6f69f7e0dbf42de86610dead2e263c1261f35bd`, including
 `tests/test_search_fixtures.py`, and `fixtures/search/`.
 
 Database reference: `7aa63cfc5453a70a12b73b099c4f56e1dc583825`, verified as the
-remote branch tip on 2026-11-07. The agreed payload contract is
+remote branch tip on 2026-11-08. The agreed payload contract is
 [`Database/task_schema.json`](https://github.com/Loser-r-6663/Smart-Calender-for-FITHCMUS/blob/7aa63cfc5453a70a12b73b099c4f56e1dc583825/Database/task_schema.json).
 Files were reviewed at that immutable revision; this does not verify a deployed
 database or subsequent branch changes. The local `origin/Database` is stale.
@@ -27,75 +28,84 @@ Database files are absent from this Search checkout. The separate lowercase
 Database module guide recommends it for new code. Its transaction and return
 contracts must not be attributed to the selected module.
 
-## Current Search usage
+## PostgreSQL usage and configuration
 
-Use Python 3.10+ from the repository root; no third-party dependencies are needed:
+The application supplies an initialized instance of the exact selected manager.
+The Database package and its dependencies (`psycopg2-binary`, Pydantic v2,
+`python-dotenv`) must be available in the integrated application's Python path.
+They are not bundled in this Search-only checkout. Search adds no driver or
+connection manager of its own; importing Search alone does not connect anywhere.
 
-```console
-python -X utf8 -m academic_search.demo
-python -X utf8 -m unittest discover -s tests -p test_structured_search.py -v
-python -X utf8 -m unittest discover -s tests -v
-python -X utf8 fixtures/search/build_data.py --check
-python -X utf8 fixtures/search/validate.py
-git diff --check
-```
-
-The demo always creates a fresh `:memory:` database and closes it on exit. It
-does not open a real user database. Its seven examples show exact lookup,
-course/type/status, due time, registration, event overlap, updated time, and an
-empty result. All dates are fixed around the fixture reference clock
-`2026-10-30T12:00:00+07:00`; no system clock is read.
-
-## Current SQLite public interface
-
-This example consumes the existing fixtures; its task dictionaries are not valid
-current database payloads. See the database contract and fixture gaps below.
+`Database/db_config.py` loads dotenv/environment settings: `DB_HOST` (default
+`localhost`), `DB_NAME` (`task_manager_db`), `DB_USER` (`postgres`), `DB_PASSWORD`
+(empty default), and `DB_PORT` (`5432`). Configure these for the intended database
+without storing credentials in source. Selected-manager constructor arguments
+`host`, `database`, `user`, `password`, `port` override those defaults on its first
+initialization. Apply the team's schema separately; Search runs no migrations.
 
 ```python
-import json
-from contextlib import closing
-from pathlib import Path
-from academic_search import SearchService, SearchValidationError
-from academic_search.fixture_adapter import create_demo_database
+from Database.DatabaseManager import DatabaseManager
+from academic_search import SearchService
 
-tasks = json.loads(Path("fixtures/search/tasks.json").read_text(encoding="utf-8"))
-with closing(create_demo_database(tasks)) as connection:
-    search = SearchService(connection)
-    task = search.get_task_by_id("asg-csc10004-lab")
-    assert task["course_code"] == "CSC10004"
-    assert search.get_task_by_id("not-present") is None
 
+def read_for_user(manager, trusted_user_id, task_id):
+    search = SearchService(manager, user_id=trusted_user_id)
+    task = search.get_task_by_id(task_id)
     results = search.search_tasks({
-        "filters": {
-            "course_code": "CSC10004",
-            "types": ["assignment"],
-            "statuses": ["active"],
-        },
+        "filters": {"course": "Cấu trúc dữ liệu", "types": ["class", "assignment"]},
         "sort": "deadline",
-        "direction": "asc",
         "limit": 20,
         "offset": 0,
     })
-    assert [t["id"] for t in results] == [
-        "asg-overdue", "asg-csc10004-lab", "asg-csc10004-project"
-    ]
+    return task, results
+
+
+manager = DatabaseManager()
 ```
 
-- `SearchService(connection)` uses a caller-owned SQLite connection containing
-  the read projection described below. The caller owns transactions and closing.
-- `get_task_by_id(task_id)` returns the original task dictionary or `None`.
-  This is exact lookup across **all statuses**, independent of search defaults.
-  IDs follow the current fixture contract: 1–40 lowercase letters, digits or
-  hyphens. This is narrower than the Database contract described below.
-- `search_tasks(request)` returns a list of task dictionaries, possibly `[]`.
-  There is no fallback, total-count query, or hidden result cache.
-- Invalid input raises `SearchValidationError` (a `ValueError` subclass).
-  SQLite failures propagate as `sqlite3.Error`, including missing tables and
-  closed connections; they are never disguised as an empty successful result.
+The caller resolves `trusted_user_id` from its authorized application context;
+never take it directly from an untrusted search request. `user_id` must be a
+positive PostgreSQL integer. Both methods use `EXISTS` on `user_tasks` for that
+user, following the selected manager's user-linked read scope. They do not require
+`daily_tasks` scheduling links and do not duplicate tasks with multiple links.
+An existing task outside this scope returns the same `None` as an absent task.
+There is no global or public-task bypass. The repository defines API role
+permissions (admin can read; the LLM role can create), but no public/shared-task
+visibility policy or end-user identity mapping. The application must retain its
+permission checks; wider visibility needs team agreement.
 
-Returned dictionaries preserve the original 22-field documents, Unicode,
-timestamp strings and null values. Modifying a returned dictionary does not
-update the database. Search does not create schemas, write records, or commit.
+## Interface and transaction ownership
+
+- `SearchService(manager, user_id=...)` borrows the current `manager.connection`
+  on each operation. It opens/closes only cursors. It never commits, rolls back,
+  closes/reconnects the shared connection, writes data, or retries implicitly.
+- `get_task_by_id(task_id)` normalizes IDs using the shared validator: strip outer
+  whitespace, reject empty/NUL input, allow 1–64 characters, including uppercase,
+  Unicode and internal spaces. It looks across **all statuses** within user scope
+  and returns a task dictionary or `None`.
+- `search_tasks(request)` returns a list of task dictionaries, possibly `[]`.
+  Status defaults to active; omitted types do not restrict type.
+- Invalid input raises `SearchValidationError` before database access. Database,
+  cursor and row-conversion failures raise `SearchDatabaseError`, retaining the
+  original exception in `__cause__`. A failed query never becomes `[]` or `None`.
+
+The application owns transaction boundaries, successful read completion, rollback
+on failure and final manager shutdown. PostgreSQL SELECTs can start transactions.
+After `SearchDatabaseError`, the owner must roll back the failed unit of work
+before reuse; Search cannot roll back unrelated pending writes. Serialize use of
+the singleton connection and supply a suitable transaction snapshot when needed.
+Do not use a manager context per Search call: its `close()` commits pending work
+and its context exit closes even when the body raises. Resolve the transaction
+before shutdown instead.
+
+Results are independent dictionaries of exactly the 21 task fields below, with
+nullable keys retained, Unicode and zero preserved, and aware Python `datetime`
+values for non-null timestamps. No `course_code`, `embedding`, JSON `payload`,
+`work_date`, or `is_completed_today` is returned. Editing a dictionary does not
+write to storage. At an API boundary serialize datetimes to UTC ISO 8601 strings
+ending in `Z`, preserving microseconds when present, and `None` as JSON `null`.
+`TIMESTAMPTZ` preserves the instant, not the original input offset spelling;
+Search itself returns Python values and does not implement an HTTP endpoint.
 
 ## Requests and filters
 
@@ -106,15 +116,9 @@ It accepts free-text `course` and provides a database-compatible task-ID normali
 (trim surrounding whitespace, reject NUL/empty values, maximum 64 characters).
 It does not validate complete task payloads or execute queries.
 
-The SQLite boundary in `academic_search/service.py` retains the existing public
-vocabulary and ID regex. `validate_sqlite_request()` keeps validated legacy
-`course_code` separate from the shared filters; it does not rename it to `course`.
-`compile_request()` consumes that validated result and only builds SQLite SQL,
-bound parameters and integer UTC-microsecond storage values. The fixture adapter
-uses the same timestamp conversion. SearchService still rejects `course` and IDs
-outside the fixture regex. Widening those public inputs would change existing
-validation behavior and remains PostgreSQL integration work, alongside deciding
-how exact course-code identity maps to free-text `course`.
+`academic_search/postgres.py` compiles only validated requests into SQL with
+psycopg2 `%s` parameters and maps database rows. It binds aware datetimes directly;
+SQLite timestamp integers and JSON payload decoding are absent from this path.
 
 Only `filters`, `sort`, `direction`, `limit`, and `offset` are accepted at the
 request's top level. Omitted `filters` means `{}`. Unknown fields, including
@@ -132,7 +136,7 @@ Filters are query operators, not task-payload properties. For example,
 | Filter | Accepted value and semantics |
 | --- | --- |
 | `types` | List from `class`, `assignment`, `exam`, `event`, `personal`, `tuition`; omitted means all six types |
-| `course_code` | Exact `[A-Z]{3}[0-9]{5}` code; CSC10004 cannot match CSC10005 |
+| `course` | Exact case-sensitive stored text; nonblank string without NUL, no code regex or maximum length; not a canonical course identifier |
 | `source_platform` | One of `moodle`, `portal`, `facebook`, `custom` |
 | `source_platforms` | Nonempty list of the same source enums; OR within the list |
 | `statuses` | List from `active`, `done`, `archived`, `cancelled`; defaults to `["active"]` |
@@ -154,9 +158,11 @@ or an equivalent deduplicated projection before ordering and pagination.
 
 Explicit statuses replace the active default, permitting completed (`done`),
 cancelled and archived results. Time passage never changes status automatically;
-overdue active tasks remain visible. Unknown training points remain null, and
-fail either numeric bound, including `min_training_points: 0`. They are not
-converted to zero. Without a points filter they remain eligible.
+overdue active tasks remain visible. The current PostgreSQL schema stores integer
+points 0–100 with default zero and rejects null; it cannot represent unknown points
+separately. Search neither treats zero as unknown nor invents a replacement flag.
+The isolated SQLite tests still cover nullable points; that is a compatibility gap,
+not a representation supported by the current production schema.
 
 ## Time and missing values
 
@@ -164,11 +170,10 @@ Requests accept ISO 8601 timestamp strings with seconds, an explicit offset or
 `Z`, and optional 1–6 fractional second digits. Date-only, naive timestamps,
 invalid dates, equal range bounds and reversed ranges raise validation errors.
 Every range requires both endpoints. Input timestamps may use different offsets;
-they are normalized to exact integer UTC microseconds before storage/comparison.
-This avoids lexical timestamp comparisons and floating-point rounding. Original
-GMT+7 fixture timestamps are preserved in returned documents.
+they are normalized to aware UTC datetimes and bound directly against `TIMESTAMPTZ`.
+No lexical comparison or floating-point timestamp conversion is used.
 
-The existing fixture policies apply:
+The same interval policies apply in PostgreSQL and the isolated fixture tests:
 
 - Every date range is half-open `[start, end)`: `timestamp >= start AND timestamp < end`.
 - Assignment/tuition `deadline`, registration times, event times and `updated_at`
@@ -183,8 +188,9 @@ The existing fixture policies apply:
 - Overlap requires both event endpoints. Starts-within requires only a known
   start, so an unknown end does not disqualify that separate predicate.
 - Missing timestamps fail predicates on that field. Unrelated filters can still
-  return the record. The adapter rejects equal/reversed known event or
-  registration endpoints; it accepts independently missing optional endpoints.
+  return the record. Database Python validation and SQL constraints reject
+  equal/reversed known event or registration endpoints and allow independently
+  missing optional endpoints.
   Zero-duration event representation is outside this interval contract.
 - Recurrence expansion is not implemented; class records are materialized
   occurrences, as in the existing fixtures.
@@ -202,7 +208,6 @@ request = {
     },
     "sort": "id",
 }
-# Result IDs: ["evt-overlap", "evt-today"]
 ```
 
 ## Sorting, pagination, and SQL
@@ -222,10 +227,27 @@ database; callers needing a snapshot across concurrent writes own that transacti
 
 All user values, including timestamps, text, list members, limit and offset,
 are bound parameters. Column names and order directions are selected from fixed
-allowlists. A literal prefix uses `substr`, avoiding wildcard interpretation.
-There are no speculative indexes or production migration changes.
+allowlists. Exact text filters and ID ordering use deterministic `COLLATE "C"`.
+A literal prefix uses `left(location, char_length(%s)) = %s` under that collation,
+with the prefix bound twice; `%`, `_`, quotes and backslashes remain literal.
+User scoping and filtering precede ordering and LIMIT/OFFSET. No indexes or
+migrations are added.
 
 ## SQLite adapter and tests
+
+The legacy service is explicitly `academic_search.sqlite_service.SearchService`;
+its connection-based constructor, `course_code` filter, 1–40 character fixture-ID
+regex, fixture dictionaries and timestamp conversion remain unchanged. It is
+not selected automatically by the production service. `academic_search.demo`
+uses that explicit SQLite import. For the isolated demo and standard-library tests:
+
+```console
+python -X utf8 -m academic_search.demo
+python -X utf8 -m unittest discover -s tests -v
+python -X utf8 fixtures/search/build_data.py --check
+python -X utf8 fixtures/search/validate.py
+git diff --check
+```
 
 `fixture_adapter.create_demo_database(tasks)` builds an isolated in-memory
 `search_tasks` table with the original JSON `payload` and filter/sort columns.
@@ -235,8 +257,8 @@ validates the projection, not the complete database payload contract.
 
 The tests exercise nine structured fixture expectations plus boundaries,
 sorting, pagination, validation and update/delete visibility. Keyword, hybrid
-and semantic requests remain unsupported. These tests do not verify PostgreSQL
-integration. Dataset details and compatibility gaps belong in the
+and semantic requests remain unsupported. The PostgreSQL SQL/row/error/ownership
+tests use mocks, so they do not verify execution on a PostgreSQL server. Dataset details and compatibility gaps belong in the
 [fixture README](../fixtures/search/README.md#dataset-contract-and-database-compatibility).
 
 ## Current database task-payload contract
@@ -326,160 +348,57 @@ objects. Pydantic objects offer `model_dump()` (Python values) and
 `model_dump(mode="json")` (JSON-compatible values); neither means the manager
 returns JSON text.
 
-## Proposed PostgreSQL Search contract (not implemented)
+## Schema compatibility and verification limits
 
-### Connection and transaction ownership
+PostgreSQL selects `tasks` columns directly: projected SQLite columns map to the
+same named database fields, except legacy `course_code` has no automatic mapping.
+The old payload-only fields (title, description, hours, category, recurrence,
+manual flag and source URL) are actual `tasks` columns. The six date fields use
+`TIMESTAMPTZ`, and `embedding` is absent. No `search_tasks` table or payload is
+required by production search.
 
-The application obtains the singleton via the selected `DatabaseManager` and
-passes `manager.connection` into the future PostgreSQL Search adapter. Search
-borrows that connection and owns only its cursors, closing each cursor on success
-or failure. It must not open a parallel SQLite database, instantiate the lowercase
-manager, or use `get_tasks_by_date` as a search substitute.
+`course_code` is rejected by PostgreSQL request validation. `course` is free-text
+equality, with the supplied text preserved; a name, code and combined code/name
+can denote the same course but not compare equal. Supporting legacy exact-code
+requests needs an authoritative mapping or a separate identifier, confirmed by
+the Database and Parser/crawler teammates. No substring or inferred-code fallback
+is performed. Other existing structured filters are supported; their names are
+query operators rather than missing task-schema fields.
 
-The application/Database integration owner owns connection lifetime and transaction
-boundaries: commit successful units of work, roll back failed units (including
-failed reads), and close the manager at application shutdown after resolving any
-pending transaction. Search performs SELECTs only, never commits, rolls back a
-caller's unrelated work, or closes the shared connection. Errors propagate so
-the owner can roll back before reuse. PostgreSQL SELECTs can start transactions;
-the owner must also end successful read transactions. Do not wrap each Search
-call in `with DatabaseManager()` since context exit closes the shared singleton
-and commits even on exceptions. Serializing access and arranging safe shutdown
-require the ownership decision below; no automatic reconnect or retry is promised.
-
-### Read projection and returned records
-
-Query PostgreSQL `tasks` directly, selecting an explicit field list. There is no
-production `search_tasks` table or JSON `payload` requirement.
-
-| Current SQLite projection / JSON | PostgreSQL mapping and proposed Search output |
-| --- | --- |
-| `id`, `type`, `source_platform`, `status`, `training_points`, `target_audience`, `location` | Same named `tasks` columns; preserve stored values and nulls, subject to the points limitation below |
-| `course_code` in both projection and payload | `tasks.course TEXT NULL`; output key `course`, with no inferred code alias |
-| Six integer UTC-microsecond columns: `deadline`, `registration_start`, `registration_end`, `start_time`, `end_time`, `updated_at` | Same named `TIMESTAMPTZ` columns; output aware datetimes, nullable except `updated_at` |
-| Payload-only `title`, `description`, `estimated_hours`, `drl_category`, `recurrence`, `is_manual`, `source_url` | Same named typed columns; return these values directly, not a reconstructed fixture payload |
-| Payload-only `embedding` | Removed from current schema and `TaskData`; omit from PostgreSQL Search records, do not fabricate a null column |
-| No daily fields in a base task | Exclude `work_date` and `is_completed_today`; those belong to `DailyTaskObject`, not task status or the base Search record |
-
-The proposed Python interface retains `get_task_by_id(task_id) -> dict | None`
-and `search_tasks(request) -> list[dict]`. Both use the same 21 task fields above
-(the old 22 fields with `course_code` renamed and `embedding` removed), including
-all nullable keys. It returns independent dictionaries, not mixed Pydantic objects,
-tuples, JSON strings, or write-operation booleans. Do not return `SELECT *` extras
-as an accidental public contract. Modifying a result does not update storage.
-
-At an API boundary, serialize aware datetimes to ISO 8601 UTC strings ending in
-`Z`, preserving microsecond precision where present, and `None` to JSON `null`.
-Database `TIMESTAMPTZ` preserves instants, not the original textual offset; the
-SQLite promise to echo the original fixture timestamp string does not carry over.
-This is a proposed serialization rule, not a claim that a Search HTTP endpoint
-exists. A caller adapting a Pydantic result must deliberately convert it and apply
-the same timestamp normalization.
-
-### Filters, IDs, dates and SQL
-
-Preserve the current request rules, six-type coverage, active status default,
-all-status exact lookup, AND/OR composition, interval boundaries, missing-date
-semantics, numeric bounds, sort allowlists, and pagination bounds. An omitted
-`types` filter means all types; explicit types narrow results rather than selecting
-a different table. No automatic overdue status transition or fallback is added.
-The following differences require a PostgreSQL adapter rather than reusing the
-SQLite compiler unchanged:
-
-- **Course:** current Database validation strips surrounding whitespace and
-  accepts any nonempty `course` text, or null; there is no code regex, foreign key,
-  or canonical course identifier. Propose `filters.course` as exact, case-sensitive
-  stored-text equality, with nonempty text validation and no legacy code regex.
-  Such equality is not proof of course identity: `CSC10004`, a course name, and a
-  combined code/name may refer to the same course but differ as stored strings.
-  Retaining `filters.course_code` as an exact identifier requires the course
-  decision below, not an automatic SQL rename. The current SQLite API still
-  accepts only `course_code` and rejects `course`.
-- **Task IDs:** Database `TaskData` strips surrounding whitespace, rejects NUL,
-  and accepts a nonempty string of at most 64 characters with a non-whitespace
-  character. The SQL column is `VARCHAR(64)` with a nonblank check, not UUID-typed.
-  The manager generates UUIDs on creation, but repository inputs are not limited
-  to UUIDs: uppercase, underscores, Unicode and internal spaces can be accepted.
-  Propose string validation consistent with the model (strip, reject NUL, require
-  1–64 characters and a non-whitespace character), then exact bound equality;
-  do not retain the fixture regex or require UUID parsing. Quotes and SQL-looking
-  text within these constraints are data, not automatically invalid syntax.
-  SQL-only writers can retain surrounding spaces that model writers strip;
-  canonicalization of such legacy IDs requires the decision below.
-- **Time:** keep the current aware ISO request syntax and validation. Parse into
-  timezone-aware Python `datetime` parameters (optionally normalized to UTC) and
-  bind them through psycopg2 against `TIMESTAMPTZ`; do not send SQLite integer
-  microseconds or compare timestamp text. Reject naive/date-only timestamps,
-  invalid or incomplete ranges and `start >= end` before SQL. Equivalent offsets
-  denote the same instant. Callers calculating “today” use Asia/Ho_Chi_Minh day
-  boundaries with explicit offsets; storage/session timezone must not redefine
-  those boundaries. Deadline, registration bounds, event interval and update
-  timestamps remain independent. `TaskRepository.update` sets `updated_at` to
-  current UTC; it is not an event date or daily `work_date`. Database validators
-  and constraints require ordered known intervals and assignment/tuition deadlines.
-  Missing endpoints remain independently nullable. Recurrence text does not
-  expand into occurrences during Search.
-- **SQL:** bind all values with psycopg2 `%s` parameters, including lists' members,
-  timestamps, prefix text, limit and offset. Build only allowlisted identifiers
-  and directions into SQL. Preserve literal case-sensitive prefix behavior using
-  `left(location, char_length(%s)) = %s` with the prefix bound twice, under an
-  explicitly deterministic case-sensitive text collation (for example `"C"`).
-  `%`, `_`, quotes and backslashes remain literal. Apply the same explicit text
-  comparison policy to exact text filters and ID sorting. Do not interpolate
-  values or silently switch to `ILIKE`/wildcard matching.
-- **Ordering:** default `deadline ASC NULLS LAST, id ASC`; other nullable sorts
-  also use `NULLS LAST` in both directions and ascending ID as final tie-breaker.
-  ID-only sort follows the requested direction. Define text ID order with the
-  deterministic collation above, avoiding database-locale-dependent pagination.
-  Apply WHERE and ordering before bound LIMIT/OFFSET. Stable pages assume unchanged
-  data; the owner supplies an appropriate snapshot transaction when required.
-  If user/source links are later queried, use `EXISTS` or deduplicate before
-  pagination so a task appears once.
-- **Outcomes:** invalid requests raise `SearchValidationError` before SQL; valid
-  empty structured results are `[]`, absent exact IDs are `None`. Database/query
-  failures propagate as psycopg2 errors (connection configuration failures also
-  remain errors), with transaction cleanup owned above. Never route Search
-  through the selected manager's caught-failure `[]`/`False`/`None` conventions.
-
-All `*_within` predicates stay `[start, end)`. Registration-open keeps inclusive
-closing (`registration_start <= at <= registration_end`) and requires both bounds.
-Overlap requires both endpoints and `start_time < end_time`,
-`start_time < query_end AND end_time > query_start`; touching boundaries do not
-match. Starts-within needs only a known start. SQL null comparisons exclude unknown
-dates only from predicates on those dates; do not coalesce missing dates into
-deadlines, infinities, or update times.
-
-### Training points and fixture compatibility
-
-The SQLite adapter/test suite distinguishes known zero from unknown (`None`).
-Unknown fails either numeric bound, including a bound of zero, but remains
-eligible without a points predicate. The base JSON dataset uses integers;
-`test_points_inclusive_bounds_and_unknown` adds null-point variants explicitly.
-
-Current PostgreSQL `training_points INT NOT NULL DEFAULT 0` and strict integer
-`TaskData` validation support only numeric values 0–100. Omission becomes
-zero; explicit null is rejected. No existing flag distinguishes unknown from
-zero. Search cannot recover that distinction or reinterpret every stored zero as
-unknown. Positive points require a category at SQL level; validation supplies
-`dieu_3` for an omitted or null category, unlike the JSON Schema null rule above.
-Whether absent information should mean zero or unknown is a
-business-policy conflict requiring confirmation, not a Search conversion rule.
-
-JSON fixtures remain test data. Production searches read PostgreSQL directly,
-with no JSON-to-SQLite import. The existing fixtures require explicit field,
-recurrence and request mappings for future PostgreSQL tests; see the
+The JSON fixtures remain unchanged test data. They contain forbidden database
+properties and incompatible recurrence strings; see the
 [fixture compatibility table](../fixtures/search/README.md#dataset-contract-and-database-compatibility).
-The current demo and tests retain their existing request/response contract.
+The PostgreSQL path does not coerce or import them. Unknown training-point policy
+still needs confirmation from the Database and training-point/scheduling teammates:
+the schema cannot preserve the null-versus-zero distinction from SQLite tests.
 
-## Unresolved team decisions
+`tests/test_postgres_search_integration.py` is skipped unless
+`RUN_SEARCH_POSTGRES_INTEGRATION=1`. Use only a dedicated, already populated test
+database configured with the manager's `DB_*` settings. Provide `SEARCH_TEST_USER_ID`
+and `SEARCH_TEST_TASK_ID` identifying a pre-existing assigned task, then run:
 
-Owners below identify the teammate roles that must confirm each decision; no
-individual assignment or approval is recorded in the inspected sources.
+```console
+python -X utf8 -m unittest discover -s tests -p test_postgres_search_integration.py -v
+```
 
-| Decision requiring confirmation | Effect on implementation | Teammate responsible for confirmation |
+The opt-in test uses the selected manager, a read-only repeatable-read transaction,
+SELECTs only, and owner-side rollback before closing. It does not seed records,
+clear data or run schema scripts. Without those prerequisites, only mocked
+PostgreSQL checks and real SQLite fixture tests are available; server-side syntax,
+driver adaptation, deployed schema compatibility and actual ownership isolation
+remain unverified. No configured dedicated database or PostgreSQL dependencies
+were available for live checks on 2026-11-08.
+
+## Remaining integration decisions
+
+| Decision | Effect | Teammate responsible for confirmation |
 | --- | --- | --- |
-| Canonical course identity and legacy `course_code` requests: exact stored text, authoritative code mapping, or a separate identifier? | Blocks promising code isolation for arbitrary `course` text and finalizing alias/rejection rules; no substring or inferred name-to-code conversion | Database teammate with Parser/crawler teammate; Search teammate confirms request compatibility |
-| Does missing training-point information mean zero, or must unknown be represented separately? | Current schema/model cannot preserve the SQLite null distinction; either revise that policy or agree a Database representation before claiming parity; no automatic null-to-zero conversion | Database teammate with the teammate owning training-point/scheduling policy; Search teammate confirms filter expectations |
-| Application owner of shared singleton transactions, serialization and shutdown, including safe rollback and reuse after failure/close | Proposed borrowing contract needs a safe caller; current manager lacks a transaction/borrow API and commits on context exit, so isolated concurrent Search use cannot be assumed | Database teammate with application integration teammate |
-| Is Search over all `tasks`, or restricted to the authenticated user's assigned tasks? | Proposed direct-table query spans all tasks; user scoping needs an explicit trusted context and `EXISTS` on `user_tasks`, not an accidental date join or a user-supplied bypass | Application/API teammate with Database teammate; Search teammate confirms scope |
-| Are IDs written outside model validation canonicalized consistently? | Proposed model-compatible trimming cannot retrieve a distinct SQL-only ID with surrounding spaces; confirm data policy before promising lookup parity for such rows | Database teammate with ingestion teammate |
+| Public/shared or unassigned task visibility and trusted end-user identity | Current Search follows user-task links only; it cannot expose a broader pool or authenticate a user by itself | Database and application/API teammates |
+| Canonical course identity / legacy exact-code requests | Cannot equate arbitrary `course` text with an exact course identifier | Database and Parser/crawler teammates |
+| Unknown training points | Current non-null schema cannot preserve unknown independently from zero | Database and training-point/scheduling teammates |
+| Singleton connection coordination and shutdown | Application must serialize use and own commit/rollback; current manager has no borrow/transaction API or automatic recovery | Database and application integration teammates |
+| IDs written outside model normalization | Trimmed lookup cannot retrieve a distinct SQL-only ID with outer spaces | Database and ingestion teammates |
+
+The schema/validator discrepancies listed above also need Database confirmation.
+This Search-only checkout consumes an injected manager; the application must make
+the reviewed `Database` package and its dependencies available at deployment.
