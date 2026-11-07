@@ -64,7 +64,7 @@ API chỉ trả về task đã được gán cho user đó.
 Tại thư mục gốc dự án, cài dependencies:
 
 ```powershell
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
 
 Tạo file `.env` từ `.env.example`, sau đó điền thông tin PostgreSQL:
