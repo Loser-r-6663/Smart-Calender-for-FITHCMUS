@@ -15,16 +15,25 @@ class SearchDatabaseError(RuntimeError):
 class SearchService:
     """Search tasks assigned to a trusted user; the caller owns transactions."""
 
-    def __init__(self, database_manager: "DatabaseManager", *, user_id: int):
+    def __init__(self, database_manager: "DatabaseManager | None", *, user_id: int):
         check(type(user_id) is int and 1 <= user_id <= 2_147_483_647,
               "user_id must be a positive PostgreSQL integer")
         self.database_manager = database_manager
         self.user_id = user_id
+        self._connection = None
+
+    @classmethod
+    def from_connection(cls, connection, *, user_id: int):
+        """Borrow an explicit PostgreSQL connection; the caller owns its lifetime."""
+        service = cls(None, user_id=user_id)
+        service._connection = connection
+        return service
 
     def _query(self, sql, params, *, single=False):
         try:
             # Cursor contexts close cursors only; a connection context would commit.
-            with self.database_manager.connection.cursor() as cursor:
+            connection = self.database_manager.connection if self.database_manager is not None else self._connection
+            with connection.cursor() as cursor:
                 cursor.execute(sql, params)
                 if single:
                     row = cursor.fetchone()

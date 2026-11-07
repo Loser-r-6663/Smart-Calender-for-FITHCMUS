@@ -64,8 +64,8 @@ have deadlines. The class is one materialized occurrence; recurrence expansion
 is outside this dataset.
 
 `validate.py` checks this fixture contract, not `task_schema.json`. Passing it does
-not prove database compatibility. The test-only adapter in
-`tests/postgres_search_support.py` explicitly maps `course_code` to controlled
+not prove database compatibility. The shared adapter in
+`search_sample/support.py` (also re-exported by `tests/postgres_search_support.py`) maps `course_code` to controlled
 `course` text, removes null `embedding`, maps `NONE` to null and `WEEKLY:FRI` to
 `T6 07:30-11:00`, and parses aware timestamps. IDs, numeric points and the nine
 structured-query expected-ID sets remain unchanged. It rejects unknown points

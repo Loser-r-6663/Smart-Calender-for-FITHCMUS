@@ -36,6 +36,12 @@ The Database package and its dependencies (`psycopg2-binary`, Pydantic v2,
 They are not bundled in this Search-only checkout. Search adds no driver or
 connection manager of its own; importing Search alone does not connect anywhere.
 
+For an explicitly supplied PostgreSQL handle, `SearchService.from_connection(
+connection, user_id=...)` borrows that handle with identical query/ownership rules.
+This is the local sample's seam when the team Database package is absent; it does
+not open, commit, roll back or close the connection, and does not emulate the
+selected manager. See the [local sample commands](../README.md#local-postgresql-search-sample).
+
 `Database/db_config.py` loads dotenv/environment settings: `DB_HOST` (default
 `localhost`), `DB_NAME` (`task_manager_db`), `DB_USER` (`postgres`), `DB_PASSWORD`
 (empty default), and `DB_PORT` (`5432`). Configure these for the intended database
@@ -493,7 +499,8 @@ in the dedicated database before removing it, rather than sweeping other schemas
 The second command above verifies repeatability and committed-write cleanup when
 a dedicated database is available.
 
-The test-only adapter in `tests/postgres_search_support.py` preserves fixture IDs,
+The shared adapter in `search_sample/support.py`, re-exported by
+`tests/postgres_search_support.py`, preserves fixture IDs,
 points and authored expected IDs. It maps controlled `course_code` values and
 filters to identical `course` text, omits null `embedding`, maps `NONE` to null and
 `WEEKLY:FRI` to `T6 07:30-11:00`, and parses aware timestamps. This is not a
