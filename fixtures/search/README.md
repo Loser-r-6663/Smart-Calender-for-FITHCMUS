@@ -34,41 +34,40 @@ manually chosen expectation. To edit, change that source, run
 Vietnamese accents, LF newlines, stable ordering, and no clock or random input.
 The fixture-local `.gitattributes` preserves JSON LF bytes on Windows checkouts.
 
-## Task contract and schema reuse
+## Dataset contract and database compatibility
 
-Tasks use the 22 field names and enums in
+The dataset retains the earlier 22-field shape from
 [Suitable Schema for Task](../../Suitable%20Schema%20for%20Task.md).
-There is no executable model on the inspected `Search` branch. The validator
-therefore checks a fixture subset of that documented contract without adding a
-production model or endorsing a new production schema. All 22 keys are present;
-unavailable optional values are JSON `null`:
+It is test data, not a set of valid current database task payloads. The agreed
+[`Database/task_schema.json`](https://github.com/Loser-r-6663/Smart-Calender-for-FITHCMUS/blob/7aa63cfc5453a70a12b73b099c4f56e1dc583825/Database/task_schema.json)
+reference is Database commit `7aa63cfc5453a70a12b73b099c4f56e1dc583825`, verified
+against GitHub on 2026-11-07. The
+[Search integration documentation](../../docs/structured-search.md#current-database-task-payload-contract)
+records the full task contract and disagreements among JSON Schema, Python and SQL.
 
-| Group | Fields and fixture rules |
+| Fixture value or rule | Difference from the current database contract |
 | --- | --- |
-| Identity and text | `id`, `title`, `type`, `course_code`, `description`, `target_audience`, `location` |
-| Registration | `registration_start`, `registration_end`; optional independently |
-| Event interval | `start_time`, `end_time`; when both known, start < end |
-| Obligation | `deadline` required for assignment/tuition; `estimated_hours` optional |
-| Activity | `training_points` is 0–100; positive points have `drl_category` |
-| Lifecycle | `status`, `recurrence`, `is_manual`, `updated_at` |
-| Provenance | `source_url`, `source_platform`, `embedding` (always null) |
+| All records contain `course_code` and `embedding: null` | Both are forbidden extra task properties; the database uses nullable free-text `course` and has no `embedding` field |
+| `course_code` values and `filters.course_code` are exact course codes | A test mapping to `course` is possible for these controlled values, but arbitrary production course names/text do not preserve exact code identity by renaming alone |
+| `recurrence` is `NONE`, or `WEEKLY:FRI` for `class-csc10004` | Neither matches the database weekday/time format, e.g. `T2 08:00-10:00`, or null; every unchanged fixture fails the schema recurrence pattern |
+| IDs match `[a-z0-9-]{1,40}` | A valid subset of the database's 1–64 character nonblank strings; UUIDs are not required by the payload schema |
+| All 22 keys, including nullable keys, are present | The database permits 21 fields; only ID/title/type are always required, with deadline additionally required for assignment/tuition |
+| Base JSON points are integers 0–100; positive points include a category | These values match the points rules. Null-point variants added by Search tests are accepted by the SQLite adapter but rejected by the database schema/model/SQL |
+| Aware timestamp strings use UTC+07:00 | Valid database timestamp inputs; the fixture validator is narrower than the database, which permits other explicit offsets. PostgreSQL returns instants, not original timestamp strings |
 
-Fixture IDs are readable lowercase strings of at most 40 characters instead of
-generated UUIDs/hashes. Titles obey the stricter documented 255-character table
-limit. `type` is one of `class`, `assignment`, `exam`, `event`, `personal`,
-`tuition`; status uses `active`, `done`, `archived`, `cancelled`. Sources reuse
-`moodle`, `portal`, `facebook`, `custom`. The class fixture represents a single
-materialized occurrence; recurrence expansion is outside this dataset.
+The dataset covers all six types: `class`, `assignment`, `exam`, `event`,
+`personal`, `tuition`. Status values are `active`, `done`, `archived`, `cancelled`;
+source platforms are `moodle`, `portal`, `facebook`, `custom`. These enums agree
+with the current database. Titles are 2–255 characters. Optional date endpoints
+are independent, known interval endpoints are ordered, and assignment/tuition
+have deadlines. The class is one materialized occurrence; recurrence expansion
+is outside this dataset.
 
-The parent `algorithms/algorithms-for-task-search-and-retrieval.md` uses older
-names (`event_type`, `registration_deadline`, `short_description`, `event_url`).
-The repository schema takes precedence here (`type`, `registration_end`,
-`description`, `source_url`). That document's prototype permits null registration
-bounds and falls back to active records on an empty candidate set. These fixtures
-intentionally propose stricter unknown-date and keyword-miss policies below.
-The parent `diagram.md` and `report_final.docx` provide context for task management,
-distinct date roles, and updates preserving identity; they are not runtime code
-or prerequisites to running these checks.
+`validate.py` checks this fixture contract, not `task_schema.json`. Passing it does
+not prove database compatibility. A future PostgreSQL test adapter needs explicit
+field and recurrence mappings that preserve each expectation; it must not send
+these records unchanged to database creation. Production searches query database
+state directly and require no JSON-to-SQLite import.
 
 ## Clock, date, missing-value, and status policies
 
@@ -110,8 +109,8 @@ text/request pairs as parser targets, but no parser is exercised here.
 
 | Request field | Meaning |
 | --- | --- |
-| `filters.course_code` | Exact course equality; semantic similarity cannot override it |
-| `types`, `statuses` | Allowed enum values (nonempty lists) |
+| `filters.course_code` | Exact fixture code equality; semantic similarity cannot override it |
+| `types`, `statuses` | Allowed enum values (nonempty lists); omitted types means all six, omitted statuses means active |
 | `source_platform`, `target_audience` | Exact stored value |
 | `location_prefix` | Literal case-sensitive prefix |
 | `min_training_points` | Inclusive lower bound |
@@ -122,7 +121,9 @@ text/request pairs as parser targets, but no parser is exercised here.
 | `semantic_text` | Intent requiring manual graded judgments |
 
 Filter fields live inside `request.filters`; keyword/semantic text are alongside
-that object. All supplied filters combine with AND. Query modes are `structured`
+that object. Filter names are not task properties: `min_training_points` is an
+inclusive bound over the `training_points` task field. All supplied filters combine
+with AND. Query modes are `structured`
 (filters only), `keyword` (lexical, optionally with status filters), `semantic`
 (intent with hard filters), and `hybrid` (lexical request plus hard filters).
 Hybrid cases here do not request a vector branch or specify fusion weights.
