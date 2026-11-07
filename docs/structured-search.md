@@ -6,7 +6,7 @@ agreed database task-payload schema and the proposed integration.
 
 ## Reference revisions
 
-Search reference: `f6f69f7e0dbf42de86610dead2e263c1261f35bd`, including
+Search baseline: `f6f69f7e0dbf42de86610dead2e263c1261f35bd`, including
 `academic_search/`, `tests/test_structured_search.py`,
 `tests/test_search_fixtures.py`, and `fixtures/search/`.
 
@@ -98,6 +98,23 @@ timestamp strings and null values. Modifying a returned dictionary does not
 update the database. Search does not create schemas, write records, or commit.
 
 ## Requests and filters
+
+`academic_search/validation.py` validates requests without a database connection.
+`validate_request()` returns an immutable `ValidatedRequest`: enum lists become
+tuples, defaults are explicit, and timestamps become aware UTC `datetime` values.
+It accepts free-text `course` and provides a database-compatible task-ID normalizer
+(trim surrounding whitespace, reject NUL/empty values, maximum 64 characters).
+It does not validate complete task payloads or execute queries.
+
+The SQLite boundary in `academic_search/service.py` retains the existing public
+vocabulary and ID regex. `validate_sqlite_request()` keeps validated legacy
+`course_code` separate from the shared filters; it does not rename it to `course`.
+`compile_request()` consumes that validated result and only builds SQLite SQL,
+bound parameters and integer UTC-microsecond storage values. The fixture adapter
+uses the same timestamp conversion. SearchService still rejects `course` and IDs
+outside the fixture regex. Widening those public inputs would change existing
+validation behavior and remains PostgreSQL integration work, alongside deciding
+how exact course-code identity maps to free-text `course`.
 
 Only `filters`, `sort`, `direction`, `limit`, and `offset` are accepted at the
 request's top level. Omitted `filters` means `{}`. Unknown fields, including
