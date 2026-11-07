@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from datetime import datetime
 from math import isfinite
+import re
 from typing import Any
 
 from pydantic import (
@@ -84,19 +85,21 @@ class TaskData(BaseModel):
     def validate_recurrence_format(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        allowed_days = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
-        if value in {"NONE", "DAILY"}:
-            return value
-        prefix, separator, days = value.partition(":")
-        if prefix != "WEEKLY" or not separator:
-            raise ValueError("recurrence must be NONE, DAILY, or WEEKLY:<days>")
-        selected_days = days.split(",")
-        if (
-            not selected_days
-            or any(day not in allowed_days for day in selected_days)
-            or len(set(selected_days)) != len(selected_days)
-        ):
-            raise ValueError("weekly recurrence days must be unique weekday codes")
+        match = re.fullmatch(
+            r"(T[2-7]|CN) "
+            r"((?:[01]\d|2[0-3]):[0-5]\d)-"
+            r"((?:[01]\d|2[0-3]):[0-5]\d)",
+            value,
+        )
+        if match is None:
+            raise ValueError(
+                "recurrence must use the format 'T2 08:00-10:00' "
+                "with a weekday from T2 to T7 or CN"
+            )
+        start_time = datetime.strptime(match.group(2), "%H:%M").time()
+        end_time = datetime.strptime(match.group(3), "%H:%M").time()
+        if start_time >= end_time:
+            raise ValueError("recurrence start time must be before end time")
         return value
 
     @field_validator(

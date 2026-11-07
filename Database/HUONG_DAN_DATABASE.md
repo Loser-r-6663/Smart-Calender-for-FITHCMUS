@@ -14,6 +14,7 @@ REST API để thao tác với database của Smart Calendar.
 - `task_config.py`: khai báo các trường và giá trị mặc định chung của task.
 - `*_objects.py`: chuyển bản ghi từ các hàm đọc thành object có kiểu.
 - `api_schemas.py`: schema cho dữ liệu cập nhật qua REST API.
+- `task_schema.json`: JSON Schema mô tả payload tạo task cho client/API consumer.
 - `api.py`: REST API dùng FastAPI, cung cấp các endpoint cho ứng dụng.
 - `MODULES_GUIDE.md`: sơ đồ luồng và hướng dẫn nhanh các module.
 
@@ -219,6 +220,9 @@ từ máy khác hoặc Internet.
 
 ### Tasks
 
+Payload tạo task được mô tả trong `Database/task_schema.json`; API dùng
+`TaskData` trong `Database/task_validation.py` để thực thi validation.
+
 | Phương thức | Đường dẫn | Chức năng |
 |---|---|---|
 | `POST` | `/tasks` | Tạo task |
@@ -259,8 +263,9 @@ toàn bộ dữ liệu sau cập nhật.
 
 Trước khi ghi database, task được kiểm tra kiểu, độ dài và định dạng của từng
 trường; các mốc thời gian phải có múi giờ, `source_url` phải là URL HTTP(S),
-và `recurrence` phải theo dạng `NONE`, `DAILY` hoặc `WEEKLY:MON` (có thể liệt
-kê nhiều ngày, phân cách bằng dấu phẩy). Các trường không khai báo bị từ chối.
+và `recurrence` phải theo dạng `T2 08:00-10:00` (một ngày và khoảng giờ 24
+tiếng; ngày hợp lệ là `T2`–`T7` hoặc `CN`). Thời gian bắt đầu phải trước thời
+gian kết thúc. Các trường không khai báo bị từ chối.
 Task đọc qua `DatabaseManager` được trả về dưới dạng object trong
 `Database.objects`.
 

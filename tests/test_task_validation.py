@@ -41,7 +41,7 @@ class TaskValidationTests(unittest.TestCase):
                 **self.valid_task,
                 "course": "  Computer Science  ",
                 "location": "  Campus  ",
-                "recurrence": "WEEKLY:MON,FRI",
+                "recurrence": "T2 08:00-10:00",
                 "source_url": "https://example.edu/tasks/1",
             }
         )
@@ -105,8 +105,11 @@ class TaskValidationTests(unittest.TestCase):
             {"course": "   "},
             {"location": "   "},
             {"source_url": "not-a-url"},
-            {"recurrence": "WEEKLY:MON,MON"},
-            {"recurrence": "WEEKLY:FUNDAY"},
+            {"recurrence": "WEEKLY:MON"},
+            {"recurrence": "T8 08:00-10:00"},
+            {"recurrence": "T2 24:00-25:00"},
+            {"recurrence": "T2 10:00-10:00"},
+            {"recurrence": "CN 11:00-10:00"},
             {"registration_start": "2026-11-01T10:00:00"},
             {"registration_start": 1793523600},
             {"estimated_hours": float("inf")},

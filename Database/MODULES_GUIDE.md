@@ -29,6 +29,7 @@ khi trả về từ `DatabaseManager`.
 | `api_authorization.py` | Đọc `role_permissions.json`, xác thực Bearer API key và kiểm tra quyền endpoint. |
 | `role_permissions.json` | Khai báo tên biến chứa API key và quyền cho từng role; không lưu key bí mật trong file này. |
 | `api_schemas.py` | Schema request khi cập nhật task, user và trạng thái task theo ngày. |
+| `task_schema.json` | JSON Schema cho payload tạo task; các quy tắc logic bổ sung vẫn được thực thi trong `task_validation.py`. |
 | `database_manager.py` | Điều phối repository, transaction và chuyển bản ghi đọc thành object. Đây là DatabaseManager dùng bởi API. |
 | `DatabaseManager.py` | DatabaseManager kiểu kết nối trực tiếp cũ; được giữ để tương thích với luồng gọi cũ. Với code mới, ưu tiên `database_manager.py`. |
 
