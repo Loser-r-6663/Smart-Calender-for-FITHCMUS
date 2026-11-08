@@ -599,9 +599,78 @@ filters, owner scope, sorting/pagination, blank inputs and query failures.
 It never mocks query execution or substitutes SQLite. Offline setup-guard and
 fixture-adapter tests are separate and do not count as real PostgreSQL checks.
 
-No dedicated target, Database runtime or PostgreSQL driver was available for live
-verification on 2026-11-08. The suite is implemented but PostgreSQL execution and
-two-run cleanup verification remain outstanding until that environment is supplied.
+### Verification record: 2026-11-08 (blocked)
+
+Search revision inspected and exercised offline:
+`10fadafc36ec2870085eaa4f053052b50e206ff8` on `Search` (initially clean).
+**No live PostgreSQL verification completed.** No Database package revision was
+executed. The required guarded Database revision is
+`7aa63cfc5453a70a12b73b099c4f56e1dc583825`; the bundled
+`search_sample/schema.sql` passed its pinned fingerprint check, but no schema was
+loaded into PostgreSQL. The DatabaseManager/tasks source guards were not reached
+and were not bypassed.
+
+Environment: Windows NT `10.0.26300.0`, PowerShell `7.6.9`, Python `3.14.7`.
+Docker/Compose and `psql` were absent from PATH; the standard Docker executable
+and PostgreSQL installation directory were also absent. No project `.venv`,
+importable `Database` package, `psycopg2`, Pydantic or python-dotenv was available.
+No running PostgreSQL version was obtained: `postgres:17-bookworm` is only the
+configured Compose image, not a tested server version. All dedicated sample/test
+settings and integration opt-in were unset. No credentials or environment settings
+were changed, and no database connection was attempted.
+
+Commands executed from the repository root with the available `python`:
+
+```powershell
+python -X utf8 -m search_sample seed
+python -X utf8 -m search_sample seed
+python -X utf8 -m search_sample demo
+python -X utf8 -m unittest discover -s tests -p test_postgres_search_integration.py -v
+python -X utf8 -m unittest discover -s tests -p test_postgres_search_integration.py -v
+python -X utf8 -m search_sample demo
+python -X utf8 -m unittest discover -s tests -q
+python -X utf8 fixtures/search/build_data.py --check
+python -X utf8 fixtures/search/validate.py
+python -X utf8 -c "from search_sample.__main__ import schema_source, SOURCE_REVISION; schema_source(); print('Bundled SQL fingerprint verified; source revision:', SOURCE_REVISION)"
+python -X utf8 -m search_sample seed
+Write-Output "Sample Python exit code: $LASTEXITCODE"
+git diff --check
+```
+
+| Check | Actual result |
+| --- | --- |
+| Seed runs 1 and 2 | Both refused missing explicit `SEARCH_SAMPLE_DB_HOST/NAME/USER/PASSWORD/PORT/CONFIRM`; no task count obtained |
+| Demo before / after integration suites | Both refused the same configuration error before any query |
+| PostgreSQL suite run 1, separate Python process | 20 discovered: 0 passed, 0 failed, 0 errors, 20 skipped; opt-in disabled |
+| PostgreSQL suite run 2, separate Python process | 20 discovered: 0 passed, 0 failed, 0 errors, 20 skipped; opt-in disabled |
+| Full suite, offline | 117 discovered: 97 passed, 0 failed, 0 errors, 20 PostgreSQL skips |
+| Fixture checks | Reproducible tasks/queries/scenarios; validated 40 tasks, 32 queries, 3 scenarios; no database retrieval verified |
+| Bundled SQL fingerprint | Passed against the pinned source hash; offline only |
+| Third seed invocation, exit-code diagnostic | Same configuration refusal; Python exit code 2 |
+| Documentation whitespace | `git diff --check` passed |
+
+The two skipped suites prove neither repeatability nor cleanup. Expected seed
+count 45, duplicate prevention, live demo IDs/order, scratch-schema removal and
+preservation of the persistent sample remain unverified. No sample/reset DDL ran;
+there were no setup-created database objects to clean up. Offline and SQLite
+checks above are not evidence of live PostgreSQL behavior.
+
+To reproduce live verification, follow the existing
+[local sample setup](../README.md#local-postgresql-search-sample): provide Docker
+with Compose v2, the project driver environment, and all six `SEARCH_SAMPLE_DB_*`
+values. Use the documented loopback host, dedicated `_search_test` database and
+matching `CONFIRM`; supply `PASSWORD` privately (`<local-secret>`, never recorded).
+Provide the complete Database package at the guarded revision on `PYTHONPATH`,
+with Pydantic v2 and python-dotenv. Copy the dedicated sample settings explicitly
+to `SEARCH_TEST_DB_*` and set `RUN_SEARCH_POSTGRES_INTEGRATION=1` only after
+provisioning that isolated target. Record actual installed dependency/server
+versions when running it; do not relax fingerprints to accommodate source drift.
+
+The sample demo uses `SearchService.from_connection()` and owns its connection;
+it does not verify the selected manager. The isolated integration suite uses the
+actual `Database/DatabaseManager.py` and `TaskRepository`, including committed
+mutations and cleanup. Neither path reached PostgreSQL in this record. Both live
+suite runs and the final persistent-sample demo still need successful execution.
 
 ## Remaining integration decisions
 
