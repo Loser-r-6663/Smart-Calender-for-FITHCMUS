@@ -28,3 +28,31 @@ EXAMPLES = (
      ["asg-csc10004-project", "asg-overdue"]),
     ("No match", {"keyword": "quantum pineapple"}, []),
 )
+
+FIVE_POINT_IDS = [
+    "evt-cancel", "evt-end-midnight", "evt-future-reg", "evt-missing-both",
+    "evt-missing-end", "evt-missing-start", "evt-next-midnight", "evt-overlap",
+    "evt-reg-after", "evt-reg-before", "evt-reg-exact", "evt-speaking", "evt-today",
+    "sample-description-only",
+]
+MINIMUM_FIVE_IDS = [
+    "evt-beach", "evt-cancel", "evt-end-midnight", "evt-future-reg", "evt-green",
+    "evt-missing-both", "evt-missing-end", "evt-missing-start", "evt-next-midnight",
+    "evt-overlap", "evt-reg-after", "evt-reg-before", "evt-reg-exact", "evt-speaking",
+    "evt-today", "sample-cross-field", "sample-description-only",
+]
+INTERPRETED_EXAMPLES = (
+    ("Exactly five points across eligible types", {"keyword": "5 điểm", "sort": "id", "limit": 100},
+     FIVE_POINT_IDS, "", {"min_training_points": 5, "max_training_points": 5},
+     {"statuses": ["active"], "min_training_points": 5, "max_training_points": 5}),
+    ("At least five points", {"keyword": "từ 5 điểm", "sort": "id", "limit": 100},
+     MINIMUM_FIVE_IDS, "", {"min_training_points": 5},
+     {"statuses": ["active"], "min_training_points": 5}),
+    ("Event inference with five points", {"keyword": "sự kiện 5 điểm", "sort": "id", "limit": 100},
+     FIVE_POINT_IDS, "", {"min_training_points": 5, "max_training_points": 5, "types": ["event"]},
+     {"statuses": ["active"], "min_training_points": 5, "max_training_points": 5, "types": ["event"]}),
+    ("Remaining keywords with five points", {"keyword": "tình nguyện 5 điểm", "sort": "id", "limit": 100},
+     ["sample-description-only"], "tình nguyện", {"min_training_points": 5, "max_training_points": 5},
+     {"statuses": ["active"], "min_training_points": 5, "max_training_points": 5}),
+)
+CONFLICT_REQUEST = {"keyword": "5 điểm", "filters": {"max_training_points": 3}}

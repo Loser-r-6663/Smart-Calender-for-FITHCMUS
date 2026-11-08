@@ -134,6 +134,29 @@ class InterpretationTests(unittest.TestCase):
         with self.assertRaises(SearchDatabaseError):
             search.interpret_and_search({"keyword": "5 điểm"})
 
+    def test_invalid_interpretation_boundary_never_accesses_a_connection(self):
+        class ConnectionSentinel:
+            accesses = 0
+
+            @property
+            def connection(self):
+                self.accesses += 1
+                raise AssertionError("Validation attempted database access")
+
+        manager = ConnectionSentinel()
+        search = SearchService(manager, user_id=47)
+        for request in (
+            {"keyword": "5 điểm", "filters": {"max_training_points": 3}},
+            {"keyword": "sự kiện 5 điểm", "filters": {"types": ["exam"]}},
+            {"keyword": "không phải 5 điểm"}, {"keyword": "3-5 điểm"}, {"keyword": "2.5 điểm"},
+            {"keyword": "tối đa 5 điểm"}, {"keyword": "hơn 5 điểm"}, {"keyword": "5 điểm 7 điểm"},
+        ):
+            with self.subTest(request=request), self.assertRaises(SearchInterpretationError):
+                search.interpret_and_search(request)
+        with self.assertRaises(SearchValidationError):
+            search.interpret_and_search({"keyword": "101 điểm"})
+        self.assertEqual(manager.accesses, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

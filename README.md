@@ -2,6 +2,7 @@
 
 - [Structured search service, demo, and tests](docs/structured-search.md)
 - [Representative search fixtures and policies](fixtures/search/README.md)
+- [Search Demonstration Guide](docs/search-demo-guide.md)
 
 ## Local PostgreSQL search sample
 
@@ -132,7 +133,7 @@ reports cleanup as unverified and exits nonzero; an existing primary error is
 retained with its exit code and an additional cleanup notice.
 
 Offline verification on 2026-11-08: `python -X utf8 -m unittest discover -s tests -q`
-ran 140 tests: 120 passed, 20 PostgreSQL cases skipped. The 31 focused sample,
+ran 147 tests: 127 passed, 20 PostgreSQL cases skipped. The 37 focused sample,
 CLI and formatter tests use mocks/offline data, not a live database. Fixture
 reproducibility/validation and `git diff --check` passed. Docker/PostgreSQL, the
 driver and dedicated configuration were unavailable; real terminal output,
@@ -169,8 +170,11 @@ IDs/titles, and fails on a mismatch rather than reporting an empty success.
 | `{"filters":{"statuses":["cancelled"]},"sort":"id"}` | `asg-cancelled`, `evt-cancelled` |
 | `{"keyword":"quantum pineapple"}` | `[]` |
 
-The demo also checks all 38 active tasks without a type restriction and a stable
-course page. It reads existing rows through the real current SearchService; it
+The demo also checks all 38 active tasks without a type restriction, a stable
+course page, four interpreted point queries and one expected constraint conflict.
+It checks authored IDs and interpretation metadata, uses the terminal formatter,
+and fails rather than printing final success after any mismatch. It reads existing
+rows through the real current SearchService; it
 does not load JSON, seed data or reset anything during a search. User scope still
 comes from `user_tasks`; no public/unassigned visibility policy is added.
 

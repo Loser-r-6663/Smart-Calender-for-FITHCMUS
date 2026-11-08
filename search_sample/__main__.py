@@ -132,22 +132,44 @@ def sample_service(connection, target):
 
 
 def demo(connection, target):
-    from .examples import EXAMPLES
+    from .examples import CONFLICT_REQUEST, EXAMPLES, INTERPRETED_EXAMPLES
 
     search = sample_service(connection, target)
     task = search.get_task_by_id("asg-csc10004-lab")
     if task is None or task["id"] != "asg-csc10004-lab":
         raise SampleSetupError("Exact-lookup example did not match its expected ID")
-    print("Exact lookup:", task["id"], "|", task["title"])
+    print("Exact lookup input: asg-csc10004-lab")
+    print("Task ID:", task["id"], "| Title:", task["title"])
     if search.get_task_by_id("sample-missing") is not None:
         raise SampleSetupError("Missing-lookup example unexpectedly found a task")
-    print("Missing lookup: None")
+    print("Exact lookup input: sample-missing | No task found")
+    print("Demonstration deadline window: 2026-10-30 00:00 to 2026-10-31 00:00 GMT+7 (end exclusive).")
     for label, request, expected in EXAMPLES:
         rows = search.search_tasks(request)
         if [task["id"] for task in rows] != expected:
             raise SampleSetupError(f"Demo expectation failed: {label}; seeded rows may have been edited")
-        print(label, request)
-        print([(task["id"], task["title"]) for task in rows])
+        print("\n" + label)
+        options = validate_request(request)
+        print(f"Sort: {options.sort} {options.direction}; limit: {options.limit}; offset: {options.offset}")
+        print(render_search(request, rows))
+    for label, request, expected, remaining, inferred, effective in INTERPRETED_EXAMPLES:
+        response = search.interpret_and_search(request)
+        metadata = response.interpretation
+        if ([task["id"] for task in response.results] != expected
+                or metadata.original_query != request["keyword"] or metadata.remaining_keyword != remaining
+                or metadata.inferred_filters != inferred or metadata.effective_filters != effective):
+            raise SampleSetupError(f"Demo interpretation expectation failed: {label}; review the sample and contract")
+        print("\n" + label)
+        print(render_search(request, response.results, metadata))
+    print("\nDeliberate conflict input: 5 điểm; selected training points: at most 3")
+    try:
+        search.interpret_and_search(CONFLICT_REQUEST)
+    except SearchInterpretationError as error:
+        if "conflict" not in str(error).casefold():
+            raise SampleSetupError("Demo expected a constraint conflict, but received a different interpretation error") from error
+        print("Expected validation error: typed exactly 5 conflicts with selected maximum 3.")
+    else:
+        raise SampleSetupError("Demo expected a constraint conflict, but the request succeeded")
     print("All demo expectations passed against PostgreSQL.")
 
 

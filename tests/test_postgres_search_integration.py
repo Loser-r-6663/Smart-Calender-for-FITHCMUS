@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from academic_search import SearchDatabaseError, SearchService, SearchValidationError
+from academic_search import SearchDatabaseError, SearchInterpretationError, SearchService, SearchValidationError
 from postgres_search_support import (adapt_request, adapt_task, read_fixture,
                                      read_test_target, reviewed_schema, validate_live_target)
 
@@ -439,17 +439,43 @@ class PostgreSQLSearchIntegrationTests(unittest.TestCase):
                    "evt-missing-both", "evt-missing-end", "evt-missing-start", "evt-next-midnight",
                    "evt-overlap", "evt-reg-after", "evt-reg-before", "evt-reg-exact", "evt-speaking",
                    "evt-today", "sample-cross-field", "sample-description-only"]
-        for query, expected in (("5 điểm rèn luyện", five), ("5 đrl", five), ("5 điểm", five),
-                                ("sự kiện 5 điểm", five), ("tình nguyện 5 điểm", ["sample-description-only"]),
-                                ("từ 5 điểm", minimum), ("từ 5 điểm rèn luyện", minimum),
-                                ("từ 5 đrl", minimum), ("quantum pineapple 5 điểm", [])):
+        exact = {"min_training_points": 5, "max_training_points": 5}
+        for query, expected, remaining, inferred in (
+            ("5 điểm rèn luyện", five, "", exact), ("5 đrl", five, "", exact), ("5 điểm", five, "", exact),
+            ("sự kiện 5 điểm", five, "", {**exact, "types": ["event"]}),
+            ("tình nguyện 5 điểm", ["sample-description-only"], "tình nguyện", exact),
+            ("từ 5 điểm", minimum, "", {"min_training_points": 5}),
+            ("từ 5 điểm rèn luyện", minimum, "", {"min_training_points": 5}),
+            ("từ 5 đrl", minimum, "", {"min_training_points": 5}),
+            ("quantum pineapple 5 điểm", [], "quantum pineapple", exact),
+        ):
             with self.subTest(query=query):
                 result = self.search.interpret_and_search({"keyword": query, "sort": "id", "limit": 100})
                 self.assertEqual([row["id"] for row in result.results], expected)
+                self.assertEqual(result.interpretation.original_query, query)
+                self.assertEqual(result.interpretation.remaining_keyword, remaining)
+                self.assertEqual(result.interpretation.inferred_filters, inferred)
+                self.assertEqual(result.interpretation.effective_filters, {"statuses": ["active"], **inferred})
         result = self.search.interpret_and_search({"keyword": "từ 5 điểm", "sort": "id", "limit": 100,
                                                   "filters": {"max_training_points": 5}})
         self.assertEqual([row["id"] for row in result.results], five)
-        with self.assertRaisesRegex(SearchValidationError, "Conflicting"):
+        self.variant("interpreted-eleven", training_points=11)
+        for query, selected, expected, inferred, effective in (
+            ("5 điểm", {"min_training_points": 3}, five, exact, exact),
+            ("từ 5 điểm", {"max_training_points": 10}, minimum, {"min_training_points": 5},
+             {"min_training_points": 5, "max_training_points": 10}),
+            ("sự kiện 5 điểm", {"types": ["event", "personal"]}, five, {**exact, "types": ["event"]},
+             {**exact, "types": ["event"]}),
+        ):
+            with self.subTest(query=query, selected=selected):
+                response = self.search.interpret_and_search({"keyword": query, "filters": selected,
+                                                             "sort": "id", "limit": 100})
+                self.assertEqual([row["id"] for row in response.results], expected)
+                self.assertEqual(response.interpretation.original_query, query)
+                self.assertEqual(response.interpretation.remaining_keyword, "")
+                self.assertEqual(response.interpretation.inferred_filters, inferred)
+                self.assertEqual(response.interpretation.effective_filters, {"statuses": ["active"], **effective})
+        with self.assertRaisesRegex(SearchInterpretationError, "Conflicting"):
             self.search.interpret_and_search({"keyword": "5 điểm", "filters": {"max_training_points": 3}})
 
     def test_vietnamese_points_do_not_restrict_types_or_visibility(self):
@@ -460,18 +486,31 @@ class PostgreSQLSearchIntegrationTests(unittest.TestCase):
                          deadline=instant if kind in {"assignment", "tuition"} else None)
         self.variant("interpreted-other-owner", owner=self.other_id, title="PointMarker", training_points=5)
         self.variant("interpreted-cancelled", title="PointMarker", training_points=5, status="cancelled")
+        self.variant("interpreted-done", title="PointMarker", training_points=5, status="done")
         expected = ["interpreted-assignment", "interpreted-class", "interpreted-event", "interpreted-exam",
                     "interpreted-personal", "interpreted-tuition"]
         result = self.search.interpret_and_search({"keyword": "PointMarker 5 điểm", "sort": "id", "limit": 100})
         self.assertEqual([row["id"] for row in result.results], expected)
         self.assertNotIn("types", result.interpretation.effective_filters)
+        self.assertEqual(result.interpretation.effective_filters,
+                         {"statuses": ["active"], "min_training_points": 5, "max_training_points": 5})
+        self.assertEqual(result.interpretation.remaining_keyword, "PointMarker")
         result = self.search.interpret_and_search({"keyword": "PointMarker sự kiện 5 điểm",
                                                   "filters": {"types": ["personal", "event"]}})
         self.assertEqual([row["id"] for row in result.results], ["interpreted-event"])
+        self.assertEqual(result.interpretation.effective_filters,
+                         {"statuses": ["active"], "types": ["event"], "min_training_points": 5, "max_training_points": 5})
         result = self.search.interpret_and_search({"keyword": "PointMarker 5 điểm",
                                                   "filters": {"statuses": ["cancelled"]}})
         self.assertEqual([row["id"] for row in result.results], ["interpreted-cancelled"])
-        with self.assertRaisesRegex(SearchValidationError, "Conflicting"):
+        self.assertEqual(result.interpretation.effective_filters,
+                         {"statuses": ["cancelled"], "min_training_points": 5, "max_training_points": 5})
+        result = self.search.interpret_and_search({"keyword": "PointMarker 5 điểm", "sort": "id", "limit": 100,
+                                                  "filters": {"statuses": ["done", "cancelled"]}})
+        self.assertEqual([row["id"] for row in result.results], ["interpreted-cancelled", "interpreted-done"])
+        self.assertEqual(result.interpretation.effective_filters,
+                         {"statuses": ["done", "cancelled"], "min_training_points": 5, "max_training_points": 5})
+        with self.assertRaisesRegex(SearchInterpretationError, "Conflicting"):
             self.search.interpret_and_search({"keyword": "sự kiện 5 điểm", "filters": {"types": ["exam"]}})
 
     def test_real_database_failure_is_distinct_from_empty_results(self):
