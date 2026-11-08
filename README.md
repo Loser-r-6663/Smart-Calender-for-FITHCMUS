@@ -43,6 +43,46 @@ the [official PostgreSQL 17 image](https://github.com/docker-library/postgres/bl
 includes that locale. The server is separate from the schema/data setup: only
 the explicit `seed` command creates application tables and loads fictional data.
 
+### Terminal search
+
+Initialize the dedicated sample separately with `python -m search_sample seed`
+using the configuration above. Search only reads existing sample data; it never
+seeds, resets, migrates or imports fixtures. Use the project environment's Python
+(replace `python` below with `.\.venv\Scripts\python.exe` if it is not activated).
+
+```powershell
+python -X utf8 -m search_sample search --query "tình nguyện"
+python -X utf8 -m search_sample search --query "sự kiện 5 điểm" --interpret
+python -X utf8 -m search_sample search --course "CSC10004" --type assignment
+python -X utf8 -m search_sample search --query "từ 5 điểm" --interpret --limit 10
+python -X utf8 -m search_sample search
+```
+
+Only `search` accepts `--query`, `--interpret`, `--course`, `--type`, and `--limit`.
+Query text maps to `keyword`; course maps to exact `filters.course` text; type maps
+to a one-element `filters.types` list; limit maps to `limit`. Omitted values use
+SearchService defaults: active tasks assigned to the sample owner, all six types,
+20 results, deadline ascending with nulls last and ID tie-breaking. Blank query
+text adds no keyword constraint. Types and limit bounds (currently 1–100) use the
+existing request validator. Course text is not automatically a course identifier.
+
+Without `--interpret`, text goes directly to `search_tasks()` for literal keyword
+matching. With `--interpret`, `interpret_and_search()` applies the existing
+[Vietnamese point grammar](docs/structured-search.md#vietnamese-training-point-interpretation),
+intersects inferred and selected filters, and uses remaining text as keywords.
+For example, `sự kiện 5 điểm` infers event and exactly five points, while `từ 5 điểm`
+infers a minimum of five points with no type restriction. The CLI adds no parsing
+rules of its own.
+
+Each matching task prints as `ID | title`. Interpretation also prints the remaining
+keyword and effective filters. `No tasks match.` is a successful empty result.
+Invalid arguments, interpretation conflicts, missing initialization/owner, and
+database failures exit nonzero. Missing setup directs users to the explicit seed
+command. The command resolves the owner's ID from PostgreSQL, uses a read-only
+transaction, and ends the transaction and closes its connection on success/failure.
+Live terminal retrieval remains unverified until the local PostgreSQL runtime and
+dedicated configuration are available; mocked CLI tests are offline checks only.
+
 ### Data, ownership and expected results
 
 `seed` creates only the reserved `search_sample` schema, its source-defined

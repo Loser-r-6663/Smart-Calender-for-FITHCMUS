@@ -1,4 +1,4 @@
-"""Explicit seed/demo/reset commands for a dedicated local PostgreSQL sample."""
+"""Seed, demonstrate, search and reset a dedicated local PostgreSQL sample."""
 import argparse
 import hashlib
 import os
@@ -6,6 +6,7 @@ from pathlib import Path
 
 from academic_search import SearchService
 from academic_search.postgres import TASK_FIELDS
+from academic_search.validation import SearchValidationError, validate_request
 
 from .support import read_target, validate_live_target
 
@@ -107,19 +108,23 @@ def reset(connection, target):
         cursor.execute("DROP SCHEMA search_sample RESTRICT")
 
 
-def demo(connection, target):
-    from .examples import EXAMPLES
-
+def sample_service(connection, target):
     validate_transaction(connection, target)
     if not owned_schema(connection, target):
-        raise RuntimeError("Sample is not initialized; run seed explicitly")
+        raise RuntimeError("Sample is not initialized; run python -m search_sample seed explicitly")
     with connection.cursor() as cursor:
         cursor.execute("SET LOCAL search_path TO search_sample, pg_catalog")
         cursor.execute("SELECT id FROM users WHERE username = %s", ("sample_owner",))
         row = cursor.fetchone()
         if row is None:
-            raise RuntimeError("Sample owner is absent; review or reset the sample")
-    search = SearchService.from_connection(connection, user_id=row[0])
+            raise RuntimeError("Sample owner is absent; run python -m search_sample seed explicitly")
+    return SearchService.from_connection(connection, user_id=row[0])
+
+
+def demo(connection, target):
+    from .examples import EXAMPLES
+
+    search = sample_service(connection, target)
     task = search.get_task_by_id("asg-csc10004-lab")
     if task is None or task["id"] != "asg-csc10004-lab":
         raise RuntimeError("Exact-lookup example did not match its expected ID")
@@ -136,13 +141,60 @@ def demo(connection, target):
     print("All demo expectations passed against PostgreSQL.")
 
 
+def search(connection, target, request, *, interpret=False):
+    service = sample_service(connection, target)
+    if interpret:
+        response = service.interpret_and_search(request)
+        print("Remaining keyword:", response.interpretation.remaining_keyword)
+        print("Effective filters:", response.interpretation.effective_filters)
+        rows = response.results
+    else:
+        rows = service.search_tasks(request)
+    if not rows:
+        print("No tasks match.")
+    for task in rows:
+        print(task["id"], "|", task["title"])
+
+
+def search_request(args):
+    request = {}
+    filters = {}
+    if args.query is not None:
+        request["keyword"] = args.query
+    if args.course is not None:
+        filters["course"] = args.course
+    if args.type is not None:
+        filters["types"] = [args.type]
+    if filters:
+        request["filters"] = filters
+    if args.limit is not None:
+        request["limit"] = args.limit
+    validate_request(request)
+    return request
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("seed", "demo", "reset"))
     parser.add_argument("--confirm-reset", action="store_true", help="explicitly remove only setup-owned sample tables")
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("seed", "demo", "reset"):
+        command = commands.add_parser(name)
+        command.add_argument("--confirm-reset", action="store_true", default=argparse.SUPPRESS,
+                             help=argparse.SUPPRESS)
+    search_parser = commands.add_parser("search", help="read tasks assigned to the sample owner")
+    search_parser.add_argument("--query", help="literal keyword text unless --interpret is enabled")
+    search_parser.add_argument("--interpret", action="store_true", help="interpret supported Vietnamese point expressions")
+    search_parser.add_argument("--course", help="exact course text")
+    search_parser.add_argument("--type", help="single task type")
+    search_parser.add_argument("--limit", type=int, help="result limit using existing Search bounds")
     args = parser.parse_args(argv)
     if args.command == "reset" and not args.confirm_reset:
         parser.error("reset requires --confirm-reset")
+    if args.command == "search":
+        try:
+            request = search_request(args)
+        except SearchValidationError as error:
+            parser.error(str(error))
     try:
         target = sample_target(os.environ)
     except RuntimeError as error:
@@ -157,9 +209,12 @@ def main(argv=None):
         parser.error("Local sample connection failed; check dedicated settings privately")
     try:
         connection.autocommit = False
-        if args.command == "demo":
+        if args.command in {"demo", "search"}:
             connection.set_session(readonly=True, isolation_level="REPEATABLE READ")
-            demo(connection, target)
+            if args.command == "demo":
+                demo(connection, target)
+            else:
+                search(connection, target, request, interpret=args.interpret)
             connection.rollback()
         elif args.command == "seed":
             count = seed(connection, target)
