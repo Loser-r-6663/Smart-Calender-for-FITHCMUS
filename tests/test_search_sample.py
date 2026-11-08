@@ -158,6 +158,7 @@ class SampleTests(unittest.TestCase):
 
         cursor.execute.side_effect = fail_drop
         driver = Mock()
+        driver.Error = Exception
         driver.connect.return_value = connection
         with patch.dict(os.environ, self.settings(), clear=True), patch.dict(sys.modules, {"psycopg2": driver}), \
              contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:

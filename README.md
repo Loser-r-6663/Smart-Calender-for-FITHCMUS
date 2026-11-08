@@ -55,6 +55,7 @@ python -X utf8 -m search_sample search --query "tình nguyện"
 python -X utf8 -m search_sample search --query "sự kiện 5 điểm" --interpret
 python -X utf8 -m search_sample search --course "CSC10004" --type assignment
 python -X utf8 -m search_sample search --query "từ 5 điểm" --interpret --limit 10
+python -X utf8 -m search_sample search --query "quantum pineapple"
 python -X utf8 -m search_sample search
 ```
 
@@ -74,14 +75,70 @@ For example, `sự kiện 5 điểm` infers event and exactly five points, while
 infers a minimum of five points with no type restriction. The CLI adds no parsing
 rules of its own.
 
-Each matching task prints as `ID | title`. Interpretation also prints the remaining
-keyword and effective filters. `No tasks match.` is a successful empty result.
-Invalid arguments, interpretation conflicts, missing initialization/owner, and
-database failures exit nonzero. Missing setup directs users to the explicit seed
-command. The command resolves the owner's ID from PostgreSQL, uses a read-only
-transaction, and ends the transaction and closes its connection on success/failure.
-Live terminal retrieval remains unverified until the local PostgreSQL runtime and
-dedicated configuration are available; mocked CLI tests are offline checks only.
+Output shows the original query, mode and readable filters, followed by one task
+per block. Omitted/blank queries show `No keyword constraint.` Literal mode labels
+selected filters including defaults; it does not interpret point expressions.
+Interpretation mode uses existing metadata to show the remaining keyword and all
+effective filters, including status, type, course and merged point constraints
+(`exactly 5`, `at least 5`, `at most 5`, or `5 through 10`).
+
+For example, `search --query "tình nguyện 5 điểm" --interpret` on an initialized,
+unedited sample is expected to include:
+
+```text
+Original query: tình nguyện 5 điểm
+Mode: interpreted
+Remaining keyword: tình nguyện
+Effective filters:
+  Status: active
+  Type: all six task types
+  Training points: exactly 5
+
+Returned page: 1 task(s)
+
+Task ID: sample-description-only
+Title: Bản tin sinh viên
+Type: event
+Training points: 5
+```
+
+Each block also shows relevant dates. Assignment/tuition deadlines use `Due`;
+event/class/exam/personal intervals use separate `Starts` and `Ends` labels.
+Other populated deadlines or interval endpoints are also displayed under their
+own labels. Populated registration closing times use `Registration closes` and
+never replace a deadline. Missing required display slots say `Not provided`;
+unknown points say `Unknown`, distinct from `0` (the current SQL schema forbids
+unknown points). Aware timestamps are converted to GMT+7, with seconds and any
+nonzero microseconds preserved. Invalid/naive timestamps cause an error rather
+than an assumed timezone. IDs and titles are printed in full on separate lines.
+
+`Returned page` counts only the rows returned by this invocation, not total
+database matches. A successful empty page retains query/filter context and prints
+the exact message `No matching tasks`. It does not fall back to other tasks.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Successful search, including an empty page |
+| 2 | Invalid CLI arguments/request, unsupported or conflicting interpretation, missing configuration or driver prerequisite |
+| 1 | Sample setup/owner failure, connection/query failure, unexpected command failure, or cleanup failure |
+
+Normal output goes to stdout; errors go to stderr without tracebacks, SQL or raw
+driver details. Error labels distinguish interpretation, sample setup, connection,
+query and unexpected failures. Missing setup directs users to the explicit seed
+command. The owner is resolved from PostgreSQL; the command uses a read-only
+transaction, rolls it back when finished and closes the connection. Search output
+is emitted only after cleanup succeeds. If rollback/close fails, the command
+reports cleanup as unverified and exits nonzero; an existing primary error is
+retained with its exit code and an additional cleanup notice.
+
+Offline verification on 2026-11-08: `python -X utf8 -m unittest discover -s tests -q`
+ran 140 tests: 120 passed, 20 PostgreSQL cases skipped. The 31 focused sample,
+CLI and formatter tests use mocks/offline data, not a live database. Fixture
+reproducibility/validation and `git diff --check` passed. Docker/PostgreSQL, the
+driver and dedicated configuration were unavailable; real terminal output,
+exit codes and sample preservation against PostgreSQL remain unverified.
+The four representative search commands stopped
+at the missing-configuration guard (exit 2, empty stdout); no connection was made.
 
 ### Data, ownership and expected results
 

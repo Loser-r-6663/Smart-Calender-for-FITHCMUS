@@ -1,20 +1,27 @@
 """Seed, demonstrate, search and reset a dedicated local PostgreSQL sample."""
 import argparse
+import contextlib
 import hashlib
+import io
 import os
 from pathlib import Path
 
-from academic_search import SearchService
+from academic_search import SearchService, SearchDatabaseError, SearchInterpretationError
 from academic_search.postgres import TASK_FIELDS
 from academic_search.validation import SearchValidationError, validate_request
 
 from .support import read_target, validate_live_target
+from .output import SearchOutputError, render_search
 
 SCHEMA = "search_sample"
 OWNER_TAG = "smart-calendar-search-sample-v1"
 SOURCE_REVISION = "7aa63cfc5453a70a12b73b099c4f56e1dc583825"
 SCHEMA_HASH = "81f85d88e73500b8aac1de7002c855602e4597c5bea93af9ad9ae5463174e553"
 TABLES = ("daily_tasks", "user_tasks", "tasks", "users", "_sample_meta")
+
+
+class SampleSetupError(RuntimeError):
+    """The dedicated sample's guarded setup cannot be used safely."""
 
 
 def sample_target(environ):
@@ -27,14 +34,17 @@ def sample_target(environ):
 def schema_source():
     source = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
     if hashlib.sha256(source.encode("utf-8")).hexdigest() != SCHEMA_HASH:
-        raise RuntimeError("Sample SQL differs from the reviewed Database snapshot; review it before use")
+        raise SampleSetupError("Sample SQL differs from the reviewed Database snapshot; review it before use")
     return source
 
 
 def validate_transaction(connection, target):
     if connection.autocommit:
-        raise RuntimeError("Sample commands require an explicit transaction, not autocommit")
-    validate_live_target(connection, target)
+        raise SampleSetupError("Sample commands require an explicit transaction, not autocommit")
+    try:
+        validate_live_target(connection, target)
+    except RuntimeError as error:
+        raise SampleSetupError(str(error)) from error
 
 
 def owned_schema(connection, target):
@@ -46,13 +56,13 @@ def owned_schema(connection, target):
         if owner is None:
             return False
         if owner[0] != target.user:
-            raise RuntimeError("The sample schema is owned by a different role")
+            raise SampleSetupError("The sample schema is owned by a different role")
         cursor.execute("SELECT to_regclass('search_sample._sample_meta')")
         if cursor.fetchone()[0] is None:
-            raise RuntimeError("Refusing an existing schema without this setup's ownership marker")
+            raise SampleSetupError("Refusing an existing schema without this setup's ownership marker")
         cursor.execute("SELECT owner_tag, schema_hash FROM search_sample._sample_meta")
         if cursor.fetchall() != [(OWNER_TAG, SCHEMA_HASH)]:
-            raise RuntimeError("Sample ownership/source marker differs; refusing to modify it")
+            raise SampleSetupError("Sample ownership/source marker differs; refusing to modify it")
     return True
 
 
@@ -78,14 +88,14 @@ def seed(connection, target):
             cursor.execute("SELECT id, email FROM users WHERE username = %s", (username,))
             row = cursor.fetchone()
             if row is None or row[1] != email:
-                raise RuntimeError("A sample username has conflicting data; use explicit reset after review")
+                raise SampleSetupError("A sample username has conflicting data; use explicit reset after review")
             users[username] = row[0]
         tasks = sample_tasks()
         columns = ", ".join(TASK_FIELDS)
         placeholders = ", ".join("%s" for _ in TASK_FIELDS)
         for task in tasks:
             if set(task) != set(TASK_FIELDS):
-                raise RuntimeError("Sample task fields differ from the PostgreSQL projection")
+                raise SampleSetupError("Sample task fields differ from the PostgreSQL projection")
             cursor.execute(f"INSERT INTO tasks ({columns}) VALUES ({placeholders}) ON CONFLICT (id) DO NOTHING",
                            tuple(task[field] for field in TASK_FIELDS))
             cursor.execute("INSERT INTO user_tasks (user_id, task_id, assigned_at) VALUES (%s, %s, %s) "
@@ -111,13 +121,13 @@ def reset(connection, target):
 def sample_service(connection, target):
     validate_transaction(connection, target)
     if not owned_schema(connection, target):
-        raise RuntimeError("Sample is not initialized; run python -m search_sample seed explicitly")
+        raise SampleSetupError("Sample is not initialized; run python -m search_sample seed explicitly")
     with connection.cursor() as cursor:
         cursor.execute("SET LOCAL search_path TO search_sample, pg_catalog")
         cursor.execute("SELECT id FROM users WHERE username = %s", ("sample_owner",))
         row = cursor.fetchone()
         if row is None:
-            raise RuntimeError("Sample owner is absent; run python -m search_sample seed explicitly")
+            raise SampleSetupError("Sample owner is absent; run python -m search_sample seed explicitly")
     return SearchService.from_connection(connection, user_id=row[0])
 
 
@@ -127,15 +137,15 @@ def demo(connection, target):
     search = sample_service(connection, target)
     task = search.get_task_by_id("asg-csc10004-lab")
     if task is None or task["id"] != "asg-csc10004-lab":
-        raise RuntimeError("Exact-lookup example did not match its expected ID")
+        raise SampleSetupError("Exact-lookup example did not match its expected ID")
     print("Exact lookup:", task["id"], "|", task["title"])
     if search.get_task_by_id("sample-missing") is not None:
-        raise RuntimeError("Missing-lookup example unexpectedly found a task")
+        raise SampleSetupError("Missing-lookup example unexpectedly found a task")
     print("Missing lookup: None")
     for label, request, expected in EXAMPLES:
         rows = search.search_tasks(request)
         if [task["id"] for task in rows] != expected:
-            raise RuntimeError(f"Demo expectation failed: {label}; seeded rows may have been edited")
+            raise SampleSetupError(f"Demo expectation failed: {label}; seeded rows may have been edited")
         print(label, request)
         print([(task["id"], task["title"]) for task in rows])
     print("All demo expectations passed against PostgreSQL.")
@@ -145,15 +155,22 @@ def search(connection, target, request, *, interpret=False):
     service = sample_service(connection, target)
     if interpret:
         response = service.interpret_and_search(request)
-        print("Remaining keyword:", response.interpretation.remaining_keyword)
-        print("Effective filters:", response.interpretation.effective_filters)
-        rows = response.results
-    else:
-        rows = service.search_tasks(request)
-    if not rows:
-        print("No tasks match.")
-    for task in rows:
-        print(task["id"], "|", task["title"])
+        return render_search(request, response.results, response.interpretation)
+    return render_search(request, service.search_tasks(request))
+
+
+def command_failure(error, database_error):
+    if isinstance(error, SearchInterpretationError):
+        return 2, "Interpretation error: " + str(error)
+    if isinstance(error, SearchValidationError):
+        return 2, "Invalid search request: " + str(error)
+    if isinstance(error, SampleSetupError):
+        return 1, "Sample setup error: " + str(error)
+    if isinstance(error, SearchOutputError):
+        return 1, "Unexpected command failure: " + str(error)
+    if isinstance(error, (SearchDatabaseError, database_error)):
+        return 1, "Database query failure; check the dedicated sample and retry."
+    return 1, "Unexpected command failure; no results were reported."
 
 
 def search_request(args):
@@ -198,7 +215,7 @@ def main(argv=None):
     try:
         target = sample_target(os.environ)
     except RuntimeError as error:
-        parser.error(str(error))
+        parser.error("Sample configuration error: " + str(error))
     try:
         import psycopg2
     except ImportError:
@@ -206,30 +223,51 @@ def main(argv=None):
     try:
         connection = psycopg2.connect(**target.manager_kwargs())
     except Exception:
-        parser.error("Local sample connection failed; check dedicated settings privately")
+        parser.exit(1, "Database connection failure; check dedicated settings privately.\n")
+    failure = None
+    cleanup_errors = []
+    output = None
     try:
         connection.autocommit = False
         if args.command in {"demo", "search"}:
             connection.set_session(readonly=True, isolation_level="REPEATABLE READ")
             if args.command == "demo":
-                demo(connection, target)
+                captured = io.StringIO()
+                with contextlib.redirect_stdout(captured):
+                    demo(connection, target)
+                output = captured.getvalue().rstrip("\n")
             else:
-                search(connection, target, request, interpret=args.interpret)
-            connection.rollback()
+                output = search(connection, target, request, interpret=args.interpret)
+            try:
+                connection.rollback()
+            except Exception:
+                cleanup_errors.append("rollback")
         elif args.command == "seed":
             count = seed(connection, target)
             connection.commit()
-            print(f"Sample seeded: {count} task rows. Existing rows were preserved.")
+            output = f"Sample seeded: {count} task rows. Existing rows were preserved."
         else:
             reset(connection, target)
             connection.commit()
-            print("Owned sample objects removed. Run seed to recreate them.")
+            output = "Owned sample objects removed. Run seed to recreate them."
     except Exception as error:
-        connection.rollback()
-        message = str(error) if isinstance(error, (RuntimeError, ValueError)) else "PostgreSQL command failed"
-        parser.exit(1, message + "; transaction rolled back.\n")
+        failure = command_failure(error, psycopg2.Error)
+        try:
+            connection.rollback()
+        except Exception:
+            cleanup_errors.append("rollback")
     finally:
-        connection.close()
+        try:
+            connection.close()
+        except Exception:
+            cleanup_errors.append("close")
+    if cleanup_errors:
+        note = "Cleanup failed (" + ", ".join(cleanup_errors) + "); connection cleanup is unverified."
+        failure = (failure[0], failure[1] + " " + note) if failure else (1, note)
+    if failure:
+        parser.exit(failure[0], failure[1] + "\n")
+    if output is not None:
+        print(output)
 
 
 if __name__ == "__main__":

@@ -3,19 +3,30 @@ import contextlib
 import io
 import sys
 import unittest
+from copy import deepcopy
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
-from academic_search import (InterpretedSearch, SearchDatabaseError, SearchInterpretationError,
+from academic_search import (InterpretedSearch, SearchDatabaseError, SearchInterpretationError, SearchService,
                              interpret_request)
 from search_sample.__main__ import main, sample_service
+from test_postgres_search import record
+from academic_search.postgres import task_record
+
+
+class DriverError(Exception):
+    pass
 
 
 class SearchSampleCliTests(unittest.TestCase):
-    def run_cli(self, argv, *, rows=(), response=None, error=None):
-        connection = MagicMock()
+    def run_cli(self, argv, *, rows=(), response=None, error=None, connection=None, connect_error=None,
+                use_service=None):
+        connection = MagicMock() if connection is None else connection
         driver = Mock()
+        driver.Error = DriverError
         driver.connect.return_value = connection
+        driver.connect.side_effect = connect_error
         service = Mock()
         service.search_tasks.return_value = list(rows)
         service.interpret_and_search.return_value = response
@@ -24,7 +35,7 @@ class SearchSampleCliTests(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with patch.dict(sys.modules, {"psycopg2": driver}), \
              patch("search_sample.__main__.sample_target") as target, \
-             patch("search_sample.__main__.sample_service", return_value=service), \
+             patch("search_sample.__main__.sample_service", return_value=service if use_service is None else use_service), \
              patch("search_sample.__main__.seed") as seed, patch("search_sample.__main__.reset") as reset, \
              patch("search_sample.support.read_fixture", side_effect=AssertionError("fixture load")), \
              contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -85,10 +96,12 @@ class SearchSampleCliTests(unittest.TestCase):
                               (["--course", ""], "invalid course")):
             with self.subTest(argv=argv):
                 result = self.run_cli(["search", *argv])
-                self.assertNotEqual(result.code, 0)
+                self.assertEqual(result.code, 2)
                 self.assertIn(message, result.err)
                 result.driver.connect.assert_not_called()
                 result.target.assert_not_called()
+                result.connection.rollback.assert_not_called()
+                result.connection.close.assert_not_called()
         for limit in (1, 100):
             result = self.run_cli(["search", "--limit", str(limit)])
             self.assertEqual(result.code, 0)
@@ -104,32 +117,40 @@ class SearchSampleCliTests(unittest.TestCase):
                     result.driver.connect.assert_not_called()
 
     def test_output_preserves_titles_and_existing_interpretation_metadata(self):
-        rows = [{"id": "sample-description-only", "title": "Tình nguyện mùa hè"}]
+        rows = [task_record(record(id="sample-description-only", title="Tình nguyện mùa hè"))]
         result = self.run_cli(["search", "--query", "tình nguyện"], rows=rows)
-        self.assertEqual(result.out, "sample-description-only | Tình nguyện mùa hè\n")
+        self.assertIn("Task ID: sample-description-only", result.out)
+        self.assertIn("Title: Tình nguyện mùa hè", result.out)
+        self.assertIn("Original query: tình nguyện", result.out)
         metadata = interpret_request({"keyword": "tình nguyện 5 điểm"})
         result = self.run_cli(["search", "--query", metadata.original_query, "--interpret"],
                               response=InterpretedSearch(metadata, rows))
         self.assertEqual(result.code, 0)
         self.assertIn("Remaining keyword: tình nguyện", result.out)
-        self.assertIn("Effective filters: " + str(metadata.effective_filters), result.out)
-        self.assertIn("sample-description-only | Tình nguyện mùa hè", result.out)
+        self.assertIn("Effective filters:", result.out)
+        self.assertIn("Training points: exactly 5", result.out)
+        self.assertIn("Status: active", result.out)
+        self.assertIn("Task ID: sample-description-only", result.out)
+        self.assertNotIn(str(metadata.effective_filters), result.out)
 
     def test_no_matches_are_successful_in_both_modes(self):
         for argv, response in ((["search"], None), (["search", "--interpret"],
                                InterpretedSearch(interpret_request({}), []))):
             result = self.run_cli(argv, response=response)
             self.assertEqual(result.code, 0)
-            self.assertIn("No tasks match.", result.out)
+            self.assertIn("No matching tasks", result.out.splitlines())
             self.assertEqual(result.err, "")
+            result.connection.rollback.assert_called_once_with()
+            result.connection.close.assert_called_once_with()
+            result.connection.commit.assert_not_called()
 
     def test_errors_are_nonzero_with_rollback_and_close(self):
         for error, interpreted in ((SearchInterpretationError("Conflicting task types"), True),
                                    (SearchDatabaseError("PostgreSQL task search failed"), False),
                                    (SearchDatabaseError("PostgreSQL task search failed"), True)):
             result = self.run_cli(["search"] + (["--interpret"] if interpreted else []), error=error)
-            self.assertEqual(result.code, 1)
-            self.assertIn(str(error), result.err)
+            self.assertEqual(result.code, 2 if interpreted and isinstance(error, SearchInterpretationError) else 1)
+            self.assertIn("Interpretation error" if isinstance(error, SearchInterpretationError) else "Database query failure", result.err)
             self.assertNotIn("No tasks match", result.out)
             result.connection.rollback.assert_called_once_with()
             result.connection.close.assert_called_once_with()
@@ -160,6 +181,7 @@ class SearchSampleCliTests(unittest.TestCase):
             connection = MagicMock()
             connection.cursor.return_value.__enter__.return_value.fetchone.return_value = None
             driver = Mock()
+            driver.Error = DriverError
             driver.connect.return_value = connection
             err = io.StringIO()
             with patch.dict(sys.modules, {"psycopg2": driver}), \
@@ -184,6 +206,7 @@ class SearchSampleCliTests(unittest.TestCase):
                                 (["reset", "--confirm-reset"], "reset"),
                                 (["--confirm-reset", "reset"], "reset")):
             connection, driver = MagicMock(), Mock()
+            driver.Error = DriverError
             driver.connect.return_value = connection
             with patch.dict(sys.modules, {"psycopg2": driver}), \
                  patch("search_sample.__main__.sample_target") as target, \
@@ -198,6 +221,100 @@ class SearchSampleCliTests(unittest.TestCase):
             else:
                 connection.commit.assert_called_once_with()
                 connection.rollback.assert_not_called()
+
+    def test_multiple_rows_zero_points_and_long_titles_are_returned_as_a_page(self):
+        rows = [task_record(record(id="zero-task", title="Tình nguyện " * 20)),
+                task_record(record(id="next-task", type="assignment", title="Bài tập"))]
+        original = deepcopy(rows)
+        result = self.run_cli(["search", "--query", "tình nguyện", "--course", "Tên môn", "--type", "personal"], rows=rows)
+        self.assertEqual(result.code, 0)
+        result.service.search_tasks.assert_called_once_with({"keyword": "tình nguyện",
+            "filters": {"course": "Tên môn", "types": ["personal"]}})
+        for text in ("Returned page: 2 task(s)", "Task ID: zero-task", "Task ID: next-task", rows[0]["title"],
+                     "Training points: 0", "Due: Not provided", "Starts: Not provided"):
+            self.assertIn(text, result.out)
+        self.assertEqual(rows, original)
+        self.assertEqual(result.err, "")
+
+    def test_unknown_options_and_connection_failures_do_not_attempt_cleanup(self):
+        result = self.run_cli(["search", "--unknown"])
+        self.assertEqual(result.code, 2)
+        self.assertIn("unrecognized arguments", result.err)
+        result.driver.connect.assert_not_called()
+        result.connection.rollback.assert_not_called()
+        result.connection.close.assert_not_called()
+        result = self.run_cli(["search"], connect_error=DriverError("private password and connection string"))
+        self.assertEqual(result.code, 1)
+        self.assertIn("Database connection failure", result.err)
+        self.assertNotIn("private password", result.err)
+        self.assertEqual(result.out, "")
+        result.connection.rollback.assert_not_called()
+        result.connection.close.assert_not_called()
+
+    def test_unexpected_driver_and_invalid_timestamp_failures_are_sanitized(self):
+        for error, label in ((DriverError("SELECT password FROM private"), "Database query failure"),
+                             (RuntimeError("private host and password"), "Unexpected command failure")):
+            result = self.run_cli(["search"], error=error)
+            self.assertEqual(result.code, 1)
+            self.assertIn(label, result.err)
+            self.assertNotIn(str(error), result.err)
+            self.assertNotIn("Traceback", result.err)
+            self.assertEqual(result.out, "")
+            result.connection.close.assert_called_once_with()
+        row = task_record(record())
+        row["start_time"] = datetime(2026, 10, 30)
+        result = self.run_cli(["search"], rows=[row])
+        self.assertEqual(result.code, 1)
+        self.assertIn("lacks a timezone", result.err)
+        self.assertEqual(result.out, "")
+
+    def test_cleanup_failure_suppresses_success_and_preserves_primary_error(self):
+        for method in ("rollback", "close"):
+            connection = MagicMock()
+            getattr(connection, method).side_effect = DriverError("private cleanup detail")
+            result = self.run_cli(["search"], connection=connection, rows=[task_record(record())])
+            self.assertEqual(result.code, 1)
+            self.assertIn("Cleanup failed", result.err)
+            self.assertIn(method, result.err)
+            self.assertNotIn("private cleanup detail", result.err)
+            self.assertEqual(result.out, "")
+            connection.close.assert_called_once_with()
+        connection = MagicMock()
+        connection.rollback.side_effect = DriverError("private rollback")
+        connection.close.side_effect = DriverError("private close")
+        result = self.run_cli(["search", "--interpret"], connection=connection,
+                              error=SearchInterpretationError("Conflicting task types"))
+        self.assertEqual(result.code, 2)
+        for text in ("Interpretation error: Conflicting task types", "Cleanup failed", "rollback", "close"):
+            self.assertIn(text, result.err)
+        self.assertNotIn("private", result.err)
+        self.assertEqual(result.out, "")
+
+    def test_actual_interpreter_errors_and_literal_sql_use_the_same_read_only_service(self):
+        for query, types in (("sự kiện 5 điểm", ["exam"]), ("hơn 5 điểm", None), ("5 điểm 7 điểm", None)):
+            connection = MagicMock()
+            service = SearchService.from_connection(connection, user_id=47)
+            argv = ["search", "--query", query, "--interpret"] + ([] if types is None else ["--type", types[0]])
+            result = self.run_cli(argv, connection=connection, use_service=service)
+            self.assertEqual(result.code, 2)
+            self.assertIn("Interpretation error", result.err)
+            self.assertEqual(result.out, "")
+            connection.cursor.assert_not_called()
+            connection.rollback.assert_called_once_with()
+            connection.close.assert_called_once_with()
+        for interpret in (False, True):
+            connection = MagicMock()
+            cursor = connection.cursor.return_value.__enter__.return_value
+            cursor.fetchall.return_value = [record()]
+            result = self.run_cli(["search", "--query", "5 điểm"] + (["--interpret"] if interpret else []),
+                                  connection=connection, use_service=SearchService.from_connection(connection, user_id=47))
+            self.assertEqual(result.code, 0)
+            sql, params = cursor.execute.call_args.args
+            self.assertTrue(sql.startswith("SELECT "))
+            self.assertEqual("t.training_points >=" in sql, interpret)
+            if not interpret:
+                self.assertIn("%5%", params)
+            connection.commit.assert_not_called()
 
 
 if __name__ == "__main__":
