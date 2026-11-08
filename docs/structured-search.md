@@ -233,6 +233,82 @@ separately. Search neither treats zero as unknown nor invents a replacement flag
 The isolated SQLite tests still cover nullable points; that is a compatibility gap,
 not a representation supported by the current production schema.
 
+## Vietnamese training-point interpretation
+
+Interpretation is opt-in: `interpret_request(request)` is database-independent;
+`search.interpret_and_search(request)` interprets the same request shape and runs
+the existing PostgreSQL search. `search_tasks(request)` continues treating all
+keyword text literally and retains its list return type. Exact lookup is unchanged.
+
+| Keyword expression | Inferred filters | Remaining keyword |
+| --- | --- | --- |
+| `5 điểm`, `5 điểm rèn luyện`, `5 đrl` | minimum 5, maximum 5 | empty |
+| `từ 5 điểm`, `từ 5 điểm rèn luyện`, `từ 5 đrl` | minimum 5 | empty |
+| `sự kiện 5 điểm` | type event, minimum 5, maximum 5 | empty |
+| `tình nguyện 5 điểm` | minimum 5, maximum 5 | `tình nguyện` |
+
+The grammar accepts ASCII nonnegative integers followed by a complete `điểm`,
+`điểm rèn luyện`, or `đrl` suffix, optionally preceded by `từ`. Values use the
+existing structured-filter validation (currently 0–100 inclusive). Recognition
+uses NFC Unicode normalization, case-insensitive matching, normalized whitespace,
+word boundaries and the longest suffix; accents are preserved. Unaccented forms
+are ordinary keyword text. With a recognized point expression, complete `sự kiện`
+phrases infer event and are removed. Otherwise they remain literal text.
+
+Only recognized expression/type spans are removed. Remaining words before and
+after those spans use existing literal, case-insensitive substring matching in
+title/description: every term must match either field. Punctuation remains literal.
+An empty remainder adds no text constraint. Without a recognized expression,
+keyword terms retain their original Unicode representation and existing behavior.
+Points are hard constraints, not ranking hints. No type restriction is added
+unless event is inferred or types are explicitly selected; all six types, default
+active status and existing user visibility rules still apply.
+
+Typed and selected constraints intersect; neither overrides the other. Exactly 5
+with selected minimum 3 remains exactly 5; minimum 5 with selected maximum 10
+becomes 5–10. Inferred event with `[event, personal]` becomes `[event]`. Exactly 5
+with maximum 3, or inferred event with `[exam]`, raises `SearchInterpretationError`
+(a `SearchValidationError`) before database access. Other selected filters,
+sorting and pagination are preserved; the caller's request is not mutated.
+
+Multiple point expressions raise an explicit ambiguity error, even if they agree.
+Common unsupported adjacent forms such as `không phải 5 điểm`, `3-5 điểm`,
+`2.5 điểm`, `tối đa 5 điểm`, `hơn 5 điểm`, symbolic comparisons and `5 điểm trở lên`
+raise an interpretation error rather than becoming equality. This is a limited
+grammar, not general language understanding: when points are recognized, a complete
+`không`, `chẳng` or `chưa` token anywhere in the query is conservatively rejected
+rather than attempting to determine its scope. No additional type synonyms,
+spelled-out numbers or general comparison syntax is supported.
+A valid interpreted query with no matches returns an empty result list;
+database failures retain `SearchDatabaseError`.
+
+```python
+from academic_search import interpret_request
+
+metadata = interpret_request({"keyword": "tình nguyện 5 điểm"})
+# metadata.original_query == "tình nguyện 5 điểm"
+# metadata.remaining_keyword == "tình nguyện"
+# metadata.inferred_filters == {"min_training_points": 5, "max_training_points": 5}
+# metadata.effective_filters == {
+#     "statuses": ["active"], "min_training_points": 5, "max_training_points": 5}
+response = search.interpret_and_search({"keyword": "tình nguyện 5 điểm", "sort": "id"})
+```
+
+`Interpretation` is a frozen dataclass with the four fields above. Its dictionaries
+are detached snapshots using request filter names/values, with the default status
+made explicit in `effective_filters`; they are not the internal normalized SQL
+request. `InterpretedSearch` contains `interpretation: Interpretation` and
+`results: list[dict]`. Result records and timestamps follow the existing Search
+contract. These Python structures do not add an API endpoint or serialization layer.
+
+On the fixed local sample, `tình nguyện 5 điểm` returns only
+`sample-description-only`; `từ 5 điểm` also admits seven/ten-point events such as
+`evt-green` and `evt-beach`. Use `sort="id", limit=100` when inspecting the full
+sample result set. Tests in `tests/test_search_interpretation.py` cover offline
+interpretation; the existing isolated PostgreSQL suite adds exact expected IDs,
+all-six-type equal-point tasks, status and owner isolation. Those cases require
+the same explicit integration opt-in and dependencies described below.
+
 ## Time and missing values
 
 Requests accept ISO 8601 timestamp strings with seconds, an explicit offset or

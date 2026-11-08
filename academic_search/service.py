@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from .postgres import compile_lookup, compile_request, task_record
 from .validation import check, validate_request, validate_task_id
+from .interpretation import InterpretedSearch, interpret_request
 
 if TYPE_CHECKING:
     from Database.DatabaseManager import DatabaseManager
@@ -54,3 +55,10 @@ class SearchService:
         validated = validate_request(request)
         sql, params = compile_request(validated, self.user_id)
         return self._query(sql, params)
+
+    def interpret_and_search(self, request):
+        """Return point-expression metadata and results through ordinary task search."""
+        interpretation = interpret_request(request)
+        results = self.search_tasks({**request, "keyword": interpretation.remaining_keyword,
+                                     "filters": interpretation.effective_filters})
+        return InterpretedSearch(interpretation, results)
