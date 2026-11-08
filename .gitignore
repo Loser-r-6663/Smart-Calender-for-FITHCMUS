@@ -151,6 +151,8 @@ activemq-data/
 
 # Environments
 .env
+.parser-dedup.json
+.parser-dedup.json.tmp
 .envrc
 .venv
 env/
@@ -158,6 +160,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Crawler browser state and generated output
+State/
+History/
+Backend/Crawler/RawTasks.txt
 
 # Spyder project settings
 .spyderproject
@@ -201,7 +208,7 @@ cython_debug/
 #   can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #   and can be added to the global gitignore or merged into this file. However, if you prefer, you
 #   could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 

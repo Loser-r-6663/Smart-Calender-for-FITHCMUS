@@ -1,0 +1,17 @@
+# Shared
+python-dotenv
+pydantic>=2,<3
+
+# Parser
+google-genai
+
+# Crawler
+beautifulsoup4
+playwright
+html2text
+
+# Database
+psycopg2-binary
+fastapi
+uvicorn
+httpx2
