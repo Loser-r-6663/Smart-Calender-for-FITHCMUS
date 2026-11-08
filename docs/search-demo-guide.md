@@ -39,7 +39,7 @@ database name must end in `_search_test`. Existing target, ownership and source
 guards remain mandatory. Use the project environment's `python` below, or replace
 it with `.\.venv\Scripts\python.exe` as in the README.
 
-## Initialization
+## Initialization and teacher demonstration
 
 Initialization is separate from retrieval. On a fresh dedicated sample, both seed
 runs must report 45 tasks; existing rows/edits are preserved rather than overwritten.
@@ -47,7 +47,6 @@ No sample records or counts changed for this demonstration.
 
 ```powershell
 docker compose -f compose.search-sample.yml up -d --wait
-python -X utf8 -m search_sample seed
 python -X utf8 -m search_sample seed
 python -X utf8 -m search_sample demo
 python -X utf8 -m search_sample search --query "tình nguyện"

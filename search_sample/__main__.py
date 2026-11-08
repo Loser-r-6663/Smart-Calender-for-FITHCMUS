@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import os
+import sys
 from pathlib import Path
 
 from academic_search import SearchService, SearchDatabaseError, SearchInterpretationError
@@ -181,6 +182,26 @@ def search(connection, target, request, *, interpret=False):
     return render_search(request, service.search_tasks(request))
 
 
+def interactive(connection, target, *, interpret=False):
+    print("Enter a search query. Type :quit to exit. Blank input applies no keyword constraint.")
+    print("Mode:", "interpreted" if interpret else "literal keyword search")
+    while True:
+        try:
+            query = input("===============\nSearch query: ")
+            if query.strip().casefold() == ":quit":
+                return
+            output = search(connection, target, {"keyword": query}, interpret=interpret)
+            connection.rollback()
+            print(output)
+        except (EOFError, KeyboardInterrupt):
+            print("\nSearch session ended.")
+            return
+        except SearchValidationError as error:
+            connection.rollback()
+            label = "Interpretation error" if isinstance(error, SearchInterpretationError) else "Invalid search request"
+            print(label + ": " + str(error), file=sys.stderr)
+
+
 def command_failure(error, database_error):
     if isinstance(error, SearchInterpretationError):
         return 2, "Interpretation error: " + str(error)
@@ -226,6 +247,8 @@ def main(argv=None):
     search_parser.add_argument("--course", help="exact course text")
     search_parser.add_argument("--type", help="single task type")
     search_parser.add_argument("--limit", type=int, help="result limit using existing Search bounds")
+    interactive_parser = commands.add_parser("interactive", help="enter successive queries at a terminal prompt")
+    interactive_parser.add_argument("--interpret", action="store_true", help="interpret supported Vietnamese point expressions")
     args = parser.parse_args(argv)
     if args.command == "reset" and not args.confirm_reset:
         parser.error("reset requires --confirm-reset")
@@ -251,15 +274,17 @@ def main(argv=None):
     output = None
     try:
         connection.autocommit = False
-        if args.command in {"demo", "search"}:
+        if args.command in {"demo", "search", "interactive"}:
             connection.set_session(readonly=True, isolation_level="REPEATABLE READ")
             if args.command == "demo":
                 captured = io.StringIO()
                 with contextlib.redirect_stdout(captured):
                     demo(connection, target)
                 output = captured.getvalue().rstrip("\n")
-            else:
+            elif args.command == "search":
                 output = search(connection, target, request, interpret=args.interpret)
+            else:
+                interactive(connection, target, interpret=args.interpret)
             try:
                 connection.rollback()
             except Exception:

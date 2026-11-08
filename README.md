@@ -60,7 +60,22 @@ python -X utf8 -m search_sample search --query "quantum pineapple"
 python -X utf8 -m search_sample search
 ```
 
-Only `search` accepts `--query`, `--interpret`, `--course`, `--type`, and `--limit`.
+To start once and enter queries repeatedly, use:
+
+```powershell
+python -X utf8 -m search_sample interactive --interpret
+```
+
+Enter queries such as `tình nguyện 5 điểm` at the `Search query:` prompt. Type
+`:quit`, send end-of-input, or press Ctrl+C to exit. Blank input applies no keyword
+constraint. Omit `--interpret` for literal keyword mode. The session uses the same
+sample configuration, visibility and formatter; it never seeds data. Each query's
+read transaction ends before results are printed. Invalid queries are reported
+on stderr and can be corrected; database failures end the session with a nonzero
+exit code. The command owner closes the connection when the session ends.
+
+`search` accepts `--query`, `--interpret`, `--course`, `--type`, and `--limit`;
+`interactive` accepts only `--interpret`.
 Query text maps to `keyword`; course maps to exact `filters.course` text; type maps
 to a one-element `filters.types` list; limit maps to `limit`. Omitted values use
 SearchService defaults: active tasks assigned to the sample owner, all six types,
@@ -133,7 +148,7 @@ reports cleanup as unverified and exits nonzero; an existing primary error is
 retained with its exit code and an additional cleanup notice.
 
 Offline verification on 2026-11-08: `python -X utf8 -m unittest discover -s tests -q`
-ran 147 tests: 127 passed, 20 PostgreSQL cases skipped. The 37 focused sample,
+ran 152 tests: 132 passed, 20 PostgreSQL cases skipped. The 42 focused sample,
 CLI and formatter tests use mocks/offline data, not a live database. Fixture
 reproducibility/validation and `git diff --check` passed. Docker/PostgreSQL, the
 driver and dedicated configuration were unavailable; real terminal output,
