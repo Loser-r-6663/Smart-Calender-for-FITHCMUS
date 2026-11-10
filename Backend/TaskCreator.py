@@ -1,6 +1,8 @@
+import os
 import traceback
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler, RawTask
+from Backend.Regulation.RawTask import RawTask
+from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
@@ -11,8 +13,10 @@ from Backend.Crawler.FBCrawler import FBCrawler
 
 class TaskCreator():
     def __init__(self):
+        os.makedirs("Backend/Crawler/History", exist_ok=True)
+        os.makedirs("Backend/Crawler/State", exist_ok=True)
+        
         self.crawlers: dict[str, BaseCrawler] = {
-            "Portal": PortalCrawler(),
             "Moodle": MoodleCrawler(),
             "FIT": FITCrawler(),
             "HCMUS": HCMUSCrawler(),
@@ -20,21 +24,28 @@ class TaskCreator():
             "FB": FBCrawler()
         }
     
-    def crawl_raw_task(self):
+    def crawl_raw_tasks(self):
         """Start the crawling process"""
-        raw_tasks: dict[str, RawTask] = {}
+        # Crawl Portal data
+        try:
+            courses = PortalCrawler().fetch_data()
+        except Exception:
+            print(f"An error occurred while crawling Portal data:")
+            traceback.print_exc()
         
+        # Crawl other platforms data
+        raw_tasks: list[RawTask] = []
         for key, crawler in self.crawlers.items():
             try:
-                raw_tasks[key] = crawler.fetch_data()
+                for raw_task in crawler.fetch_data():
+                    raw_tasks.append(raw_task.update(Platform=key))
             except Exception:
                 print(f"An error occurred while crawling {key} data:")
                 traceback.print_exc()
-                raw_tasks[key] = []
         
-        return raw_tasks
+        return courses, raw_tasks
     
     def create_task(self):
         """Create structured data from website data"""
-        raw_tasks = self.crawl_raw_task()
-        print(raw_tasks, file=open("Backend/Crawler/RawTasks.txt", "w", encoding="utf-8"))
+        courses, raw_tasks = self.crawl_raw_tasks()
+        print(courses + raw_tasks, file=open("Backend/Crawler/RawTasks.txt", "w", encoding="utf-8"))

@@ -38,31 +38,30 @@ class MoodleCrawler(PlaywrightCrawler):
     
     def browse_page(self, page):
         raw_tasks: list[RawTask] = []
+        due_date = "N/A"
         
-        container = page.locator('div[data-region="event-list-container"]')
-        container.scroll_into_view_if_needed()
-        
-        wrapper = page.locator('div[data-region="event-list-wrapper"]').all()
-        for content in wrapper:
+        page.locator('div[data-region="event-list-wrapper"]').scroll_into_view_if_needed()
+        wrapper = page.locator('div[data-region="event-list-wrapper"] > div').all()
+        for content in wrapper[::-1]:
             try:
+                if content.get_attribute('class') == "mt-3":
+                    due_date = content.locator('h4').inner_text()
+                    continue
+                
                 raw_task = RawTask()
                 
-                due_date = content.locator('h4').inner_text()
+                link = content.locator('h5.event-name > a').get_attribute('href')
+                if link == self.last_post: break
                 
-                items = content.locator('div[data-region="event-list-item"]').all()
-                for item in items:
-                    link = item.locator('h5.event-name > a').get_attribute('href')
-                    if link == self.last_post: break
-                    
-                    raw_task.Link = link
-                    raw_task.Title = item.locator('h5.event-name > a').get_attribute('title')
-                    
-                    due_time = item.locator('small.text-end').inner_text()
-                    raw_task.Deadline = f"{due_date} {due_time}"
-                    raw_task.Course = item.locator('small.mb-0').inner_text()
-                else:
-                    raw_tasks.append(raw_task)
+                raw_task.Link = link
+                raw_task.Title = content.locator('h5.event-name > a').get_attribute('title')
+                
+                due_time = content.locator('small.text-end').inner_text()
+                raw_task.Deadline = f"{due_date} {due_time}"
+                raw_task.Course = content.locator('small.mb-0').inner_text().split(" · ")[1].split(" - ")[0]
+                
+                raw_tasks.append(raw_task)
             except Exception as e:
                 print(f"Error when parsing assignment on Moodle: {e}")
         
-        return raw_tasks
+        return raw_tasks[::-1]

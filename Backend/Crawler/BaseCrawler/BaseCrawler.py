@@ -2,39 +2,15 @@ import time
 from pathlib import Path
 from contextlib import contextmanager
 import html2text
-from pydantic import BaseModel
+
+
+from Backend.Regulation.RawTask import RawTask
 
 
 # HTML2Text configuration
 _h2t = html2text.HTML2Text()
 _h2t.ignore_images = True
 _h2t.body_width = 0
-
-
-class RawTask(BaseModel):
-    Title: str = "N/A"           # Title of the post
-    Type: str = "N/A"            # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
-    Description: str = "N/A"     # Description or brief summary of the post
-    CreateDate: str = "N/A"      # Creation date of the post
-    Duration: str = "N/A"        # Duration of the task or event
-    Deadline: str = "N/A"        # Assignment deadline
-    Course: str = "N/A"          # Course associated with the post
-    Content: str = "N/A"         # Full content of the post
-    Link: str = "N/A"            # Link to the original post
-    
-    def __repr__(self):
-        value = f"\nRawTask(\n" \
-        f"\tTitle: {self.Title.__repr__()}\n" \
-        f"\tType: {self.Type.__repr__()}\n" \
-        f"\tDescription: {self.Description.__repr__()}\n" \
-        f"\tCreateDate: {self.CreateDate.__repr__()}\n" \
-        f"\tDuration: {self.Duration.__repr__()}\n" \
-        f"\tDeadline: {self.Deadline.__repr__()}\n" \
-        f"\tCourse: {self.Course.__repr__()}\n" \
-        f"\tContent: {self.Content.__repr__()}\n" \
-        f"\tLink: {self.Link.__repr__()}\n" \
-        ")\n"
-        return value
 
 
 class BaseCrawler():
