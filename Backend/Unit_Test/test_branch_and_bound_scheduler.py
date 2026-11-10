@@ -22,7 +22,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from Backend.branch_and_bound_scheduler import (
+from Backend.Scheduling.branch_and_bound_scheduler import (
     BranchAndBoundScheduler,
     DEFAULT_DRL_CAPS,
 )
