@@ -54,6 +54,19 @@ class PlaywrightCrawler(BaseCrawler):
         browser = self.crawler.chromium.launch(headless=headless)
         context = browser.new_context(storage_state=storage_state)
         page = context.new_page()
+
+        # Define the types of resources that are meant to be blocked
+        EXCLUDED_RESOURCE_TYPES = ["image", "media", "font"]
+
+        # Block requests of the above type
+        page.route(
+            "**/*",
+            lambda route: (
+                route.abort() 
+                if route.request.resource_type in EXCLUDED_RESOURCE_TYPES 
+                else route.continue_()
+            )
+        )
         
         page.goto(url, wait_until='domcontentloaded')
         return page, context, browser

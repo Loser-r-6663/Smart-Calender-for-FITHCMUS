@@ -4,7 +4,7 @@ from urllib.parse import urlparse, urljoin
 from dotenv import load_dotenv
 import os
 
-
+LOGIN_NOTIFICATION = 'xpath=//div[contains(@aria-label,"Log in to Facebook")]'
 POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[3]/div'
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
@@ -36,7 +36,12 @@ class FBCrawler(PlaywrightCrawler):
         page, context, browser = self.launch_engine(self.home_url, settings)
         
         # Initialize login checking variable
-        login_notification = page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]')
+        try:
+            page.wait_for_selector(LOGIN_NOTIFICATION,state='visible',timeout=1000)
+        except Exception as e:
+            browser.close()
+            return
+        login_notification = page.locator(LOGIN_NOTIFICATION)
         
         # Login required if the login notification is present
         if login_notification.count() > 0:
@@ -48,7 +53,7 @@ class FBCrawler(PlaywrightCrawler):
             username = os.getenv("FB_USERNAME")
             password = os.getenv("FB_PASSWORD")
             page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
-            page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr")]').nth(1).fill(password)
+            page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
             page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
             
             # 2-step verification, wait until the user enters the code sent via email
