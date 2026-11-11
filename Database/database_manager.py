@@ -5,11 +5,12 @@ from typing import Any, TypeVar
 from Database.daily_tasks import DailyTaskRepository
 from Database.db_connection import DatabaseConnection
 from Database.daily_task_objects import DailyTaskObject
-from Database.enums import TaskStatus, TaskType
+from Database.enums import DRLCategory, TaskStatus, TaskType
 from Database.task_objects import TaskObject
 from Database.tasks import TaskRepository
+from Database.user_drl import UserDRLRepository, validate_drl_scores
 from Database.user_tasks import UserTaskRepository
-from Database.user_objects import UserObject, UserTaskObject
+from Database.user_objects import UserDRLScoresObject, UserObject, UserTaskObject
 from Database.users import UserRepository
 
 
@@ -22,6 +23,7 @@ class DatabaseManager:
         self.tasks = TaskRepository()
         self.users = UserRepository()
         self.user_tasks = UserTaskRepository()
+        self.user_drl = UserDRLRepository()
         self.daily_tasks = DailyTaskRepository()
 
     def _run(self, operation: Callable[..., Result], *args: Any) -> Result:
@@ -77,6 +79,45 @@ class DatabaseManager:
 
     def unassign_task(self, user_id: int, task_id: str) -> bool:
         return self._run(self.user_tasks.unassign, user_id, task_id)
+
+    def get_user_drl_scores(self, user_id: int) -> UserDRLScoresObject | None:
+        def _load(db_connection: Any) -> UserDRLScoresObject | None:
+            if self.users.get_by_id(db_connection, user_id) is None:
+                return None
+            records = self.user_drl.get_for_user(db_connection, user_id)
+            return UserDRLScoresObject.from_records(user_id, records)
+
+        return self._run(_load)
+
+    def set_user_drl_scores(
+        self,
+        user_id: int,
+        scores: Mapping[str, int],
+        *,
+        replace: bool = False,
+    ) -> UserDRLScoresObject | None:
+        validated = validate_drl_scores(scores, require_non_empty=False)
+        effective_scores = (
+            {
+                category.value: validated.get(category.value, 0)
+                for category in DRLCategory
+            }
+            if replace
+            else validated
+        )
+
+        def _save(db_connection: Any) -> UserDRLScoresObject | None:
+            if self.users.get_by_id(db_connection, user_id) is None:
+                return None
+            if effective_scores:
+                records = self.user_drl.upsert_scores(
+                    db_connection, user_id, effective_scores
+                )
+            else:
+                records = self.user_drl.get_for_user(db_connection, user_id)
+            return UserDRLScoresObject.from_records(user_id, records)
+
+        return self._run(_save)
 
     def set_daily_task(
         self,

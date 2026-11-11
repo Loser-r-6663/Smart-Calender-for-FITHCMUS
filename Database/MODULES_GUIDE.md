@@ -11,7 +11,7 @@ HTTP request
   -> api_authorization.py (đọc role_permissions.json, API key và quyền)
   -> api_schemas.py / task_validation.py / user_validation.py
   -> database_manager.py
-  -> tasks.py / users.py / user_tasks.py / daily_tasks.py
+  -> tasks.py / users.py / user_tasks.py / user_drl.py / daily_tasks.py
   -> db_connection.py
   -> PostgreSQL (Db_query.sql)
 ```
@@ -40,6 +40,7 @@ khi trả về từ `DatabaseManager`.
 | `tasks.py` | Tạo, đọc, liệt kê (có lọc theo `status`, `type`), cập nhật và xóa task; xác thực task trước khi ghi. |
 | `users.py` | Tạo, đọc, cập nhật và xóa user. |
 | `user_tasks.py` | Gán/bỏ gán task và truy vấn các liên kết user-task. |
+| `user_drl.py` | Đọc và cập nhật điểm rèn luyện 5 Điều (`user_drl_scores`) của từng user. |
 | `daily_tasks.py` | Thêm task vào ngày, truy vấn lịch ngày và cập nhật trạng thái hoàn thành. |
 
 ### Schema, cấu hình và xác thực
@@ -58,7 +59,7 @@ khi trả về từ `DatabaseManager`.
 |---|---|
 | `task_objects.py` | Chuyển bản ghi task thành `TaskObject`. |
 | `daily_task_objects.py` | Object task theo ngày, mở rộng task với ngày và trạng thái hoàn thành. |
-| `user_objects.py` | Object user và liên kết user-task. |
+| `user_objects.py` | Object user, liên kết user-task và bảng điểm ĐRL (`UserDRLScoresObject`). |
 | `objects.py` | Module tương thích, tái xuất các object từ file chuyên biệt. |
 
 ### Database và tài liệu

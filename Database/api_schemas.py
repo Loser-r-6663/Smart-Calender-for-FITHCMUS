@@ -65,3 +65,23 @@ class CompletionUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     is_completed: bool
+
+
+class UserDRLScoresSet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dieu_1: int = Field(default=0, ge=0, le=100, strict=True)
+    dieu_2: int = Field(default=0, ge=0, le=100, strict=True)
+    dieu_3: int = Field(default=0, ge=0, le=100, strict=True)
+    dieu_4: int = Field(default=0, ge=0, le=100, strict=True)
+    dieu_5: int = Field(default=0, ge=0, le=100, strict=True)
+
+
+class UserDRLScoresUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dieu_1: int | None = Field(default=None, ge=0, le=100, strict=True)
+    dieu_2: int | None = Field(default=None, ge=0, le=100, strict=True)
+    dieu_3: int | None = Field(default=None, ge=0, le=100, strict=True)
+    dieu_4: int | None = Field(default=None, ge=0, le=100, strict=True)
+    dieu_5: int | None = Field(default=None, ge=0, le=100, strict=True)

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from Database.database_manager import DatabaseManager
 from Database.daily_task_objects import DailyTaskObject
 from Database.task_objects import TaskObject
-from Database.user_objects import UserObject, UserTaskObject
+from Database.user_objects import UserDRLScoresObject, UserObject, UserTaskObject
 from Database.db_connection import DatabaseConnection
 
 
@@ -131,6 +131,55 @@ class DatabaseManagerTests(unittest.TestCase):
         )
         manager.tasks.list_tasks.assert_called_once_with(
             transaction_connection, "active", "personal"
+        )
+
+    def test_user_drl_scores_methods(self) -> None:
+        transaction_connection = object()
+
+        @contextmanager
+        def transaction():
+            yield transaction_connection
+
+        database = Mock()
+        database.transaction = transaction
+        manager = DatabaseManager(database=database)
+
+        manager.users.get_by_id = Mock(return_value=None)
+        manager.user_drl.get_for_user = Mock()
+        self.assertIsNone(manager.get_user_drl_scores(999))
+        self.assertIsNone(manager.set_user_drl_scores(999, {"dieu_1": 10}))
+        manager.user_drl.get_for_user.assert_not_called()
+
+        manager.users.get_by_id = Mock(
+            return_value={"id": 1, "username": "u", "email": "u@e.edu", "full_name": None}
+        )
+        manager.user_drl.get_for_user = Mock(
+            return_value=[{"user_id": 1, "drl_category": "dieu_1", "points": 20}]
+        )
+        loaded = manager.get_user_drl_scores(1)
+        self.assertIsInstance(loaded, UserDRLScoresObject)
+        assert loaded is not None
+        self.assertEqual(
+            loaded.to_drl_dict(),
+            {"dieu_1": 20, "dieu_2": 0, "dieu_3": 0, "dieu_4": 0, "dieu_5": 0},
+        )
+
+        manager.user_drl.upsert_scores = Mock(
+            return_value=[
+                {"user_id": 1, "drl_category": "dieu_1", "points": 25},
+                {"user_id": 1, "drl_category": "dieu_4", "points": 12},
+            ]
+        )
+        replaced = manager.set_user_drl_scores(
+            1, {"dieu_1": 25, "dieu_4": 12}, replace=True
+        )
+        assert replaced is not None
+        self.assertEqual(replaced.dieu_1, 25)
+        self.assertEqual(replaced.dieu_4, 12)
+        manager.user_drl.upsert_scores.assert_called_once_with(
+            transaction_connection,
+            1,
+            {"dieu_1": 25, "dieu_2": 0, "dieu_3": 0, "dieu_4": 12, "dieu_5": 0},
         )
 
 

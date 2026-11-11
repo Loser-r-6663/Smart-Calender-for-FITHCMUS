@@ -12,6 +12,8 @@ from Database.api_schemas import (
     CompletionUpdate,
     DailyTaskUpdate,
     TaskUpdate,
+    UserDRLScoresSet,
+    UserDRLScoresUpdate,
     UserUpdate,
 )
 from Database.database_manager import DatabaseManager
@@ -19,6 +21,7 @@ from Database.daily_task_objects import DailyTaskObject
 from Database.enums import TaskStatus, TaskType
 from Database.task_objects import TaskObject
 from Database.user_objects import (
+    UserDRLScoresObject,
     UserObject,
     UserTaskObject,
 )
@@ -197,6 +200,54 @@ def delete_user(
 ) -> None:
     if not database.delete_user(user_id):
         raise HTTPException(status_code=404, detail="User not found")
+
+
+@app.get(
+    "/users/{user_id}/drl",
+    dependencies=[Depends(require_permission("users:read"))],
+)
+def get_user_drl(
+    user_id: int = Path(ge=1),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> UserDRLScoresObject:
+    scores = database.get_user_drl_scores(user_id)
+    if scores is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return scores
+
+
+@app.put(
+    "/users/{user_id}/drl",
+    dependencies=[Depends(require_permission("users:update"))],
+)
+def set_user_drl(
+    scores: UserDRLScoresSet,
+    user_id: int = Path(ge=1),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> UserDRLScoresObject:
+    saved = database.set_user_drl_scores(
+        user_id, scores.model_dump(), replace=True
+    )
+    if saved is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return saved
+
+
+@app.patch(
+    "/users/{user_id}/drl",
+    dependencies=[Depends(require_permission("users:update"))],
+)
+def update_user_drl(
+    updates: UserDRLScoresUpdate,
+    user_id: int = Path(ge=1),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> UserDRLScoresObject:
+    saved = database.set_user_drl_scores(
+        user_id, updates.model_dump(exclude_unset=True), replace=False
+    )
+    if saved is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return saved
 
 
 @app.get(

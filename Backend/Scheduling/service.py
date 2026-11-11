@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from Database.database_manager import DatabaseManager
 from Database.enums import TaskStatus
 from Database.task_objects import TaskObject
+from Database.user_objects import UserDRLScoresObject
 
 from .branch_and_bound_models import BranchAndBoundResult, FIXED_TASK_TYPES
 from .branch_and_bound_scheduler import BranchAndBoundScheduler
@@ -293,6 +294,7 @@ class SchedulingService:
             raise ValueError("user_id is required when persist=True")
 
         assigned_task_ids: set[str] | None = None
+        resolved_initial_drl = dict(initial_drl) if initial_drl is not None else None
         if user_id is not None:
             user = self.database.get_user(user_id)
             if user is None:
@@ -300,6 +302,10 @@ class SchedulingService:
             assigned_task_ids = {
                 item.task_id for item in self.database.get_user_tasks(user_id)
             }
+            if resolved_initial_drl is None:
+                stored_scores = self.database.get_user_drl_scores(user_id)
+                if isinstance(stored_scores, UserDRLScoresObject):
+                    resolved_initial_drl = stored_scores.to_drl_dict()
 
         resolved_start, resolved_end = _resolve_window(week_start, week_end)
         raw_tasks = self.database.list_tasks(status=TaskStatus.ACTIVE)
@@ -314,7 +320,7 @@ class SchedulingService:
 
         schedule_result = self.scheduler.schedule(
             prepared_tasks,
-            initial_drl=dict(initial_drl) if initial_drl is not None else None,
+            initial_drl=resolved_initial_drl,
         )
 
         persistence: SchedulePersistenceSummary | None = None

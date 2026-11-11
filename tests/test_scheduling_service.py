@@ -17,7 +17,7 @@ from Backend.Scheduling.service import (
 )
 from Database.task_config import TASK_DEFAULTS
 from Database.task_objects import TaskObject
-from Database.user_objects import UserObject, UserTaskObject
+from Database.user_objects import UserDRLScoresObject, UserObject, UserTaskObject
 
 
 def make_task_object(**overrides: object) -> TaskObject:
@@ -271,6 +271,48 @@ class SchedulingServiceTests(unittest.TestCase):
                 week_start=date(2026, 11, 15),
                 week_end=date(2026, 11, 9),
             )
+
+    def test_service_run_loads_stored_user_drl_scores_when_initial_drl_omitted(
+        self,
+    ) -> None:
+        # User already has 27/30 in dieu_1 stored in user_drl_scores; event gives 8 pts -> gain capped at 3
+        event_dieu_1 = make_task_object(
+            id="ev-d1",
+            title="Hoi thao NCKH",
+            type="event",
+            location="CS1",
+            start_time=datetime(2026, 11, 12, 9, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 12, 11, 0, tzinfo=GMT_PLUS_7),
+            training_points=8,
+            drl_category="dieu_1",
+        )
+        database = Mock()
+        database.get_user.return_value = UserObject(
+            id=1, username="sv01", email="sv01@example.edu"
+        )
+        database.get_user_tasks.return_value = []
+        database.get_user_drl_scores.return_value = UserDRLScoresObject(
+            user_id=1, dieu_1=27, dieu_2=10
+        )
+        database.list_tasks.return_value = [event_dieu_1]
+
+        service = SchedulingService(database=database)
+        res = service.run(user_id=1, week_start=date(2026, 11, 9), persist=False)
+
+        self.assertEqual(res.schedule.initial_drl["dieu_1"], 27)
+        self.assertEqual(res.schedule.initial_drl["dieu_2"], 10)
+        self.assertEqual(res.schedule.total_drl_gained, 3)
+        self.assertEqual(res.schedule.final_drl["dieu_1"], 30)
+        database.get_user_drl_scores.assert_called_once_with(1)
+
+        override_res = service.run(
+            user_id=1,
+            initial_drl={"dieu_1": 20},
+            week_start=date(2026, 11, 9),
+            persist=False,
+        )
+        self.assertEqual(override_res.schedule.total_drl_gained, 8)
+        self.assertEqual(override_res.schedule.final_drl["dieu_1"], 28)
 
 
 if __name__ == "__main__":

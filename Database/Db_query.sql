@@ -101,6 +101,16 @@ CREATE TABLE IF NOT EXISTS daily_tasks (
     PRIMARY KEY (work_date, task_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_drl_scores (
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    drl_category VARCHAR(20) NOT NULL CHECK (
+        drl_category IN ('dieu_1', 'dieu_2', 'dieu_3', 'dieu_4', 'dieu_5')
+    ),
+    points INT NOT NULL DEFAULT 0 CHECK (points BETWEEN 0 AND 100),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, drl_category)
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline
     ON tasks(deadline) WHERE deadline IS NOT NULL;
 DROP INDEX IF EXISTS idx_tasks_course;

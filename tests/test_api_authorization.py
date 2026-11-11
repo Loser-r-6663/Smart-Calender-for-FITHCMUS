@@ -10,12 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from Database.api_authorization import load_role_config
 from Database.api import app, get_database_manager
+from Database.user_objects import UserDRLScoresObject
 
 
 class FakeDatabaseManager:
     def __init__(self) -> None:
         self.tasks: dict[str, dict[str, object]] = {}
         self.users: dict[int, dict[str, object]] = {}
+        self.user_drl: dict[int, dict[str, int]] = {}
         self.next_user_id = 1
 
     def create_task(self, task_data: dict[str, object]) -> dict[str, object]:
@@ -53,7 +55,30 @@ class FakeDatabaseManager:
         return user
 
     def delete_user(self, user_id: int) -> bool:
+        self.user_drl.pop(user_id, None)
         return self.users.pop(user_id, None) is not None
+
+    def get_user_drl_scores(self, user_id: int) -> UserDRLScoresObject | None:
+        if user_id not in self.users:
+            return None
+        return UserDRLScoresObject(user_id=user_id, **self.user_drl.get(user_id, {}))
+
+    def set_user_drl_scores(
+        self,
+        user_id: int,
+        scores: dict[str, int],
+        *,
+        replace: bool = False,
+    ) -> UserDRLScoresObject | None:
+        if user_id not in self.users:
+            return None
+        current = {} if replace else dict(self.user_drl.get(user_id, {}))
+        for key, value in scores.items():
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+                raise ValueError("Invalid DRL score")
+            current[key] = value
+        self.user_drl[user_id] = current
+        return UserDRLScoresObject(user_id=user_id, **current)
 
 
 class ApiAuthorizationTests(unittest.TestCase):
@@ -130,6 +155,17 @@ class ApiAuthorizationTests(unittest.TestCase):
             ),
             self.client.delete("/users/1", headers=headers),
             self.client.get("/users/1/tasks", headers=headers),
+            self.client.get("/users/1/drl", headers=headers),
+            self.client.put(
+                "/users/1/drl",
+                headers=headers,
+                json={"dieu_1": 10},
+            ),
+            self.client.patch(
+                "/users/1/drl",
+                headers=headers,
+                json={"dieu_1": 10},
+            ),
             self.client.put(
                 "/users/1/tasks/any-task",
                 headers=headers,
@@ -213,6 +249,58 @@ class ApiAuthorizationTests(unittest.TestCase):
 
         bad_resp = self.client.get("/tasks?status=invalid", headers=headers)
         self.assertEqual(bad_resp.status_code, 422)
+
+    def test_admin_can_read_and_update_user_drl_scores(self) -> None:
+        headers = {"Authorization": "Bearer test-admin-key"}
+        self.assertEqual(
+            self.client.get("/users/999/drl", headers=headers).status_code, 404
+        )
+
+        self.client.post(
+            "/users",
+            headers=headers,
+            json={"username": "drl-user", "email": "drl@example.edu"},
+        )
+
+        initial = self.client.get("/users/1/drl", headers=headers)
+        self.assertEqual(initial.status_code, 200, initial.text)
+        self.assertEqual(
+            initial.json(),
+            {
+                "user_id": 1,
+                "dieu_1": 0,
+                "dieu_2": 0,
+                "dieu_3": 0,
+                "dieu_4": 0,
+                "dieu_5": 0,
+            },
+        )
+
+        put_resp = self.client.put(
+            "/users/1/drl",
+            headers=headers,
+            json={"dieu_1": 22, "dieu_4": 15},
+        )
+        self.assertEqual(put_resp.status_code, 200, put_resp.text)
+        self.assertEqual(put_resp.json()["dieu_1"], 22)
+        self.assertEqual(put_resp.json()["dieu_4"], 15)
+        self.assertEqual(put_resp.json()["dieu_2"], 0)
+
+        patch_resp = self.client.patch(
+            "/users/1/drl",
+            headers=headers,
+            json={"dieu_2": 18},
+        )
+        self.assertEqual(patch_resp.status_code, 200, patch_resp.text)
+        self.assertEqual(patch_resp.json()["dieu_1"], 22)
+        self.assertEqual(patch_resp.json()["dieu_2"], 18)
+
+        bad_patch = self.client.patch(
+            "/users/1/drl",
+            headers=headers,
+            json={"dieu_1": True},
+        )
+        self.assertEqual(bad_patch.status_code, 422)
 
     def test_equal_role_keys_disable_authorization(self) -> None:
         with patch.dict(

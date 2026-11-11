@@ -8,7 +8,7 @@ REST API để thao tác với database của Smart Calendar.
 - `Db_query.sql`: tạo các bảng, khóa ngoại, ràng buộc và chỉ mục.
 - `db_connection.py`: đọc cấu hình từ `.env`, tạo kết nối và quản lý transaction.
 - `database_manager.py`: lớp trung gian gọi các repository.
-- `tasks.py`, `users.py`, `user_tasks.py`, `daily_tasks.py`: thao tác với từng
+- `tasks.py`, `users.py`, `user_tasks.py`, `user_drl.py`, `daily_tasks.py`: thao tác với từng
   nhóm dữ liệu.
 - `enums.py`, `task_validation.py`, `user_validation.py`: enum và kiểm tra dữ liệu.
 - `task_config.py`: khai báo các trường và giá trị mặc định chung của task.
@@ -59,6 +59,13 @@ lần. Khi xóa user hoặc task, liên kết tương ứng được xóa theo k
 Lưu task được đưa vào lịch theo ngày và trạng thái `is_completed_today`. Mỗi
 cặp `(work_date, task_id)` chỉ có một bản ghi. Khi truy vấn lịch ngày theo user,
 API chỉ trả về task đã được gán cho user đó.
+
+### `user_drl_scores`
+
+Lưu điểm rèn luyện hiện tại theo 5 tiêu chí (`dieu_1` đến `dieu_5`) cho từng
+user (`points` từ `0` đến `100`). Khi chưa có bản ghi nào cho một tiêu chí,
+API trả mặc định là `0`. Khi xóa user, dữ liệu điểm rèn luyện của user đó cũng
+được xóa theo khóa ngoại.
 
 ## 3. Cài đặt và cấu hình
 
@@ -287,6 +294,9 @@ Task đọc qua `DatabaseManager` được trả về dưới dạng object tron
 | `GET` | `/users/{user_id}/tasks` | Xem các task đã gán |
 | `PUT` | `/users/{user_id}/tasks/{task_id}` | Gán task cho user |
 | `DELETE` | `/users/{user_id}/tasks/{task_id}` | Bỏ gán task |
+| `GET` | `/users/{user_id}/drl` | Xem điểm ĐRL hiện tại 5 Điều của user |
+| `PUT` | `/users/{user_id}/drl` | Đặt lại toàn bộ điểm ĐRL 5 Điều (mặc định 0) |
+| `PATCH` | `/users/{user_id}/drl` | Cập nhật từng mục điểm ĐRL được gửi lên |
 
 Body tạo user:
 

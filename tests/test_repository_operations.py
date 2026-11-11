@@ -14,6 +14,7 @@ from Database.daily_tasks import DailyTaskRepository
 from Database.task_config import TASK_DEFAULTS
 from Database.task_validation import TaskData
 from Database.tasks import TaskRepository
+from Database.user_drl import UserDRLRepository
 from Database.user_tasks import UserTaskRepository
 from Database.users import UserRepository
 
@@ -427,6 +428,51 @@ class LinkRepositoryTests(unittest.TestCase):
                 FakeConnection(FakeCursor(rowcount=0)), work_date, "missing"
             )
         )
+
+    def test_user_drl_scores_read_upsert_and_validation(self) -> None:
+        rows = [
+            {
+                "user_id": 1,
+                "drl_category": "dieu_1",
+                "points": 20,
+                "updated_at": datetime(2026, 11, 11, tzinfo=timezone.utc),
+            },
+            {
+                "user_id": 1,
+                "drl_category": "dieu_4",
+                "points": 15,
+                "updated_at": datetime(2026, 11, 11, tzinfo=timezone.utc),
+            },
+        ]
+        repository = UserDRLRepository()
+
+        fetched = repository.get_for_user(FakeConnection(FakeCursor(many=rows)), 1)
+        self.assertEqual(fetched, rows)
+
+        upsert_cursor = FakeCursor()
+        read_cursor = FakeCursor(many=rows)
+        saved = repository.upsert_scores(
+            FakeConnection(upsert_cursor, read_cursor),
+            1,
+            {"dieu_4": 15, "dieu_1": 20},
+        )
+        self.assertEqual(saved, rows)
+        self.assertEqual(len(upsert_cursor.executions), 2)
+        self.assertEqual(upsert_cursor.executions[0][1], (1, "dieu_1", 20))
+        self.assertEqual(upsert_cursor.executions[1][1], (1, "dieu_4", 15))
+
+        for bad_scores in (
+            {},
+            {"dieu_6": 10},
+            {"dieu_1": True},
+            {"dieu_1": -1},
+            {"dieu_1": 101},
+        ):
+            with self.subTest(bad_scores=bad_scores):
+                bad_conn = FakeConnection()
+                with self.assertRaises(ValueError):
+                    repository.upsert_scores(bad_conn, 1, bad_scores)
+                self.assertEqual(bad_conn.used_cursors, [])
 
 
 if __name__ == "__main__":
