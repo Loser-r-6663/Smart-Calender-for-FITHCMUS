@@ -42,11 +42,7 @@ class TaskCreator():
     
     def parse_tasks(self, raw_tasks: list[RawTask]):
         """Parse the raw tasks and extract structured information"""
-        extracted_tasks = []
-        for task in raw_tasks:
-            if (extracted_task := Parser.parse(task)):
-                extracted_tasks.append(extracted_task)
-        return extracted_tasks
+        return [extracted_task for task in raw_tasks if (extracted_task := Parser.parse(task))]
     
     def create_task(self):
         """Create structured data from website data"""

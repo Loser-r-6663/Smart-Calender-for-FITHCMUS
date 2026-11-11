@@ -5,7 +5,6 @@ import traceback
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
-from google.genai.types import GenerateContentResponse
 
 from Backend.Regulation.Task import RawTask, ExtractedTask
 
@@ -15,12 +14,17 @@ class LLMParser:
         load_dotenv()
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         self.config = types.GenerateContentConfig(
+            system_instruction=(
+                "Bạn là trợ lý thông minh chuyên trích xuất dữ liệu từ các thông báo của trường đại học Khoa học tự nhiên. "
+                "Tất cả các mốc thời gian (datetime) trích xuất được PHẢI LUÔN thuộc múi giờ GMT+7 (Việt Nam, UTC+7). "
+                "Chỉ trích xuất các thông tin có bằng chứng rõ ràng trong văn bản, không tự suy diễn."
+            ),
             response_mime_type="application/json",
             response_schema=ExtractedTask,
         )
     
     @staticmethod
-    def retry_request(func, max_retries = 5) -> GenerateContentResponse:
+    def retry_request(func, max_retries = 5) -> types.GenerateContentResponse:
         """Retry a request in case of API errors with exponential backoff."""
         for attempt in range(max_retries + 1):
             try:
