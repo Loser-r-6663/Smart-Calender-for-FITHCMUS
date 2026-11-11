@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
@@ -38,11 +40,11 @@ class MoodleCrawler(PlaywrightCrawler):
     
     def browse_page(self, page):
         raw_tasks: list[RawTask] = []
-        due_date = "N/A"
+        due_date = ''
         
         page.locator('div[data-region="event-list-wrapper"]').scroll_into_view_if_needed()
         wrapper = page.locator('div[data-region="event-list-wrapper"] > div').all()
-        for content in wrapper[::-1]:
+        for content in wrapper:
             try:
                 if content.get_attribute('class') == "mt-3":
                     due_date = content.locator('h4').inner_text()
@@ -51,14 +53,17 @@ class MoodleCrawler(PlaywrightCrawler):
                 raw_task = RawTask()
                 
                 link = content.locator('h5.event-name > a').get_attribute('href')
-                if link == self.last_post: break
+                if link == self.last_post:
+                    raw_tasks.clear()
+                    continue
                 
-                raw_task.Link = link
-                raw_task.Title = content.locator('h5.event-name > a').get_attribute('title')
+                raw_task.link = link
+                raw_task.title = content.locator('h5.event-name > a').get_attribute('title')
+                raw_task.type = "assignment"
                 
                 due_time = content.locator('small.text-end').inner_text()
-                raw_task.Deadline = f"{due_date} {due_time}"
-                raw_task.Course = content.locator('small.mb-0').inner_text().split(" · ")[1].split(" - ")[0]
+                raw_task.deadline = datetime.strptime(f"{due_date} {due_time}", "%A, %d %B %Y %H:%M")
+                raw_task.course = content.locator('small.mb-0').inner_text().split(" · ")[1].split(" - ")[0]
                 
                 raw_tasks.append(raw_task)
             except Exception as e:

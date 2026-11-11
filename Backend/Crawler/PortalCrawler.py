@@ -57,25 +57,27 @@ class PortalCrawler(PlaywrightCrawler):
             title = f'{row["Mã MH"]} · {row["Tên MH"]}'
             course = row["Tên MH"]
             
-            dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or "N/A", "N/A")
+            dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or None, None)
             raw_task = RawTask(
-                Title=title,
-                Description="Lý Thuyết",
-                Duration=dur_loc(row["Lịch LT"])[0],
-                Course=course,
-                Location=dur_loc(row["Lịch LT"])[1],
-                Link=self.home_url
+                title=title,
+                type="class",
+                description="Lý Thuyết",
+                duration=dur_loc(row["Lịch LT"])[0],
+                course=course,
+                location=dur_loc(row["Lịch LT"])[1],
+                link=self.home_url
             )
             raw_tasks.append(raw_task)
             
             if row["Lịch TH"]:
                 raw_task = RawTask(
-                    Title=title,
-                    Description="Thực Hành",
-                    Duration=dur_loc(row["Lịch TH"])[0],
-                    Course=course,
-                    Location=dur_loc(row["Lịch TH"])[1],
-                    Link=self.home_url
+                    title=title,
+                    type="class",
+                    description="Thực Hành",
+                    duration=dur_loc(row["Lịch TH"])[0],
+                    course=course,
+                    location=dur_loc(row["Lịch TH"])[1],
+                    link=self.home_url
                 )
                 raw_tasks.append(raw_task)
         

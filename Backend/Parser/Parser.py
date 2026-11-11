@@ -24,7 +24,7 @@ class LLMParser:
         )
     
     @staticmethod
-    def retry_request(func, max_retries = 5) -> types.GenerateContentResponse:
+    def retry_request(func, max_retries = 5):
         """Retry a request in case of API errors with exponential backoff."""
         for attempt in range(max_retries + 1):
             try:
@@ -45,9 +45,9 @@ class LLMParser:
                 model="gemini-3.5-flash-lite",
                 contents=f"Trích xuất thông tin từ bài viết sau:\n{raw_task!r}",
                 config=self.config
-            ),
+            ).parsed,
             max_retries=max_retries
         )
-        return response.parsed
+        return response
 
 Parser = LLMParser()

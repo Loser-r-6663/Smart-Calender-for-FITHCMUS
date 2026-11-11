@@ -38,7 +38,7 @@ class BaseCrawler():
     
     def set_last_post(self, raw_tasks: list[RawTask]):
         """Update the history file with the link of the most recent task."""
-        if self.history_file and raw_tasks and (link := raw_tasks[-1].Link):
+        if self.history_file and raw_tasks and (link := raw_tasks[-1].link):
             Path(self.history_file).write_text(link, encoding="utf-8")
     
     @contextmanager

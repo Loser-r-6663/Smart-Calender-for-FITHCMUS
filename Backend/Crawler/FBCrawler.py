@@ -108,7 +108,7 @@ class FBCrawler(PlaywrightCrawler):
                     page.wait_for_timeout(1000)
                 
                 # Get content
-                raw_task.Content = self.convert_to_markdown(content_container.inner_html())
+                raw_task.content = self.convert_to_markdown(content_container.inner_html())
                 
                 # Get time element container (it holds the link and time of the post)
                 time_element_container = post_crawl_zone.locator(TIME_ELEMENT_CONTAINER_SELECTOR)
@@ -117,7 +117,7 @@ class FBCrawler(PlaywrightCrawler):
                 if time_element_container.count() > 0:
                     
                     # Get time
-                    raw_task.CreateDate = time_element_container.inner_text()
+                    raw_task.create_date = time_element_container.inner_text()
                     
                     # Find <a> tag(s)
                     link_element = post_crawl_zone.locator(HREF_SELECTOR)
@@ -148,14 +148,14 @@ class FBCrawler(PlaywrightCrawler):
                             if parsed_url.query and ("fbid" in parsed_url.query or "story_fbid" in parsed_url.query):
                                 clean_link = f"{clean_link}?{parsed_url.query}"
                             
-                            raw_task.Link = clean_link.rstrip('/')
+                            raw_task.link = clean_link.rstrip('/')
                     else:
                         raise Exception(f"Unable to find link for post no.{post_crawled}")
                 else:
                     raise Exception(f"Unable to find time container for post no.{post_crawled}")
                 
                 # Check if the post has already been scraped during the previous scraping session
-                if self.last_post and raw_task.Link == self.last_post: break
+                if self.last_post and raw_task.link == self.last_post: break
                 
                 # Add to result
                 raw_tasks.append(raw_task)
