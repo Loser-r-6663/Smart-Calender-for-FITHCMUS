@@ -1,3 +1,4 @@
+from datetime import date, datetime, timezone
 import os
 import sys
 import unittest
@@ -10,13 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from Database.api_authorization import load_role_config
 from Database.api import app, get_database_manager
-from Database.user_objects import UserDRLScoresObject
+from Database.user_objects import UserDRLScoresObject, UserObject, UserTaskObject
 
 
 class FakeDatabaseManager:
     def __init__(self) -> None:
         self.tasks: dict[str, dict[str, object]] = {}
         self.users: dict[int, dict[str, object]] = {}
+        self.user_tasks: dict[int, set[str]] = {}
+        self.daily_tasks: list[dict[str, object]] = []
         self.user_drl: dict[int, dict[str, int]] = {}
         self.next_user_id = 1
 
@@ -56,7 +59,43 @@ class FakeDatabaseManager:
 
     def delete_user(self, user_id: int) -> bool:
         self.user_drl.pop(user_id, None)
+        self.user_tasks.pop(user_id, None)
         return self.users.pop(user_id, None) is not None
+
+    def get_user(self, user_id: int) -> UserObject | None:
+        record = self.users.get(user_id)
+        return UserObject.from_record(record) if record is not None else None
+
+    def get_user_tasks(self, user_id: int) -> list[UserTaskObject]:
+        return [
+            UserTaskObject(
+                user_id=user_id,
+                task_id=task_id,
+                assigned_at=datetime(2026, 11, 10, tzinfo=timezone.utc),
+            )
+            for task_id in sorted(self.user_tasks.get(user_id, set()))
+        ]
+
+    def assign_task(self, user_id: int, task_id: str) -> bool:
+        assigned = self.user_tasks.setdefault(user_id, set())
+        if task_id in assigned:
+            return False
+        assigned.add(task_id)
+        return True
+
+    def set_daily_task(
+        self,
+        work_date: date,
+        task_id: str,
+        is_completed_today: bool = False,
+    ) -> dict[str, object]:
+        record: dict[str, object] = {
+            "work_date": work_date.isoformat(),
+            "task_id": task_id,
+            "is_completed_today": is_completed_today,
+        }
+        self.daily_tasks.append(record)
+        return record
 
     def get_user_drl_scores(self, user_id: int) -> UserDRLScoresObject | None:
         if user_id not in self.users:
@@ -192,6 +231,11 @@ class ApiAuthorizationTests(unittest.TestCase):
                 "/daily-tasks/2026-11-07/any-task",
                 headers=headers,
             ),
+            self.client.post(
+                "/users/1/schedule",
+                headers=headers,
+                json={},
+            ),
         )
 
         self.assertTrue(all(response.status_code == 403 for response in responses))
@@ -301,6 +345,112 @@ class ApiAuthorizationTests(unittest.TestCase):
             json={"dieu_1": True},
         )
         self.assertEqual(bad_patch.status_code, 422)
+
+    def test_admin_can_run_user_schedule_dry_run_and_persist(self) -> None:
+        headers = {"Authorization": "Bearer test-admin-key"}
+        self.assertEqual(
+            self.client.post("/users/999/schedule", headers=headers, json={}).status_code,
+            404,
+        )
+
+        self.client.post(
+            "/users",
+            headers=headers,
+            json={"username": "sched-user", "email": "sched@example.edu"},
+        )
+        self.client.put(
+            "/users/1/drl",
+            headers=headers,
+            json={"dieu_1": 27},
+        )
+        self.client.post(
+            "/tasks",
+            headers=headers,
+            json={
+                "id": "portal-t3",
+                "title": "Database Class",
+                "type": "class",
+                "location": "CS1",
+                "recurrence": "T3 07:30-09:30",
+            },
+        )
+        self.client.post(
+            "/tasks",
+            headers=headers,
+            json={
+                "id": "ev-conflict",
+                "title": "Conflicting Event",
+                "type": "event",
+                "location": "CS1",
+                "start_time": "2026-11-10T08:00:00+07:00",
+                "end_time": "2026-11-10T10:00:00+07:00",
+                "training_points": 10,
+                "drl_category": "dieu_1",
+            },
+        )
+        self.client.post(
+            "/tasks",
+            headers=headers,
+            json={
+                "id": "ev-valid",
+                "title": "Valid Research Seminar",
+                "type": "event",
+                "location": "CS1",
+                "start_time": "2026-11-11T08:00:00+07:00",
+                "end_time": "2026-11-11T10:00:00+07:00",
+                "training_points": 8,
+                "drl_category": "dieu_1",
+            },
+        )
+
+        dry_resp = self.client.post(
+            "/users/1/schedule",
+            headers=headers,
+            json={"week_start": "2026-11-09", "persist": False},
+        )
+        self.assertEqual(dry_resp.status_code, 200, dry_resp.text)
+        dry_body = dry_resp.json()
+        self.assertEqual(dry_body["status"], "OPTIMAL")
+        self.assertEqual(dry_body["total_drl_gained"], 3)
+        self.assertEqual(dry_body["final_drl"]["dieu_1"], 30)
+        self.assertEqual([ev["task_id"] for ev in dry_body["selected_events"]], ["ev-valid"])
+        self.assertIsNone(dry_body["persistence"])
+        self.assertEqual(self.database.daily_tasks, [])
+
+        persist_resp = self.client.post(
+            "/users/1/schedule",
+            headers=headers,
+            json={"week_start": "2026-11-09", "persist": True},
+        )
+        self.assertEqual(persist_resp.status_code, 200, persist_resp.text)
+        persist_body = persist_resp.json()
+        self.assertEqual(persist_body["persistence"]["user_id"], 1)
+        self.assertEqual(persist_body["persistence"]["newly_assigned_count"], 1)
+        self.assertEqual(persist_body["persistence"]["assigned_task_ids"], ["ev-valid"])
+        self.assertEqual(
+            self.database.daily_tasks,
+            [{"work_date": "2026-11-11", "task_id": "ev-valid", "is_completed_today": False}],
+        )
+
+        # Also check empty request body defaults cleanly and invalid dates/types fail with 422
+        empty_body_resp = self.client.post("/users/1/schedule", headers=headers)
+        self.assertEqual(empty_body_resp.status_code, 200, empty_body_resp.text)
+        self.assertEqual(
+            self.client.post(
+                "/users/1/schedule",
+                headers=headers,
+                json={"week_start": "2026-11-15", "week_end": "2026-11-09"},
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/users/1/schedule",
+                headers=headers,
+                json={"initial_drl": {"dieu_1": True}},
+            ).status_code,
+            422,
+        )
 
     def test_equal_role_keys_disable_authorization(self) -> None:
         with patch.dict(

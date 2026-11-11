@@ -3,14 +3,19 @@ from datetime import date
 from typing import Any
 
 import psycopg2
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Path, Query
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from Backend.Scheduling.service import SchedulingService, UserNotFoundError
 from Database.api_authorization import require_permission
 from Database.api_schemas import (
     CompletionUpdate,
     DailyTaskUpdate,
+    SchedulePersistenceResponse,
+    ScheduleRunRequest,
+    ScheduleRunResponse,
+    ScheduledEventResponse,
     TaskUpdate,
     UserDRLScoresSet,
     UserDRLScoresUpdate,
@@ -36,6 +41,12 @@ database_manager = DatabaseManager()
 
 def get_database_manager() -> DatabaseManager:
     return database_manager
+
+
+def get_scheduling_service(
+    database: DatabaseManager = Depends(get_database_manager),
+) -> SchedulingService:
+    return SchedulingService(database=database)
 
 
 @app.exception_handler(psycopg2.IntegrityError)
@@ -343,3 +354,65 @@ def remove_daily_task(
 ) -> None:
     if not database.remove_daily_task(work_date, task_id):
         raise HTTPException(status_code=404, detail="Daily task not found")
+
+
+@app.post(
+    "/users/{user_id}/schedule",
+    response_model=ScheduleRunResponse,
+    dependencies=[Depends(require_permission("daily_tasks:create"))],
+)
+def run_user_schedule(
+    user_id: int = Path(ge=1),
+    request: ScheduleRunRequest = Body(default_factory=ScheduleRunRequest),
+    service: SchedulingService = Depends(get_scheduling_service),
+) -> ScheduleRunResponse:
+    try:
+        run_result = service.run(
+            user_id=user_id,
+            initial_drl=request.initial_drl,
+            week_start=request.week_start,
+            week_end=request.week_end,
+            restrict_to_window=request.restrict_to_window,
+            include_unassigned_zero_point_events=request.include_unassigned_zero_point_events,
+            persist=request.persist,
+        )
+    except UserNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from None
+
+    schedule = run_result.schedule
+    persistence = (
+        SchedulePersistenceResponse(
+            user_id=run_result.persistence.user_id,
+            assigned_task_ids=list(run_result.persistence.assigned_task_ids),
+            newly_assigned_count=run_result.persistence.newly_assigned_count,
+            daily_task_records=list(run_result.persistence.daily_task_records),
+        )
+        if run_result.persistence is not None
+        else None
+    )
+    return ScheduleRunResponse(
+        status=schedule.status,
+        week_start=run_result.week_start,
+        week_end=run_result.week_end,
+        total_tasks_loaded=run_result.total_tasks_loaded,
+        prepared_tasks_count=run_result.prepared_tasks_count,
+        total_drl_gained=schedule.total_drl_gained,
+        raw_total_drl=schedule.raw_total_drl,
+        final_total_drl=schedule.final_total_drl,
+        initial_drl=schedule.initial_drl,
+        final_drl=schedule.final_drl,
+        selected_events=[
+            ScheduledEventResponse(
+                task_id=event.task_id,
+                title=event.title,
+                start_time=event.start_time,
+                end_time=event.end_time,
+                location=event.location,
+                training_points=event.training_points,
+                drl_category=event.drl_category,
+                points_gained=event.points_gained,
+            )
+            for event in schedule.selected_events
+        ],
+        persistence=persistence,
+    )

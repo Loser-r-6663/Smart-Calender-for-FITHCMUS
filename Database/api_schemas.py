@@ -1,10 +1,12 @@
-from datetime import datetime
+from collections.abc import Mapping
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from Database.enums import DRLCategory, SourcePlatform, TaskStatus, TaskType
 from Database.task_validation import validate_datetime_input
+from Database.user_drl import validate_drl_scores
 
 
 class TaskUpdate(BaseModel):
@@ -85,3 +87,75 @@ class UserDRLScoresUpdate(BaseModel):
     dieu_3: int | None = Field(default=None, ge=0, le=100, strict=True)
     dieu_4: int | None = Field(default=None, ge=0, le=100, strict=True)
     dieu_5: int | None = Field(default=None, ge=0, le=100, strict=True)
+
+
+class ScheduleRunRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "restrict_to_window": False,
+                "include_unassigned_zero_point_events": False,
+                "persist": False,
+            }
+        },
+    )
+
+    week_start: date | None = None
+    week_end: date | None = None
+    restrict_to_window: bool = Field(default=False, strict=True)
+    include_unassigned_zero_point_events: bool = Field(default=False, strict=True)
+    initial_drl: dict[str, int] | None = None
+    persist: bool = Field(default=False, strict=True)
+
+    @field_validator("initial_drl", mode="before")
+    @classmethod
+    def check_initial_drl(cls, value: Any) -> dict[str, int] | None:
+        if value is None:
+            return None
+        if not isinstance(value, Mapping):
+            raise ValueError("initial_drl must be an object mapping DRL categories to points")
+        return validate_drl_scores(value, require_non_empty=False)
+
+    @model_validator(mode="after")
+    def check_week_range(self) -> "ScheduleRunRequest":
+        if (
+            self.week_start is not None
+            and self.week_end is not None
+            and self.week_start > self.week_end
+        ):
+            raise ValueError("week_start must be on or before week_end")
+        return self
+
+
+class ScheduledEventResponse(BaseModel):
+    task_id: str
+    title: str
+    start_time: datetime
+    end_time: datetime
+    location: str
+    training_points: int
+    drl_category: str
+    points_gained: int
+
+
+class SchedulePersistenceResponse(BaseModel):
+    user_id: int
+    assigned_task_ids: list[str]
+    newly_assigned_count: int
+    daily_task_records: list[dict[str, Any]]
+
+
+class ScheduleRunResponse(BaseModel):
+    status: str
+    week_start: date
+    week_end: date
+    total_tasks_loaded: int
+    prepared_tasks_count: int
+    total_drl_gained: int
+    raw_total_drl: int
+    final_total_drl: int
+    initial_drl: dict[str, int]
+    final_drl: dict[str, int]
+    selected_events: list[ScheduledEventResponse]
+    persistence: SchedulePersistenceResponse | None = None

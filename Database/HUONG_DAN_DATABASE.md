@@ -335,6 +335,31 @@ Body cập nhật trạng thái hoàn thành:
 
 Ngày trong đường dẫn và query dùng định dạng `YYYY-MM-DD`.
 
+### Lập lịch tối ưu điểm rèn luyện (Scheduler)
+
+| Phương thức | Đường dẫn | Chức năng |
+|---|---|---|
+| `POST` | `/users/{user_id}/schedule` | Chạy `BranchAndBoundScheduler` lập lịch sự kiện ĐRL cho user |
+
+Endpoint yêu cầu quyền `daily_tasks:create` (dùng `ADMIN_API_KEY`). Tất cả các
+trường trong body đều tùy chọn (có thể gửi `{}`):
+
+```json
+{
+  "week_start": "2026-11-09",
+  "week_end": "2026-11-15",
+  "restrict_to_window": false,
+  "include_unassigned_zero_point_events": false,
+  "initial_drl": null,
+  "persist": false
+}
+```
+
+- Nếu `initial_drl` là `null` hoặc không gửi lên, hệ thống tự đọc điểm ĐRL
+  hiện có từ `user_drl_scores` của user.
+- Đặt `persist: true` để lưu trực tiếp các sự kiện được chọn vào `user_tasks`
+  và `daily_tasks`. Trả về `404` nếu `user_id` không tồn tại.
+
 ## 6. Mã trạng thái HTTP thường gặp
 
 - `200`: thao tác đọc hoặc cập nhật thành công.

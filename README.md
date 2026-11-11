@@ -4,6 +4,7 @@
 
 - **Backend/Crawler** contains the six crawlers and `RawTasks.txt`. The public crawlers are FIT, HCMUS, and OSA. The authenticated or session-based crawlers are Portal, Moodle, and Facebook.
 - **Backend/Parser** adapts raw crawler records, removes duplicates, extracts structured task data with the configured LLM provider, validates it, and sends it to the Database API.
+- **Backend/Scheduling** runs `BranchAndBoundScheduler` via `SchedulingService` over active database tasks and per-user DRL scores (`user_drl_scores`), expanding weekly Portal `recurrence` slots and optionally persisting selected events to `user_tasks` and `daily_tasks`.
 - **Database** contains the FastAPI database API, PostgreSQL connection and repository code, authorization settings, and `Db_query.sql`.
 - `main.py` runs the live pipeline. `tests` contains offline unit tests and `tests/pipeline_demo.py`.
 
@@ -89,3 +90,15 @@ python tests\pipeline_demo.py
 ```
 
 The demo is not fully offline and still needs the configured provider, API, database, and authorization settings as applicable.
+
+## Running the Scheduler
+
+With PostgreSQL updated using `Database/Db_query.sql` (including `user_drl_scores`) and the Database API running:
+
+- Inspect tasks via `GET /tasks` and manage a user's current 5-category DRL points via `GET/PUT/PATCH /users/{user_id}/drl`.
+- Trigger scheduling for a user via `POST /users/{user_id}/schedule` (using `ADMIN_API_KEY`; pass `persist: true` to assign selected events and write `daily_tasks`).
+- Run scheduler unit tests:
+
+```powershell
+python -m unittest tests/test_scheduling_service.py Backend/Unit_Test/test_branch_and_bound_scheduler.py -v
+```
