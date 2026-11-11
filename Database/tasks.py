@@ -5,6 +5,7 @@ from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection
 
+from Database.enums import TaskStatus, TaskType
 from Database.task_config import TASK_FIELDS, current_task_timestamp
 from Database.task_validation import TaskData, validate_task_data
 
@@ -37,6 +38,33 @@ class TaskRepository:
             cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
             row = cursor.fetchone()
             return dict(row) if row is not None else None
+
+    def list_tasks(
+        self,
+        db_connection: connection,
+        status: TaskStatus | str | None = None,
+        task_type: TaskType | str | None = None,
+    ) -> list[dict[str, Any]]:
+        clauses: list[sql.Composable] = []
+        params: list[Any] = []
+        if status is not None:
+            clauses.append(sql.SQL("status = %s"))
+            params.append(TaskStatus(status).value)
+        if task_type is not None:
+            clauses.append(sql.SQL("type = %s"))
+            params.append(TaskType(task_type).value)
+
+        where_clause = (
+            sql.SQL(" WHERE ") + sql.SQL(" AND ").join(clauses)
+            if clauses
+            else sql.SQL("")
+        )
+        query = sql.SQL(
+            "SELECT * FROM tasks{} ORDER BY start_time NULLS LAST, deadline NULLS LAST, id"
+        ).format(where_clause)
+        with db_connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
 
     def update(
         self,

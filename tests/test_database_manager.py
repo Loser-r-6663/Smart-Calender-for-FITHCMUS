@@ -102,6 +102,7 @@ class DatabaseManagerTests(unittest.TestCase):
         database.transaction = transaction
         manager = DatabaseManager(database=database)
         manager.tasks.get_by_id = Mock(return_value=task_record)
+        manager.tasks.list_tasks = Mock(return_value=[task_record])
         manager.users.get_by_id = Mock(return_value=user_record)
         manager.user_tasks.get_for_user = Mock(return_value=[user_task_record])
         manager.daily_tasks.get_for_user_date = Mock(
@@ -109,11 +110,15 @@ class DatabaseManagerTests(unittest.TestCase):
         )
 
         task = manager.get_task("test-task")
+        tasks = manager.list_tasks(status="active", task_type="personal")
         user = manager.get_user(1)
         assignments = manager.get_user_tasks(1)
         daily_tasks = manager.get_tasks_by_date(1, datetime(2026, 11, 7).date())
 
         self.assertIsInstance(task, TaskObject)
+        self.assertEqual(len(tasks), 1)
+        self.assertIsInstance(tasks[0], TaskObject)
+        self.assertEqual(tasks[0].id, "test-task")
         self.assertIsInstance(user, UserObject)
         self.assertEqual(len(assignments), 1)
         self.assertIsInstance(assignments[0], UserTaskObject)
@@ -123,6 +128,9 @@ class DatabaseManagerTests(unittest.TestCase):
 
         manager.tasks.get_by_id.assert_called_once_with(
             transaction_connection, "test-task"
+        )
+        manager.tasks.list_tasks.assert_called_once_with(
+            transaction_connection, "active", "personal"
         )
 
 

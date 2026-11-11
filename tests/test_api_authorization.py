@@ -22,6 +22,20 @@ class FakeDatabaseManager:
         self.tasks[str(task_data["id"])] = task_data
         return task_data
 
+    def list_tasks(
+        self, status: object = None, task_type: object = None
+    ) -> list[dict[str, object]]:
+        items = list(self.tasks.values())
+        if status is not None:
+            status_val = getattr(status, "value", status)
+            items = [
+                item for item in items if item.get("status", "active") == status_val
+            ]
+        if task_type is not None:
+            type_val = getattr(task_type, "value", task_type)
+            items = [item for item in items if item.get("type") == type_val]
+        return items
+
     def delete_task(self, task_id: str) -> bool:
         return self.tasks.pop(task_id, None) is not None
 
@@ -100,6 +114,7 @@ class ApiAuthorizationTests(unittest.TestCase):
                     "email": "llm@example.edu",
                 },
             ),
+            self.client.get("/tasks", headers=headers),
             self.client.get("/tasks/any-task", headers=headers),
             self.client.patch(
                 "/tasks/any-task",
@@ -170,6 +185,34 @@ class ApiAuthorizationTests(unittest.TestCase):
             self.client.delete("/users/1", headers=headers).status_code,
             204,
         )
+
+    def test_admin_can_list_tasks_with_optional_filters(self) -> None:
+        headers = {"Authorization": "Bearer test-admin-key"}
+        self.client.post(
+            "/tasks",
+            headers=headers,
+            json={"id": "t-class", "title": "Class task", "type": "class"},
+        )
+        self.client.post(
+            "/tasks",
+            headers=headers,
+            json={"id": "t-event", "title": "Event task", "type": "event", "status": "done"},
+        )
+
+        all_resp = self.client.get("/tasks", headers=headers)
+        self.assertEqual(all_resp.status_code, 200, all_resp.text)
+        self.assertEqual(
+            {item["id"] for item in all_resp.json()}, {"t-class", "t-event"}
+        )
+
+        filtered_resp = self.client.get(
+            "/tasks?status=done&type=event", headers=headers
+        )
+        self.assertEqual(filtered_resp.status_code, 200, filtered_resp.text)
+        self.assertEqual([item["id"] for item in filtered_resp.json()], ["t-event"])
+
+        bad_resp = self.client.get("/tasks?status=invalid", headers=headers)
+        self.assertEqual(bad_resp.status_code, 422)
 
     def test_equal_role_keys_disable_authorization(self) -> None:
         with patch.dict(

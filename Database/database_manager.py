@@ -5,6 +5,7 @@ from typing import Any, TypeVar
 from Database.daily_tasks import DailyTaskRepository
 from Database.db_connection import DatabaseConnection
 from Database.daily_task_objects import DailyTaskObject
+from Database.enums import TaskStatus, TaskType
 from Database.task_objects import TaskObject
 from Database.tasks import TaskRepository
 from Database.user_tasks import UserTaskRepository
@@ -33,6 +34,14 @@ class DatabaseManager:
     def get_task(self, task_id: str) -> TaskObject | None:
         record = self._run(self.tasks.get_by_id, task_id)
         return TaskObject.from_record(record) if record is not None else None
+
+    def list_tasks(
+        self,
+        status: TaskStatus | str | None = None,
+        task_type: TaskType | str | None = None,
+    ) -> list[TaskObject]:
+        records = self._run(self.tasks.list_tasks, status, task_type)
+        return [TaskObject.from_record(record) for record in records]
 
     def update_task(
         self, task_id: str, updates: Mapping[str, Any]

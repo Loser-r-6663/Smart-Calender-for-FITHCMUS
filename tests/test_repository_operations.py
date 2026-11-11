@@ -121,6 +121,39 @@ class TaskRepositoryTests(unittest.TestCase):
         self.assertEqual(found["id"], "test-task")
         self.assertIsNone(missing)
 
+    def test_list_tasks_supports_optional_filters_and_rejects_invalid_values(self) -> None:
+        def flatten_sql(node: Any) -> str:
+            if hasattr(node, "string"):
+                return node.string
+            if hasattr(node, "seq"):
+                return "".join(flatten_sql(part) for part in node.seq)
+            return str(node)
+
+        all_cursor = FakeCursor(many=[task_record(id="t1"), task_record(id="t2")])
+        all_rows = TaskRepository().list_tasks(FakeConnection(all_cursor))
+        self.assertEqual([row["id"] for row in all_rows], ["t1", "t2"])
+        all_query, all_params = all_cursor.executions[0]
+        self.assertIsInstance(all_query, Composed)
+        self.assertEqual(all_params, ())
+        self.assertNotIn("WHERE", flatten_sql(all_query))
+
+        filtered_cursor = FakeCursor(many=[task_record(id="ev1", type="event")])
+        filtered_rows = TaskRepository().list_tasks(
+            FakeConnection(filtered_cursor), status="active", task_type="event"
+        )
+        self.assertEqual([row["id"] for row in filtered_rows], ["ev1"])
+        filtered_query, filtered_params = filtered_cursor.executions[0]
+        self.assertEqual(filtered_params, ("active", "event"))
+        query_sql = flatten_sql(filtered_query)
+        self.assertIn("WHERE", query_sql)
+        self.assertIn("status = %s", query_sql)
+        self.assertIn("type = %s", query_sql)
+
+        bad_connection = FakeConnection()
+        with self.assertRaises(ValueError):
+            TaskRepository().list_tasks(bad_connection, status="invalid")
+        self.assertEqual(bad_connection.used_cursors, [])
+
     def test_update_validates_merged_record_and_refreshes_timestamp(self) -> None:
         existing = task_record()
         updated = task_record(title="Updated")

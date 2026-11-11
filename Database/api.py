@@ -3,7 +3,7 @@ from datetime import date
 from typing import Any
 
 import psycopg2
-from fastapi import Depends, FastAPI, HTTPException, Path
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -16,6 +16,7 @@ from Database.api_schemas import (
 )
 from Database.database_manager import DatabaseManager
 from Database.daily_task_objects import DailyTaskObject
+from Database.enums import TaskStatus, TaskType
 from Database.task_objects import TaskObject
 from Database.user_objects import (
     UserObject,
@@ -86,6 +87,18 @@ def create_task(
     database: DatabaseManager = Depends(get_database_manager),
 ) -> dict[str, Any]:
     return database.create_task(task.model_dump(exclude_unset=True))
+
+
+@app.get(
+    "/tasks",
+    dependencies=[Depends(require_permission("tasks:read"))],
+)
+def list_tasks(
+    status: TaskStatus | None = None,
+    task_type: TaskType | None = Query(default=None, alias="type"),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> list[TaskObject]:
+    return database.list_tasks(status=status, task_type=task_type)
 
 
 @app.get(
