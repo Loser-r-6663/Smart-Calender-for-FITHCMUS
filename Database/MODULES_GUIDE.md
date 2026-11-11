@@ -37,7 +37,7 @@ khi trả về từ `DatabaseManager`.
 
 | File | Vai trò |
 |---|---|
-| `tasks.py` | Tạo, đọc, cập nhật và xóa task; xác thực task trước khi ghi. |
+| `tasks.py` | Tạo, đọc, liệt kê (có lọc theo `status`, `type`), cập nhật và xóa task; xác thực task trước khi ghi. |
 | `users.py` | Tạo, đọc, cập nhật và xóa user. |
 | `user_tasks.py` | Gán/bỏ gán task và truy vấn các liên kết user-task. |
 | `daily_tasks.py` | Thêm task vào ngày, truy vấn lịch ngày và cập nhật trạng thái hoàn thành. |
@@ -88,11 +88,12 @@ from Database.database_manager import DatabaseManager
 
 database = DatabaseManager()
 task = database.get_task("task-001")
+active_tasks = database.list_tasks(status="active")
 ```
 
-`get_task`, `get_user`, `get_user_tasks` và `get_tasks_by_date` trả về object
-được định nghĩa trong các module `*_objects.py`. Dùng `model_dump()` để đổi
-object Pydantic thành dictionary.
+`get_task`, `list_tasks`, `get_user`, `get_user_tasks` và `get_tasks_by_date`
+trả về object được định nghĩa trong các module `*_objects.py`. Dùng `model_dump()`
+để đổi object Pydantic thành dictionary.
 
 ### Thêm quy tắc hoặc trường task
 

@@ -226,9 +226,16 @@ Payload tạo task được mô tả trong `Database/task_schema.json`; API dùn
 | Phương thức | Đường dẫn | Chức năng |
 |---|---|---|
 | `POST` | `/tasks` | Tạo task |
+| `GET` | `/tasks` | Lấy danh sách task (hỗ trợ lọc tùy chọn `?status=...&type=...`) |
 | `GET` | `/tasks/{task_id}` | Lấy task theo mã |
 | `PATCH` | `/tasks/{task_id}` | Cập nhật các trường được gửi lên |
 | `DELETE` | `/tasks/{task_id}` | Xóa task |
+
+Query params tùy chọn của `GET /tasks`:
+- `status`: `active`, `done`, `archived` hoặc `cancelled`.
+- `type`: `class`, `assignment`, `exam`, `event`, `personal` hoặc `tuition`.
+
+Kết quả được sắp xếp theo `start_time` tăng dần (null ở cuối), `deadline` tăng dần (null ở cuối), rồi đến `id`. Endpoint yêu cầu quyền `tasks:read`.
 
 Ví dụ tạo task cá nhân:
 
