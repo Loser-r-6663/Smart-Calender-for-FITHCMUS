@@ -14,6 +14,17 @@ from .branch_and_bound_scheduler import (
     normalize_location,
     parse_timestamp,
 )
+from .service import (
+    GMT_PLUS_7,
+    SchedulePersistenceSummary,
+    ScheduleRunResult,
+    SchedulingService,
+    UserNotFoundError,
+    current_week_bounds,
+    normalize_to_gmt7,
+    parse_recurrence,
+    prepare_tasks_for_scheduler,
+)
 
 __all__ = [
     "BranchAndBoundScheduler",
@@ -28,5 +39,13 @@ __all__ = [
     "get_travel_buffer_minutes",
     "normalize_location",
     "parse_timestamp",
+    "GMT_PLUS_7",
+    "SchedulePersistenceSummary",
+    "ScheduleRunResult",
+    "SchedulingService",
+    "UserNotFoundError",
+    "current_week_bounds",
+    "normalize_to_gmt7",
+    "parse_recurrence",
+    "prepare_tasks_for_scheduler",
 ]
-
