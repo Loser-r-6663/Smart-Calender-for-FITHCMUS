@@ -37,8 +37,8 @@ class FBCrawler(PlaywrightCrawler):
         
         # Initialize login checking variable
         try:
-            page.wait_for_selector(LOGIN_NOTIFICATION,state='visible',timeout=1000)
-        except Exception as e:
+            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
+        except Exception:
             browser.close()
             return
         login_notification = page.locator(LOGIN_NOTIFICATION)

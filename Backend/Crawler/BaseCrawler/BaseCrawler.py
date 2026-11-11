@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import html2text
 
 
-from Backend.Regulation.RawTask import RawTask
+from Backend.Regulation.Task import RawTask
 
 
 # HTML2Text configuration
