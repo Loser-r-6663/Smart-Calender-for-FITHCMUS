@@ -8,7 +8,7 @@ from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
 from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
 from Backend.Crawler.OSACrawler import OSACrawler
-from Backend.Crawler.FBCrawler import FBCrawler
+from Backend.Crawler.FBCrawlers import FBCrawler_VNUHCMUS, FBCrawler_YUHCMUS, FBCrawler_YUE, FBCrawler_YUC, FBCrawler_YUB, FBCrawler_YUG, FBCrawler_YUP, FBCrawler_FIT
 
 
 class TaskCreator():
@@ -17,11 +17,18 @@ class TaskCreator():
         os.makedirs("Backend/Crawler/State", exist_ok=True)
         
         self.crawlers: dict[str, BaseCrawler] = {
-            "Moodle": MoodleCrawler(),
-            "FIT": FITCrawler(),
-            "HCMUS": HCMUSCrawler(),
-            "OSA": OSACrawler(),
-            "FB": FBCrawler()
+            # "Moodle": MoodleCrawler(),
+            # "FIT": FITCrawler(),
+            # "HCMUS": HCMUSCrawler(),
+            # "OSA": OSACrawler(),
+            "VNUHMCUS": FBCrawler_VNUHCMUS(),
+            "YUHCMUS": FBCrawler_YUHCMUS(),
+            "YUE": FBCrawler_YUE(),
+            "YUC": FBCrawler_YUC(),
+            "YUB": FBCrawler_YUB(),
+            "YUG": FBCrawler_YUG(),
+            "YUP": FBCrawler_YUP(),
+            "FBFIT": FBCrawler_FIT()
         }
     
     def crawl_raw_tasks(self):

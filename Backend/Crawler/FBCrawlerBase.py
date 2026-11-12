@@ -5,21 +5,21 @@ from dotenv import load_dotenv
 import os
 
 LOGIN_NOTIFICATION = 'xpath=//div[contains(@aria-label,"Log in to Facebook")]'
-POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[3]/div'
+POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[not(@class)]/div'
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
 READ_MORE_BUTTON_SELECTOR = 'xpath=//div[contains(@role,"button")]'
-TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]/div[2]'
+TIME_ELEMENT_CONTAINER_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]//div[contains(text(),"Tháng")]'
 HREF_SELECTOR = 'xpath=/div[2]/div/div[2]/div/div[2]/span/div//span[a]//a'
 LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href, "/permalink/") or contains(@href, "/story.php") or contains(@href, "/photos/") or contains(@href, "/videos/")]'
 
 
 class FBCrawler(PlaywrightCrawler):
-    def __init__(self):
-        self.history_file = "Backend/Crawler/History/FBHistory.txt"
+    def __init__(self,history_file=None,home_url=None,crawl_limit=10):
         self.state_file = "Backend/Crawler/State/FBState.json"
-        self.home_url = "https://www.facebook.com/VNUHCM.US"
-        self.crawl_limit = 10
+        self.history_file = history_file
+        self.home_url = home_url
+        self.crawl_limit = crawl_limit
     
     def check_state(self, cookies):
         if not cookies:
@@ -95,7 +95,7 @@ class FBCrawler(PlaywrightCrawler):
                     raise Exception(f"Unable to find post crawl zone for post no.{post_crawled}")
                 
                 # Content container div tag
-                content_container = post_crawl_zone.locator(CONTENT_CONTAINER_SELECTOR)
+                content_container = post_crawl_zone.locator(CONTENT_CONTAINER_SELECTOR).nth(0)
                 content_container.scroll_into_view_if_needed()
                 if content_container.count() == 0:
                     raise Exception(f"Unable to find content container for post no.{post_crawled}")
@@ -159,6 +159,9 @@ class FBCrawler(PlaywrightCrawler):
                 
                 # Add to result
                 raw_tasks.append(raw_task)
-            except Exception: pass
+                print(f"Crawled post no.{post_crawled}")
+            except Exception as e:
+                print(f"post no.{post_crawled}: {e}")
+                pass
         
         return raw_tasks[::-1]
