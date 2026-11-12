@@ -21,14 +21,14 @@ class HCMUSCrawler(BeautifulSoupCrawler):
                 # Reached the last crawled post. Stopping further crawling
                 if self.last_post and link == self.last_post: break
                 
-                raw_task.Link = link
-                raw_task.Title = title_element.get_text(strip=True)
-                raw_task.Description = article.select_one("div.entry-content p").get_text(strip=True)
-                raw_task.CreateDate = article.select_one("abbr.published").get_text(strip=True)
+                raw_task.link = link
+                raw_task.title = title_element.get_text(strip=True)
+                raw_task.description = article.select_one("div.entry-content p").get_text(strip=True)
+                raw_task.create_date = article.select_one("abbr.published").get_text(strip=True)
                 
                 post_page = self.launch_engine(link)
                 content = post_page.select_one("div.entry-content").decode_contents()
-                raw_task.Content = self.convert_to_markdown(content)
+                raw_task.content = self.convert_to_markdown(content)
                 
                 raw_tasks.append(raw_task)
             except Exception as e:

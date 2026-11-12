@@ -1,5 +1,6 @@
 from Backend.Crawler.FBCrawlerBase import FBCrawler
 
+
 class FBCrawler_VNUHCMUS(FBCrawler):
     def __init__(self):
         super().__init__(

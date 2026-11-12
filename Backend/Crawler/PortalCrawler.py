@@ -72,7 +72,7 @@ class PortalCrawler(PlaywrightCrawler):
             title = f'{row["Mã MH"]} · {row["Tên MH"]}'
             course = row["Tên MH"]
             
-            dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or "N/A", "N/A")
+            dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or None, None)
             raw_task = RawTask(
                 title=title,
                 type="class",

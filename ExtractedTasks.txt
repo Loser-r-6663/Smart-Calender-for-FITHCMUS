@@ -16,7 +16,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'BAA00021 · Thể dục 1'
@@ -35,7 +35,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'BAA00030 · Giáo dục quốc phòng - An ninh'
@@ -54,7 +54,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'CSC10009 · Hệ thống máy tính'
@@ -73,7 +73,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'CSC10014 · Tư duy tính toán'
@@ -92,7 +92,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'CSC10014 · Tư duy tính toán'
@@ -111,7 +111,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'MTH00006 · Vi tích phân 2'
@@ -130,7 +130,7 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: 'MTH00006 · Vi tích phân 2'
@@ -149,11 +149,11 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp'
 	source_platform: 'Portal'
-	updated_at: '2026-11-12 13:11:55'
+	updated_at: '2026-11-12 15:48:13'
 ), 
 ExtractedTask(
 	title: '[PROJECT] Final Phase tới hạn'
-	type: 'assignment'
+	type: 'class'
 	course: 'Tư duy tính toán'
 	description: None
 	target_audience: None
@@ -168,11 +168,11 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://courses.ctda.hcmus.edu.vn/mod/assign/view.php?id=118282'
 	source_platform: 'Moodle'
-	updated_at: '2026-11-12 13:12:01'
+	updated_at: '2026-11-12 15:48:21'
 ), 
 ExtractedTask(
 	title: '[LAB] Assignment 3: SIGN-IN TRAVEL ASSISTANT WITH RAG CHAT tới hạn'
-	type: 'assignment'
+	type: 'class'
 	course: 'Tư duy tính toán'
 	description: None
 	target_audience: None
@@ -187,11 +187,11 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://courses.ctda.hcmus.edu.vn/mod/assign/view.php?id=118496'
 	source_platform: 'Moodle'
-	updated_at: '2026-11-12 13:12:01'
+	updated_at: '2026-11-12 15:48:21'
 ), 
 ExtractedTask(
 	title: '[PROJECT] Phase 2 tới hạn'
-	type: 'assignment'
+	type: 'class'
 	course: 'Tư duy tính toán'
 	description: None
 	target_audience: None
@@ -206,11 +206,11 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://courses.ctda.hcmus.edu.vn/mod/assign/view.php?id=117211'
 	source_platform: 'Moodle'
-	updated_at: '2026-11-12 13:12:01'
+	updated_at: '2026-11-12 15:48:21'
 ), 
 ExtractedTask(
 	title: '[LAB-2] Application Programming Interface tới hạn'
-	type: 'assignment'
+	type: 'class'
 	course: 'Tư duy tính toán'
 	description: None
 	target_audience: None
@@ -225,33 +225,14 @@ ExtractedTask(
 	estimated_hours: None
 	source_url: 'https://courses.ctda.hcmus.edu.vn/mod/assign/view.php?id=118023'
 	source_platform: 'Moodle'
-	updated_at: '2026-11-12 13:12:01'
+	updated_at: '2026-11-12 15:48:21'
 ), 
 ExtractedTask(
-	title: 'Hội nghị Khoa học Trường Đại học Khoa học Tự nhiên lần thứ XV - năm 2026'
+	title: 'Chương trình Người trong nghề HK1/2026 - 2027: Kết nối Giảng đường với thực tiễn ngành Công nghệ'
 	type: 'event'
 	course: None
-	description: 'Hội nghị Khoa học lần thứ XV – năm 2026 tổ chức Lễ khai mạc và Phiên toàn thể, quy tụ gần 2.000 báo cáo khoa học với chuỗi hoạt động học thuật diễn ra từ tháng 8 đến tháng 12/2026.'
-	target_audience: {'year': None, 'program': None, 'faculty': None, 'other': 'Toàn trường'}
-	location: {'room': None, 'campus': None, 'detail': 'Trường Đại học Khoa học tự nhiên, ĐHQG-HCM'}
-	registration_start: None
-	registration_end: None
-	start_time: '2026-11-09 00:00:00'
-	end_time: '2026-11-16 23:59:59'
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid0kdB9C43RpNinijunPpNuoC2KxjLKGB3qicZnLHzKLp2dq5nMLBKYe1JtCUfPkBh7l'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: 'CHÚC MỪNG TS LÊ HỮU THỌ ĐẠT GIẢI THƯỞNG KHOA HỌC CÔNG NGHỆ QUẢ CẦU VÀNG NĂM 2026'
-	type: 'announcement'
-	course: None
-	description: 'TS Lê Hữu Thọ, giảng viên Khoa Hóa học, Trường Đại học Khoa học tự nhiên, ĐHQG-HCM đã vinh dự đạt Giải thưởng Khoa học công nghệ Quả Cầu Vàng năm 2026.'
-	target_audience: {'year': None, 'program': None, 'faculty': 'Hóa học', 'other': 'Toàn trường'}
+	description: 'Chương trình Người trong nghề HK1/2026 - 2027 do Khoa Công nghệ thông tin triển khai mang đến các buổi chia sẻ chuyên môn từ chuyên gia doanh nghiệp và cựu sinh viên, kết nối kiến thức giảng đường với thực tiễn ngành công nghệ.'
+	target_audience: {'year': 'tất cả', 'program': 'tất cả', 'faculty': 'Công nghệ thông tin', 'other': None}
 	location: None
 	registration_start: None
 	registration_end: None
@@ -261,55 +242,131 @@ ExtractedTask(
 	training_points: None
 	training_point_category: None
 	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02JifM6XVwsmta7xsud4jyKhpixLWytNeYDppgaqpsZKzCmfGPPqXoinLLYhFNy3sgl'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid0kM1gY4LnRGpdQXqi6UAAe3W6SW7Bki4VxzBydpdztLtgYjVvatWomcRJpx2r9mp8l'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
 ), 
 ExtractedTask(
-	title: 'Trường Đại học Khoa học tự nhiên và VIASM thúc đẩy hợp tác đào tạo tiến sĩ xuất sắc'
-	type: 'announcement'
-	course: None
-	description: 'Trường Đại học Khoa học tự nhiên, ĐHQG-HCM làm việc với Viện Nghiên cứu cao cấp về Toán (VIASM) và Quỹ Hỗ trợ đổi mới Giáo dục Việt Nam (VIEF) để triển khai chương trình đào tạo tiến sĩ xuất sắc dự kiến tuyển sinh đợt 1 năm 2027.'
-	target_audience: {'year': None, 'program': None, 'faculty': 'Toán - Tin học', 'other': None}
-	location: None
-	registration_start: None
-	registration_end: None
-	start_time: None
-	end_time: None
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid04SQwNiVLZ6uYTggEUytPRtngEAcYKf22F9QjfBk5Rqikp2xc32EhvXnM3pT2SbjJl'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: 'CHÚC MỪNG NỮ SINH TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN, ĐHQG-HCM ĐẠT GIẢI THƯỞNG NỮ SINH KHOA HỌC CÔNG NGHỆ VIỆT NAM NĂM 2026'
-	type: 'announcement'
-	course: None
-	description: 'Chúc mừng hai nữ sinh Lê Thục Uyên (Khoa Công nghệ thông tin) và Lê Lan Chi (Khoa Hóa học) đạt Giải thưởng Nữ sinh Khoa học Công nghệ Việt Nam năm 2026.'
-	target_audience: {'year': None, 'program': None, 'faculty': 'tất cả', 'other': 'Nữ sinh'}
-	location: None
-	registration_start: None
-	registration_end: None
-	start_time: None
-	end_time: None
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02Z1M9pNRpLy5eD18PoC5ZscKVo45Z4aJMf9rQWwbm1qshfqsBRX1Jo8EnQ8zKb4r5l'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: 'Khai mạc Tiểu ban Công nghệ Thông tin và Truyền thông (ICT) – Hội nghị Khoa học lần thứ XV'
+	title: 'Hội thảo "AI trong doanh nghiệp: Từ xu hướng đến thực tế"'
 	type: 'event'
 	course: None
-	description: 'Tiểu ban Công nghệ Thông tin và Truyền thông (ICT) thuộc Hội nghị Khoa học lần thứ XV của Trường Đại học Khoa học tự nhiên, ĐHQG-HCM đã khai mạc với nhiều báo cáo khoa học quan trọng về AI và công nghệ thông tin.'
+	description: 'Hội thảo giúp sinh viên có thêm góc nhìn từ thực tiễn doanh nghiệp về ứng dụng của trí tuệ nhân tạo (AI) trong công việc của một nhân sự CNTT.'
 	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': None}
-	location: {'room': 'Giảng đường 1', 'campus': 'Nguyễn Văn Cừ', 'detail': 'Trường Đại học Khoa học tự nhiên, ĐHQG-HCM'}
+	location: {'room': 'Phòng B.11A', 'campus': 'Nguyễn Văn Cừ', 'detail': 'tòa B, Trường Đại học Khoa học tự nhiên, cơ sở Nguyễn Văn Cừ'}
+	registration_start: None
+	registration_end: '2026-11-06 23:59:59'
+	start_time: '2026-11-13 14:00:00'
+	end_time: '2026-11-13 16:00:00'
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: 2.0
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02ovWaPuSQtTinXk1cRiN2QxG3ZrdxisiUQFHVMDNY1WbhaVuYYeYNHmGyR7qAm6bxl'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Đăng ký tham quan công ty VNG ngày 26/11'
+	type: 'event'
+	course: None
+	description: 'Chương trình tham quan VNG Campus, tìm hiểu về các lĩnh vực hoạt động, ứng dụng AI trong công việc và cơ hội nghề nghiệp tại VNG dành cho sinh viên Khoa Công nghệ thông tin.'
+	target_audience: {'year': 'năm 2, năm 3', 'program': None, 'faculty': 'Công nghệ thông tin', 'other': None}
+	location: {'room': None, 'campus': None, 'detail': 'VNG Campus – Lô Z06, Đường số 13, phường Tân Thuận, TP.HCM'}
+	registration_start: None
+	registration_end: '2026-11-08 23:59:59'
+	start_time: '2026-11-26 09:00:00'
+	end_time: '2026-11-26 11:30:00'
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: 2.5
+	source_url: 'https://link.hcmus.edu.vn/VNG-Tour-26-11'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Hội nghị Khoa học Trường Đại học Khoa học tự nhiên, ĐHQG-HCM lần thứ XV năm 2026 - Tiểu ban Công nghệ Thông tin và Truyền thông'
+	type: 'event'
+	course: None
+	description: 'Cập nhật lịch trình bày và gia hạn thời hạn đăng ký tham gia Hội nghị Khoa học Trường Đại học Khoa học tự nhiên, ĐHQG-HCM lần thứ XV năm 2026 - Tiểu ban Công nghệ Thông tin và Truyền thông.'
+	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': 'Sinh viên, Học viên, Nghiên cứu sinh'}
+	location: {'room': 'GĐ.1, I.34 và I.35', 'campus': 'Nguyễn Văn Cừ', 'detail': '227 Nguyễn Văn Cừ, Phường Chợ Quán, TP.HCM'}
+	registration_start: None
+	registration_end: '2026-11-08 15:00:00'
+	start_time: '2026-11-10 00:00:00'
+	end_time: '2026-11-12 23:59:59'
+	deadline: '2026-11-08 15:00:00'
+	training_points: None
+	training_point_category: None
+	estimated_hours: None
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02wTnf9PQ25g1hpWf8CYbuDsNjRB9cfHaBGoWyeWSVPmo4GDyqjes3RDREeAc8jpWvl'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Talkshow “Bẫy lừa không xa – Tỉnh táo để không sa” (Ngày 08/11/2026)'
+	type: 'event'
+	course: None
+	description: 'Khoa Công nghệ thông tin tổ chức talkshow trang bị kỹ năng phòng tránh lừa đảo cho sinh viên với sự chia sẻ từ Đại úy Nguyễn Anh Quân.'
+	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': 'Hơn 200 sinh viên'}
+	location: {'room': 'Giảng đường 1', 'campus': 'Chợ Quán', 'detail': None}
+	registration_start: None
+	registration_end: None
+	start_time: '2026-11-08 00:00:00'
+	end_time: None
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: None
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid03SKBA8cLVvjznv9fWW3Rhvfbpgs2B1tGwzrSUSg7dBi9sPZ8afpgn4WmeyhirJQ4l'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Talkshow “Bẫy lừa không xa – Tỉnh táo để không sa” (Ngày 14/11/2026)'
+	type: 'event'
+	course: None
+	description: 'Chuyên đề talkshow tiếp tục được tổ chức để trang bị kỹ năng phòng tránh lừa đảo cho sinh viên khoa Công nghệ thông tin.'
+	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': None}
+	location: {'room': 'Hội trường B', 'campus': 'Đông Hòa', 'detail': None}
+	registration_start: None
+	registration_end: None
+	start_time: '2026-11-14 08:30:00'
+	end_time: None
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: None
+	source_url: 'https://link.hcmus.edu.vn/talkshowBLKXTTDKS-1411'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Đăng ký tham quan công ty Saritasa Việt Nam ngày 2/12'
+	type: 'event'
+	course: None
+	description: 'Chuyến tham quan công ty Saritasa Việt Nam mang đến cho sinh viên nhiều hoạt động thú vị như chia sẻ kỹ năng làm việc, phỏng vấn, trải nghiệm công nghệ VR và giao lưu.'
+	target_audience: {'year': 'năm 3, 4', 'program': 'tất cả', 'faculty': 'Công nghệ thông tin', 'other': '25 sinh viên'}
+	location: {'room': 'Tầng 7', 'campus': None, 'detail': "toà nhà L'Mak Long Tower, Số 101-103 Nguyễn Cửu Vân, P. Gia Định, Tp. Hồ Chí Minh"}
+	registration_start: None
+	registration_end: '2026-11-11 23:59:59'
+	start_time: '2026-12-02 14:00:00'
+	end_time: '2026-12-02 16:00:00'
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: 2.0
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02gz56m5Eur3bA63Yn9AsgzA6pqA2hCCyWtvLMtiJNGVZb2z47CpU1LDq6S1VCQrYxl'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Tiểu ban Công nghệ Thông tin và Truyền thông – Hội nghị Khoa học lần thứ XV năm 2026'
+	type: 'event'
+	course: None
+	description: 'Khoa Công nghệ Thông tin tổ chức Tiểu ban Công nghệ Thông tin và Truyền thông (ICT) trong khuôn khổ Hội nghị Khoa học lần thứ XV với các phiên trình bày và báo cáo khoa học về trí tuệ nhân tạo, y tế thông minh và các ứng dụng mới.'
+	target_audience: {'year': 'tất cả', 'program': 'tất cả', 'faculty': 'Công nghệ thông tin', 'other': 'Quý Thầy/Cô, các nhà nghiên cứu, các bạn sinh viên, học viên và nghiên cứu sinh'}
+	location: None
 	registration_start: None
 	registration_end: None
 	start_time: '2026-11-10 00:00:00'
@@ -318,102 +375,64 @@ ExtractedTask(
 	training_points: None
 	training_point_category: None
 	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid0337CaEDjTAvn58TYCZErU52F1xxDxFNHiwsbaiBW36LzPxFvRQHUj2u2mQJhFLLytl'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02Z63XH5t8GM9wdk5tkmyFs4ZASi9UtnpdMh9YSWTEn8daMqq4HpoybNMbYxAvwWNjl'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
 ), 
 ExtractedTask(
-	title: 'HCMUS trao đổi cơ hội hợp tác với The University of Melbourne (Úc)'
-	type: 'announcement'
-	course: None
-	description: 'Trường Đại học Khoa học tự nhiên, ĐHQG-HCM đã có buổi tiếp và làm việc với đại diện The University of Melbourne (Úc) nhằm trao đổi về các định hướng và cơ hội hợp tác trong đào tạo, trao đổi học thuật và nghiên cứu khoa học.'
-	target_audience: {'year': 'tất cả', 'program': 'tất cả', 'faculty': 'tất cả', 'other': 'Toàn trường'}
-	location: None
-	registration_start: None
-	registration_end: None
-	start_time: None
-	end_time: None
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02e587ZYfZfA9CxGE9hVd1ta193eTx1hC8hYTbSrDtRbBC47xmDZczXZHddsmJBA9Gl'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: '21 gương mặt HCMUS được vinh danh tại Giải thưởng Quả Cầu Vàng giai đoạn 2007–2026'
-	type: 'announcement'
-	course: None
-	description: 'Từ năm 2007 đến nay, có 21 giảng viên, nhà khoa học và sinh viên Trường Đại học Khoa học tự nhiên, ĐHQG-HCM được vinh danh tại Giải thưởng Khoa học Công nghệ Quả Cầu Vàng.'
-	target_audience: {'year': None, 'program': None, 'faculty': None, 'other': 'Toàn trường'}
-	location: None
-	registration_start: None
-	registration_end: None
-	start_time: None
-	end_time: None
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02YB5ScnqS1Pn14othhM7UAd4yzua6KHKYp39fTXeFzd3SjJugQwKCV1PkLR9PmDhql'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: 'CHÚC MỪNG TIẾN SĨ NGUYỄN TUẤN ĐẠT DANH HIỆU NHÀ GIÁO TRẺ TIÊU BIỂU CẤP TRUNG ƯƠNG NĂM 2026'
-	type: 'announcement'
-	course: None
-	description: 'TS. Nguyễn Tuấn – Giảng viên Khoa Địa chất, Trường Đại học Khoa học tự nhiên, ĐHQG-HCM vinh dự được tuyên dương danh hiệu Nhà giáo trẻ tiêu biểu cấp Trung ương năm 2026.'
-	target_audience: {'year': None, 'program': None, 'faculty': 'Địa chất', 'other': None}
-	location: None
-	registration_start: None
-	registration_end: None
-	start_time: None
-	end_time: None
-	deadline: None
-	training_points: None
-	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02xvD1VHSuYvokQTMUhNv89JGurKFNZGYEmS3ZViVjcMMgTk9WZhrSuAZvwwbhQG2Pl'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
-), 
-ExtractedTask(
-	title: 'SEMINAR KHOA HỌC | How Enzymes Shape Plant Natural Product Stereochemistry?'
+	title: 'Danh sách sinh viên tham quan VNG ngày 26/11'
 	type: 'event'
 	course: None
-	description: 'Seminar khoa học với chủ đề "How Enzymes Shape Plant Natural Product Stereochemistry?" do PGS.TS. Đặng Thị Thu Thủy trình bày về vai trò của enzyme trong việc kiểm soát cấu hình lập thể và định hình cấu trúc không gian của các hợp chất tự nhiên ở thực vật.'
-	target_audience: {'year': None, 'program': None, 'faculty': 'Sinh học - Công nghệ Sinh học', 'other': 'Quý thầy cô, các nhà nghiên cứu, học viên và sinh viên quan tâm'}
-	location: {'room': 'Phòng C36', 'campus': 'Nguyễn Văn Cừ', 'detail': None}
+	description: 'Chuyến tham quan VNG Campus giúp sinh viên khám phá môi trường doanh nghiệp, tìm hiểu về ngành nghề, cơ hội nghề nghiệp, ứng dụng AI và các kỹ năng cần thiết trong ngành công nghệ.'
+	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': 'Sinh viên'}
+	location: {'room': None, 'campus': None, 'detail': 'VNG Campus – Lô Z06, Đường số 13, phường Tân Thuận, TP.HCM'}
 	registration_start: None
 	registration_end: None
-	start_time: '2026-11-16 09:00:00'
-	end_time: '2026-11-16 11:00:00'
+	start_time: '2026-11-26 09:00:00'
+	end_time: '2026-11-26 11:30:00'
+	deadline: None
+	training_points: None
+	training_point_category: None
+	estimated_hours: 2.5
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid0MJ4bgEWuA6MTdsjFVWJaKZzN2yFjyxWa88UgX9DPYpqnn14bem9uH14jyHnVrsoil'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
+), 
+ExtractedTask(
+	title: 'Hội thảo: Xây dựng CV nổi bật và chinh phục phỏng vấn kỹ thuật'
+	type: 'event'
+	course: None
+	description: 'Khoa Công nghệ thông tin phối hợp ELCA Việt Nam tổ chức hội thảo giúp sinh viên rèn luyện kỹ năng xây dựng CV nổi bật và chinh phục phỏng vấn kỹ thuật.'
+	target_audience: {'year': 'từ năm 2 trở lên', 'program': 'tất cả', 'faculty': 'Công nghệ thông tin', 'other': None}
+	location: {'room': 'Phòng I.23', 'campus': 'Nguyễn Văn Cừ', 'detail': '227 Nguyễn Văn Cừ, phường Chợ Quán'}
+	registration_start: None
+	registration_end: '2026-11-13 23:59:59'
+	start_time: '2026-11-18 14:00:00'
+	end_time: '2026-11-18 16:00:00'
 	deadline: None
 	training_points: None
 	training_point_category: None
 	estimated_hours: 2.0
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid02Xmvcu4UK2oDj2Gi9DCrmkkbVnYKX5C4yP3RYnwVYqFJE7cJSHjwCC4E8jsPfKcoel'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
+	source_url: 'https://link.hcmus.edu.vn/HTCV-18-11'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
 ), 
 ExtractedTask(
-	title: 'CESD 2026: Kết nối tri thức Khoa học Trái đất và Phát triển bền vững'
+	title: 'Buổi giới thiệu về các chương trình học bổng trường Đại học Quốc gia Seoul (Hàn Quốc) dành cho Sinh viên Việt Nam'
 	type: 'event'
 	course: None
-	description: 'Trường Đại học Khoa học tự nhiên, ĐHQG-HCM tổ chức Hội thảo Khoa học Trái đất và Phát triển bền vững 2026 (CESD 2026) trong khuôn khổ Hội nghị Khoa học lần thứ 15 của Nhà trường.'
-	target_audience: {'year': None, 'program': None, 'faculty': None, 'other': 'Nhà khoa học trẻ, học viên và sinh viên'}
-	location: None
+	description: 'Buổi giới thiệu về các chương trình học bổng trường Đại học Quốc gia Seoul (Hàn Quốc) dành cho Học viên Cao học và Sinh viên Việt Nam.'
+	target_audience: {'year': None, 'program': None, 'faculty': 'Công nghệ thông tin', 'other': 'Học viên Cao học, Sinh viên'}
+	location: {'room': 'Hội trường I', 'campus': 'Nguyễn Văn Cừ', 'detail': '227 Nguyễn Văn Cừ, phường Chợ Quán, Tp.HCM'}
 	registration_start: None
-	registration_end: None
-	start_time: '2026-11-12 00:00:00'
-	end_time: '2026-11-13 23:59:59'
+	registration_end: '2026-11-17 15:00:00'
+	start_time: '2026-10-19 10:30:00'
+	end_time: '2026-10-19 12:00:00'
 	deadline: None
 	training_points: None
 	training_point_category: None
-	estimated_hours: None
-	source_url: 'https://web.facebook.com/VNUHCM.US/posts/pfbid0dx2T9bWNkF6nmuaxbpwQt29uQQX4eAeT3eEkWtX3rViioYWZUY1UjSdJMbjwo7S6l'
-	source_platform: 'Facebook'
-	updated_at: '2026-11-12 13:12:30'
+	estimated_hours: 1.5
+	source_url: 'https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02aE7hshVmvn3FwEbaJubhn2gHTACvDbUPebRnD6tVobA2vGkaUGsTkaw5CdfjN7Qnl'
+	source_platform: 'Facebook Khoa Công nghệ thôn tin'
+	updated_at: '2026-11-12 15:50:45'
 )]

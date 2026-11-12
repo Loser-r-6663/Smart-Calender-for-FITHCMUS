@@ -64,7 +64,7 @@ class ExtractedTask(BaseTask):
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )
-    source_platform: Literal["Portal", "Moodle", "Facebook", "FIT", "HCMUS", "OSA"] = Field(
+    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thôn tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHMCUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thôn tin"] = Field(
         description="Nền tảng nguồn"
     )
     updated_at: datetime = Field(
