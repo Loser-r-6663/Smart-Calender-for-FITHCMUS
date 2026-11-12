@@ -1,17 +1,17 @@
 import os
 import traceback
-from datetime import datetime
 
 from Backend.Regulation.RawTask import RawTask
 from Backend.Regulation.ExtractedTask import ExtractedTask
 
+from Backend.Regulation.RawTask import RawTask
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Crawler.FITCrawler import FITCrawler
 from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
 from Backend.Crawler.OSACrawler import OSACrawler
-from Backend.Crawler.FBCrawler import FBCrawler
+from Backend.Crawler.FBCrawlers import *
 
 from Backend.Parser.Parser import Parser
 
@@ -24,22 +24,37 @@ class TaskCreator():
         self.crawlers: dict[str, BaseCrawler] = {
             "Portal": PortalCrawler(),
             "Moodle": MoodleCrawler(),
-            "Faculty of Information Technology": FITCrawler(),
+            "Khoa Công nghệ thôn tin": FITCrawler(),
             "Ho Chi Minh City University of Science": HCMUSCrawler(),
             "Phòng Công tác sinh viên": OSACrawler(),
-            "Facebook": FBCrawler()
+            "VNUHMCUS": FBCrawler_VNUHCMUS(),
+            "Đoàn trường Khoa học tự nhiên": FBCrawler_YUHCMUS(),
+            "Đoàn khoa - Liên chi hội khoa Môi trường": FBCrawler_YUE(),
+            "Đoàn khoa - Liên chi hội khoa Hóa học": FBCrawler_YUC(),
+            "Đoàn khoa - Liên chi hội khoa Sinh học": FBCrawler_YUB(),
+            "Đoàn khoa - Liên chi hội khoa Địa chất": FBCrawler_YUG(),
+            "Đoàn khoa - Liên chi hội khoa Vật lý": FBCrawler_YUP(),
+            "Facebook Khoa Công nghệ thôn tin": FBCrawler_FIT()
+            
         }
     
     def crawl_raw_tasks(self):
         """Start the crawling process"""
+        # Crawl Portal data
+        try:
+            courses = PortalCrawler().fetch_data()
+        except Exception:
+            print(f"An error occurred while crawling Portal data:")
+            traceback.print_exc()
+        
+        # Crawl other platforms data
         raw_tasks: list[RawTask] = []
-        for platform, crawler in self.crawlers.items():
+        for key, crawler in self.crawlers.items():
             try:
-                # Fetch data from the crawler and update the platform and updated_at fields
-                for task in crawler.fetch_data():
-                    raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
-            except:
-                print(f"An error occurred while crawling {platform} data:")
+                for raw_task in crawler.fetch_data():
+                    raw_tasks.append(raw_task.update(Platform=key))
+            except Exception:
+                print(f"An error occurred while crawling {key} data:")
                 traceback.print_exc()
         return raw_tasks
     
@@ -57,6 +72,5 @@ class TaskCreator():
     
     def create_task(self):
         """Create structured data from website data"""
-        raw_tasks = self.crawl_raw_tasks()
-        extracted_tasks = self.parse_tasks(raw_tasks)
-        print(extracted_tasks, file=open("ExtractedTasks.txt", "w", encoding="utf-8"))
+        courses, raw_tasks = self.crawl_raw_tasks()
+        print(courses + raw_tasks, file=open("Backend/Crawler/RawTasks.txt", "w", encoding="utf-8"))

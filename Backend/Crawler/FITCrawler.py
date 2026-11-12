@@ -19,13 +19,13 @@ class FITCrawler(BeautifulSoupCrawler):
                 link = post.select_one("div.post-title a")["href"]
                 if self.last_post and link == self.last_post: break
                 
-                raw_task.link = link
-                raw_task.title = post.select_one("div.post-title a").get_text(strip=True)
-                raw_task.description = post.select_one("div.post-excerpt").get_text(strip=True)
+                raw_task.Link = link
+                raw_task.Title = post.select_one("div.post-title a").get_text(strip=True)
+                raw_task.Description = post.select_one("div.post-excerpt").get_text(strip=True)
                 
                 post_page = self.launch_engine(link)
                 content = post_page.select_one("section.has_content > div > div").decode_contents()
-                raw_task.content = self.convert_to_markdown(content)
+                raw_task.Content = self.convert_to_markdown(content)
                 
                 raw_tasks.append(raw_task)
             except Exception as e:

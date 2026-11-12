@@ -24,12 +24,12 @@ class OSACrawler(BaseCrawler):
                 link = "https://ctsv.hcmus.edu.vn/news/" + article["slug"]
                 if link == self.last_post: break
                 
-                raw_task.link = link
-                raw_task.title = article["title"]
-                raw_task.description = article["summary"]
-                raw_task.create_date = article["createdAt"]
-                raw_task.type = article["category"]["name"]
-                raw_task.content = self.convert_to_markdown(article["content"])
+                raw_task.Link = link
+                raw_task.Title = article["title"]
+                raw_task.Description = article["summary"]
+                raw_task.CreateDate = article["createdAt"]
+                raw_task.Type = article["category"]["name"]
+                raw_task.Content = self.convert_to_markdown(article["content"])
                 
                 raw_tasks.append(raw_task)
             except Exception as e:
