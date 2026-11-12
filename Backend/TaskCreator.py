@@ -2,7 +2,8 @@ import os
 import traceback
 from datetime import datetime
 
-from Backend.Regulation.Task import RawTask, ExtractedTask
+from Backend.Regulation.RawTask import RawTask
+from Backend.Regulation.ExtractedTask import ExtractedTask
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
@@ -23,10 +24,10 @@ class TaskCreator():
         self.crawlers: dict[str, BaseCrawler] = {
             "Portal": PortalCrawler(),
             "Moodle": MoodleCrawler(),
-            "FIT": FITCrawler(),
-            "HCMUS": HCMUSCrawler(),
-            "OSA": OSACrawler(),
-            "FB": FBCrawler()
+            "Faculty of Information Technology": FITCrawler(),
+            "Ho Chi Minh City University of Science": HCMUSCrawler(),
+            "Phòng Công tác sinh viên": OSACrawler(),
+            "Facebook": FBCrawler()
         }
     
     def crawl_raw_tasks(self):
@@ -46,10 +47,10 @@ class TaskCreator():
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
         for task in raw_tasks:
-            # If the task is from a platform other than Portal or Moodle, use the Parser to extract structured information
+            # Use the Parser to extract structured information (not needed for Portal and Moodle)
             if task.platform not in ("Portal", "Moodle"):
                 if (extracted_task := Parser.parse(task)):
-                    extracted_tasks.append(extracted_task)
+                    extracted_tasks.extend(extracted_task)
             else:
                 extracted_tasks.append(ExtractedTask.from_raw_task(task))
         return extracted_tasks

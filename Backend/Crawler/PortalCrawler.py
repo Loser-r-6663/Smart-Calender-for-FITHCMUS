@@ -1,7 +1,22 @@
-from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
-from dotenv import load_dotenv
 import os
+from datetime import datetime
+from dotenv import load_dotenv
+
+from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
+from Backend.Regulation.ExtractedTask import Location, DayTime
+from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
+
+
+get_location = lambda v: Location(room=v)
+def get_daytime(v: str):
+    if not v: return (None, None)
+    day, time_range = v.split(" ")
+    start_time, end_time = time_range.split("-")
+    
+    start_time = datetime.strptime(start_time, "%H:%M").time()
+    end_time = datetime.strptime(end_time, "%H:%M").time()
+    
+    return DayTime(day=day, time_=start_time), DayTime(day=day, time_=end_time)
 
 
 class PortalCrawler(PlaywrightCrawler):
@@ -62,9 +77,10 @@ class PortalCrawler(PlaywrightCrawler):
                 title=title,
                 type="class",
                 description="Lý Thuyết",
-                duration=dur_loc(row["Lịch LT"])[0],
+                start_time=get_daytime(dur_loc(row["Lịch LT"])[0])[0],
+                end_time=get_daytime(dur_loc(row["Lịch LT"])[0])[1],
                 course=course,
-                location=dur_loc(row["Lịch LT"])[1],
+                location=get_location(dur_loc(row["Lịch LT"])[1]),
                 link=self.home_url
             )
             raw_tasks.append(raw_task)
@@ -74,9 +90,10 @@ class PortalCrawler(PlaywrightCrawler):
                     title=title,
                     type="class",
                     description="Thực Hành",
-                    duration=dur_loc(row["Lịch TH"])[0],
+                    start_time=get_daytime(dur_loc(row["Lịch TH"])[0])[0],
+                    end_time=get_daytime(dur_loc(row["Lịch TH"])[0])[1],
                     course=course,
-                    location=dur_loc(row["Lịch TH"])[1],
+                    location=get_location(dur_loc(row["Lịch TH"])[1]),
                     link=self.home_url
                 )
                 raw_tasks.append(raw_task)

@@ -1,40 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
 from datetime import datetime
 from typing import Literal
 
-
-class BaseTask(BaseModel):
-    def update(self, **kwargs):
-        """Update the attributes of the RawTask instance with the provided keyword arguments."""
-        for key, value in kwargs.items():
-            if key in self.model_fields: setattr(self, key, value)
-        return self
-    
-    def __repr__(self):
-        def format_value(v):
-            if isinstance(v, datetime):
-                return f"'{v:%Y-%m-%d %H:%M:%S}'"
-            return repr(v)
-        
-        fields = "\n".join(f"\t{k}: {format_value(v)}" for k, v in self)
-        return f"\n{self.__class__.__name__}(\n{fields}\n)"
-    
-    __str__ = __repr__
-
-
-class RawTask(BaseTask):
-    title: str | None = None            # Title of the post
-    type: str | None = None             # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
-    description: str | None = None      # Description or brief summary of the post
-    create_date: str | None = None      # Creation date of the post
-    duration: str | None = None         # Duration of the task or event
-    deadline: datetime | None = None    # Assignment deadline
-    course: str | None = None           # Course associated with the post
-    location: str | None = None         # Location of the event or task
-    content: str | None = None          # Full content of the post
-    link: str | None = None             # Link to the original post
-    platform: str | None = None         # Platform from which the post was crawled
-    updated_at: datetime | None = None  # Timestamp of when the data was extracted
+from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DayTime
+from Backend.Regulation.RawTask import RawTask
 
 
 class ExtractedTask(BaseTask):
@@ -52,13 +21,13 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Tóm tắt ngắn gọn 1-3 câu nội dung chính của thông báo"
     )
-    target_audience: str | None = Field(
+    target_audience: TargetAudience | None = Field(
         default=None,
-        description="Đối tượng áp dụng hoặc tham gia có dạng: năm học, chương trình, khoa (ví dụ: 'năm 1, chương trình Đề án, khoa CNTT')"
+        description="Đối tượng áp dụng hoặc tham gia gồm các key cố định: year (năm học/khóa), program (chương trình), faculty (khoa/ngành), other (đối tượng khác)"
     )
-    location: str | None = Field(
+    location: Location | None = Field(
         default=None,
-        description="Địa điểm diễn ra sự kiện có dạng: phòng, cơ sở (ví dụ: 'giảng đường 1, cơ sở Nguyễn Văn Cừ', 'C.32, cơ sở 2')"
+        description="Địa điểm diễn ra sự kiện hoặc buổi học gồm các key cố định: room (phòng/hội trường/nền tảng online), campus (cơ sở), detail (chi tiết địa chỉ)"
     )
     registration_start: datetime | None = Field(
         default=None,
@@ -68,13 +37,13 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Thời gian đóng cổng đăng ký"
     )
-    start_time: datetime | None = Field(
+    start_time: datetime | DayTime | None = Field(
         default=None,
-        description="Thời gian bắt đầu diễn ra sự kiện/buổi học"
+        description="Thời gian bắt đầu diễn ra sự kiện/buổi học, có thể là ngày giờ cụ thể hoặc là thứ và khung giờ (lặp lại hàng tuần)"
     )
-    end_time: datetime | None = Field(
+    end_time: datetime | DayTime | None = Field(
         default=None,
-        description="Thời gian kết thúc sự kiện/buổi học"
+        description="Thời gian kết thúc sự kiện/buổi học, có thể là ngày giờ cụ thể hoặc là thứ và khung giờ (lặp lại hàng tuần)"
     )
     deadline: datetime | None = Field(
         default=None,
@@ -92,10 +61,6 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Ước tính số giờ cần thiết để tham gia hoặc hoàn thành (ví dụ: 2.0)"
     )
-    duration: str | None = Field(
-        default=None,
-        description="Thời lượng diễn ra sự kiện hoặc buổi học lặp lại hàng tuần (ví dụ: T4 14:00-16:00, T6 08:00-10:00)"
-    )
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )
@@ -106,23 +71,33 @@ class ExtractedTask(BaseTask):
         description="Thời điểm trích xuất dữ liệu này"
     )
     
-    def from_raw_task(raw_task: RawTask) -> "ExtractedTask":
+    @classmethod
+    def from_raw_task(cls, raw_task: RawTask) -> "ExtractedTask":
         """Create an ExtractedTask instance from a RawTask instance."""
-        return ExtractedTask(
+        location_obj = None
+        if raw_task.location:
+            if isinstance(raw_task.location, Location):
+                location_obj = raw_task.location
+            elif isinstance(raw_task.location, dict):
+                location_obj = Location(**raw_task.location)
+            else:
+                location_obj = Location(room=str(raw_task.location))
+        
+        return cls(
             title=raw_task.title or "",
             type=raw_task.type or "class",
             course=raw_task.course,
             description=raw_task.description,
             target_audience=None,
-            location=raw_task.location,
+            location=location_obj,
             registration_start=None,
             registration_end=None,
-            start_time=None,
-            end_time=None,
+            start_time=raw_task.start_time,
+            end_time=raw_task.end_time,
             deadline=raw_task.deadline,
             training_points=None,
             training_point_category=None,
-            duration=raw_task.duration,
+            estimated_hours=None,
             source_url=raw_task.link or "",
             source_platform=raw_task.platform or "Portal",
             updated_at=raw_task.updated_at or datetime.now()

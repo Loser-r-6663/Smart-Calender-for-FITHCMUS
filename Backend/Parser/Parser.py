@@ -6,13 +6,18 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
 
-from Backend.Regulation.Task import RawTask, ExtractedTask
+from Backend.Regulation.RawTask import RawTask
+from Backend.Regulation.ExtractedTask import ExtractedTask
 
 
 class LLMParser:
     def __init__(self):
         load_dotenv()
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+            api_key = os.getenv("GEMINI_API_KEY")
+        self.client = genai.Client(api_key=api_key)
         self.config = types.GenerateContentConfig(
             system_instruction=(
                 "Bạn là trợ lý thông minh chuyên trích xuất dữ liệu từ các thông báo của trường đại học Khoa học tự nhiên. "
@@ -20,7 +25,7 @@ class LLMParser:
                 "Chỉ trích xuất các thông tin có bằng chứng rõ ràng trong văn bản, không tự suy diễn."
             ),
             response_mime_type="application/json",
-            response_schema=ExtractedTask,
+            response_schema=list[ExtractedTask],
         )
     
     @staticmethod
@@ -38,12 +43,12 @@ class LLMParser:
                 print(f"⚠️ Lỗi {exc.code}, thử lại lần {attempt + 1}/{max_retries} sau {delay:.1f}s...")
                 time.sleep(delay)
     
-    def parse(self, raw_task: RawTask, max_retries = 5) -> ExtractedTask:
+    def parse(self, raw_task: RawTask, max_retries = 5) -> list[ExtractedTask]:
         """Parse the raw task content and extract structured information."""
         response = self.retry_request(
             lambda: self.client.models.generate_content(
                 model="gemini-3.5-flash-lite",
-                contents=f"Trích xuất thông tin từ bài viết sau:\n{raw_task!r}",
+                contents=f"Trích xuất thông tin sự kiện từ bài viết sau, một bài viết có thể có một hoặc nhiều sự kiện:\n{raw_task!r}",
                 config=self.config
             ).parsed,
             max_retries=max_retries
