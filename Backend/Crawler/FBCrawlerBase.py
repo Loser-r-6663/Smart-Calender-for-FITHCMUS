@@ -1,8 +1,9 @@
+import os
+from dotenv import load_dotenv
+from urllib.parse import urlparse, urljoin
+
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
-from urllib.parse import urlparse, urljoin
-from dotenv import load_dotenv
-import os
 
 LOGIN_NOTIFICATION = 'xpath=//div[contains(@aria-label,"Log in to Facebook")]'
 POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[not(@class)]/div'
@@ -15,6 +16,8 @@ LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href,
 
 
 class FBCrawler(PlaywrightCrawler):
+    is_valid = False
+    
     def __init__(self, history_file=None, home_url=None, crawl_limit=10):
         self.state_file = "Backend/Crawler/State/FBState.json"
         self.history_file = history_file
@@ -27,7 +30,9 @@ class FBCrawler(PlaywrightCrawler):
         
         settings = {"headless": True, "storage_state": self.state_file}
         try:
-            self.login(settings)
+            if not FBCrawler.is_valid:
+                self.login(settings)
+                FBCrawler.is_valid = True
             return True, settings
         except ConnectionError:
             return False, {"headless": False, "storage_state": self.state_file}
@@ -37,7 +42,7 @@ class FBCrawler(PlaywrightCrawler):
         
         # Initialize login checking variable
         try:
-            page.wait_for_selector(LOGIN_NOTIFICATION,state='visible',timeout=1000)
+            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
         except Exception as e:
             browser.close()
             return
@@ -68,98 +73,59 @@ class FBCrawler(PlaywrightCrawler):
         
         raw_tasks: list[RawTask] = []
         for post_crawled in range(1, self.crawl_limit + 1):
-            
-            # Define xpath to current post
-            current_post_xpath = f'{POST_SELECTOR}[{post_crawled}][node() and not(@class)]'
-            
-            # Check final post
-            if page.locator(current_post_xpath).count() == 0:
-                # Try scrolling down to see if Facebook loads more posts
-                page.evaluate("window.scrollBy(0, 800);")
-                page.wait_for_timeout(2000)
-                if page.locator(current_post_xpath).count() == 0:
-                    break
-            
             try:
                 # Define raw task
                 raw_task = RawTask()
                 
                 # Get post
-                post = page.locator(current_post_xpath)
-                post.scroll_into_view_if_needed()
+                post = page.locator(f'{POST_SELECTOR}[{post_crawled}][node() and not(@class)]')
+                if post.count() > 0:
+                    post.scroll_into_view_if_needed()
+                else: break
                 
-                # Get specific crawl zone in a post since html structure very complicated
+                # Get specific crawl zone in a post and content container
                 post_crawl_zone = post.locator(POST_CRAWL_ZONE_SELECTOR)
-                post_crawl_zone.scroll_into_view_if_needed()
-                if post_crawl_zone.count() == 0:
-                    raise Exception(f"Unable to find post crawl zone for post no.{post_crawled}")
-                
-                # Content container div tag
                 content_container = post_crawl_zone.locator(CONTENT_CONTAINER_SELECTOR).nth(0)
                 content_container.scroll_into_view_if_needed()
-                if content_container.count() == 0:
-                    raise Exception(f"Unable to find content container for post no.{post_crawled}")
+                
+                # Find link
+                if (link_element := post_crawl_zone.locator(HREF_SELECTOR)).count() == 0:
+                    link_element = post_crawl_zone.locator(LINK_ELEMENT_SELECTOR) # NOTE: Fallback and do second try (will mostly fail)
+                
+                # Get target link
+                target_link = link_element.first
+                target_link.hover() # NOTE: The <a> tag that holds the post link has a unique mechanic. Only when you hover the mouse on the time area of the post, does the post link appear in the href attribute. If not, the href attribute would just contain a chaotic string of characters
+                href = target_link.get_attribute("href")
+                
+                # Clean the post link
+                full_url = urljoin(self.home_url, href)
+                parsed_url = urlparse(full_url)
+                clean_link = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+                
+                # Keep the 'fbid' query parameter if it is a special type of image/video link.
+                if "fbid" in parsed_url.query:
+                    clean_link += '?' + parsed_url.query
+                
+                raw_task.link = clean_link.rstrip('/')
+                
+                # Check if the post has already been scraped during the previous scraping session
+                if raw_task.link == self.last_post: break
                 
                 # Handle "read more button"
                 read_more_button = content_container.locator(READ_MORE_BUTTON_SELECTOR)
                 if read_more_button.count() > 0:
-                    read_more_button.first.scroll_into_view_if_needed()
                     read_more_button.first.click()
-                    page.wait_for_timeout(1000)
                 
                 # Get content
                 raw_task.content = self.convert_to_markdown(content_container.inner_html())
                 
-                # Get time element container (it holds the link and time of the post)
+                # Get time
                 time_element_container = post_crawl_zone.locator(TIME_ELEMENT_CONTAINER_SELECTOR)
-                time_element_container.scroll_into_view_if_needed()
-                
-                if time_element_container.count() > 0:
-                    
-                    # Get time
-                    raw_task.create_date = time_element_container.inner_text()
-                    
-                    # Find <a> tag(s)
-                    link_element = post_crawl_zone.locator(HREF_SELECTOR)
-                    
-                    if link_element.count() == 0:
-                        # NOTE: Fallback and do second try (will mostly fail)
-                        link_element = post_crawl_zone.locator(LINK_ELEMENT_SELECTOR)
-                    
-                    if link_element.count() > 0:
-                        
-                        # Get target link (may have many <a> tags but the first one shall hold the post link)
-                        target_link = link_element.first
-                        
-                        # The <a> tag that holds the post link has a unique mechanic. Only when you hover the mouse on the time area of the post, does the post link appear in the href attribute. If not, the href attribute would just contain a chaotic string of characters
-                        target_link.scroll_into_view_if_needed()
-                        target_link.hover()
-                        
-                        # Get the attribute (href)
-                        href = target_link.get_attribute("href")
-                        
-                        if href:
-                            # Clean the post link
-                            full_url = urljoin(self.home_url, href)
-                            parsed_url = urlparse(full_url)
-                            clean_link = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
-                            
-                            # Keep the 'fbid' query parameter if it is a special type of image/video link.
-                            if parsed_url.query and ("fbid" in parsed_url.query or "story_fbid" in parsed_url.query):
-                                clean_link = f"{clean_link}?{parsed_url.query}"
-                            
-                            raw_task.link = clean_link.rstrip('/')
-                    else:
-                        raise Exception(f"Unable to find link for post no.{post_crawled}")
-                else:
-                    raise Exception(f"Unable to find time container for post no.{post_crawled}")
-                
-                # Check if the post has already been scraped during the previous scraping session
-                if self.last_post and raw_task.link == self.last_post: break
+                raw_task.create_date = time_element_container.inner_text()
                 
                 # Add to result
                 raw_tasks.append(raw_task)
             except Exception as e:
-                print(f"Post no.{post_crawled}: {e}")
+                print(f"Error when parsing post {post_crawled} on FIT homepage: {e}")
         
         return raw_tasks[::-1]

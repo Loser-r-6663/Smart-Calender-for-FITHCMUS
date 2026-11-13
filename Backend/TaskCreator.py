@@ -5,7 +5,6 @@ from datetime import datetime
 from Backend.Regulation.RawTask import RawTask
 from Backend.Regulation.ExtractedTask import ExtractedTask
 
-from Backend.Regulation.RawTask import RawTask
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
 from Backend.Crawler.MoodleCrawler import MoodleCrawler
@@ -57,8 +56,12 @@ class TaskCreator():
         for task in raw_tasks:
             # Use the Parser to extract structured information (not needed for Portal and Moodle)
             if task.platform not in ("Portal", "Moodle"):
-                if (extracted_task := Parser.parse(task)):
-                    extracted_tasks.extend(extracted_task)
+                for extracted_task in Parser.parse(task):
+                    if extracted_task: extracted_tasks.append(extracted_task.update(
+                        link=task.link,
+                        platform=task.platform,
+                        updated_at=task.updated_at
+                    ))
             else:
                 extracted_tasks.append(ExtractedTask.from_raw_task(task))
         return extracted_tasks
