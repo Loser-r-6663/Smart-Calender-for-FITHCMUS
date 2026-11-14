@@ -81,7 +81,7 @@ class ExtractedTask(BaseModel):
     end_time: datetime | None = None
     deadline: datetime | None = None
     estimated_hours: float | None = None
-    training_points: int | None = None
+    training_points: int | None = Field(default=None, ge=0, le=25) # Capped max training point to 25, which is the same as the official mapping according to STSV
     drl_category: DRLCategoryValue | None = None
     recurrence: str | None = None
 
