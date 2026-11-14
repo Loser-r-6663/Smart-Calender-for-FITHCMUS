@@ -58,6 +58,7 @@ class MoodleCrawler(PlaywrightCrawler):
                     continue
                 
                 raw_task.link = link
+                raw_task.type = "assignment"
                 raw_task.title = content.locator('h5.event-name > a').get_attribute('title')
                 
                 due_time = content.locator('small.text-end').inner_text()

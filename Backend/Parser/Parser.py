@@ -39,8 +39,9 @@ class LLMParser:
                 if exc.code not in (429, 503) or attempt == max_retries:
                     traceback.print_exc()
                 
+                attempt += 1
                 delay = min(2 ** attempt, 32) + random.uniform(0, 1)
-                print(f"⚠️ Lỗi {exc.code}, thử lại lần {attempt + 1}/{max_retries} sau {delay:.1f}s...")
+                print(f"⚠️ Lỗi {exc.code}, thử lại lần {attempt}/{max_retries} sau {delay:.1f}s...")
                 time.sleep(delay)
     
     def parse(self, raw_task: RawTask, max_retries = 5) -> list[ExtractedTask]:

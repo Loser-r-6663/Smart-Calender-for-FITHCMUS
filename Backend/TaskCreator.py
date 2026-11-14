@@ -70,4 +70,4 @@ class TaskCreator():
         """Create structured data from website data"""
         raw_tasks = self.crawl_raw_tasks()
         extracted_tasks = self.parse_tasks(raw_tasks)
-        print(extracted_tasks, file=open("ExtractedTasks.txt", "w", encoding="utf-8"))
+        return extracted_tasks

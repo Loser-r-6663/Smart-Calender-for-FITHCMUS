@@ -23,7 +23,7 @@ class ExtractedTask(BaseTask):
     )
     target_audience: TargetAudience | None = Field(
         default=None,
-        description="Đối tượng áp dụng hoặc tham gia gồm các key cố định: year (năm học/khóa), program (chương trình), faculty (khoa/ngành), other (đối tượng khác)"
+        description="Đối tượng áp dụng hoặc tham gia gồm các key cố định: year (năm học/khóa), program (chương trình), faculty (khoa/ngành), other (đối tượng khác). Nếu không đề cập thì để None"
     )
     location: Location | None = Field(
         default=None,
@@ -51,7 +51,7 @@ class ExtractedTask(BaseTask):
     )
     training_points: int | None = Field(
         default=None,
-        description="Số điểm rèn luyện (ĐRL) sinh viên nhận được nếu tham gia (ví dụ: 5, 10). Nếu không đề cập thì để null"
+        description="Số điểm rèn luyện (ĐRL) sinh viên nhận được nếu tham gia (ví dụ: 5, 10). Nếu không đề cập thì để None"
     )
     training_point_category: Literal["articles 1", "articles 2", "articles 3", "articles 4", "articles 5"] | None = Field(
         default=None,
