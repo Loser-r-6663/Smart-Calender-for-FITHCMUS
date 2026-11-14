@@ -140,6 +140,13 @@ def _normalize_recurrence(value: str | None) -> str | None:
     return f"{weekday.upper()} {start_hour.zfill(2)}:{start_minute}-{end_hour.zfill(2)}:{end_minute}"
 
 
+def _estimated_hours(start: datetime | None, end: datetime | None) -> float | None:
+    if start is None or end is None or end <= start:
+        return None
+    hours = (end - start).total_seconds() / 3600
+    return hours if 0.25 <= hours <= 40.0 else None
+
+
 def _portal_course(
     record: Mapping[str, Any] | None,
     title: str | None,
@@ -226,7 +233,6 @@ class LLMExtractor:
                 "end_time", "deadline",
             ):
                 data[field] = getattr(item, field, None)
-            data["estimated_hours"] = item.estimated_hours
             points = item.training_points
             if portal or points is None or points <= 0 or data["drl_category"] is None:
                 data["training_points"] = 0
@@ -266,6 +272,10 @@ class LLMExtractor:
                         raise ProviderSchemaError(
                             "LLM provider returned an invalid datetime"
                         ) from exc
+
+            data["estimated_hours"] = _estimated_hours(
+                data["start_time"], data["end_time"]
+            )
 
             result.append(
                 TaskCandidate(

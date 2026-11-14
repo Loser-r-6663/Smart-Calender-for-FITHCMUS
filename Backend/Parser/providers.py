@@ -12,7 +12,14 @@ from typing import Any, Callable, Literal, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .errors import (
     ConfigurationError,
@@ -84,6 +91,11 @@ class ExtractedTask(BaseModel):
     training_points: int | None = Field(default=None, ge=0, le=25) # Capped max training point to 25, which is the same as the official mapping according to STSV
     drl_category: DRLCategoryValue | None = None
     recurrence: str | None = None
+
+    @field_validator("estimated_hours", mode="before")
+    @classmethod
+    def ignore_estimated_hours(cls, value: Any) -> None:
+        return None
 
     @model_validator(mode="before")
     @classmethod
