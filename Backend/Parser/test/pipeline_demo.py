@@ -19,8 +19,6 @@ from Backend.Parser import (
     ParserManager,
     PipelineStage,
     RawCrawlerInput,
-    RawDedupAction,
-    RawDedupReason,
     StageStatus,
     UNKNOWN_DEADLINE,
 )
@@ -67,12 +65,10 @@ _FIELD = re.compile(r"^[ \t]*([A-Za-z_]\w*)[ \t]*:[ \t]*(.*)$")
 _STAGE_LABELS = {
     PipelineStage.ADAPT: "crawler adaptation",
     PipelineStage.API_HEALTH: "database API health check",
-    PipelineStage.DUPLICATE: "deduplication (canonical URL + SHA-256)",
     PipelineStage.PARSE: "AI extraction + provider schema validation",
     PipelineStage.CANDIDATE_DEDUP: "candidate deduplication",
     PipelineStage.PREPARE: "database payload preparation",
     PipelineStage.SEND: "database validation + persistence",
-    PipelineStage.REMEMBER: "fingerprint remembrance",
 }
 
 
@@ -152,27 +148,6 @@ class LoggingParserManager(ParserManager):
                             f"event=CANDIDATE_DUPLICATES removed={removed} kept={kept}",
                             _Ansi.BRIGHT_YELLOW,
                         ),
-                    )
-            if stage is PipelineStage.DUPLICATE and result.status is StageStatus.SUCCESS:
-                dedup = result.output
-                if (
-                    dedup.action is RawDedupAction.SKIP
-                    and dedup.reason in {
-                        RawDedupReason.UNCHANGED_URL,
-                        RawDedupReason.DUPLICATE_CONTENT,
-                    }
-                ):
-                    LOGGER.info(
-                        "%s",
-                        _color(
-                            f"event=RAW_DUPLICATE_SKIP reason={dedup.reason.name}",
-                            _Ansi.BRIGHT_YELLOW,
-                        ),
-                    )
-                elif dedup.reason is RawDedupReason.CHANGED_URL_CONTENT:
-                    LOGGER.info(
-                        "%s",
-                        _color("event=CHANGED_URL_CONTENT action=REPROCESS", _Ansi.CYAN),
                     )
             if stage is PipelineStage.SEND and result.status is StageStatus.SUCCESS:
                 task_id = value.get("id", "?") if isinstance(value, dict) else "?"
