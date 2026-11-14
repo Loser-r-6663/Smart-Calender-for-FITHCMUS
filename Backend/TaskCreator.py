@@ -55,15 +55,15 @@ class TaskCreator():
         extracted_tasks: list[ExtractedTask] = []
         for task in raw_tasks:
             # Use the Parser to extract structured information (not needed for Portal and Moodle)
-            if task.platform not in ("Portal", "Moodle"):
+            if task.platform == "Portal":
+                extracted_tasks.append(ExtractedTask.from_raw_task(task))
+            else:
                 for extracted_task in Parser.parse(task):
                     if extracted_task: extracted_tasks.append(extracted_task.update(
                         link=task.link,
                         platform=task.platform,
                         updated_at=task.updated_at
                     ))
-            else:
-                extracted_tasks.append(ExtractedTask.from_raw_task(task))
         return extracted_tasks
     
     def create_task(self):

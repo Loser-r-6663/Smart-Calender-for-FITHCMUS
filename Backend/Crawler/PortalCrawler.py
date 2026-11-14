@@ -7,7 +7,7 @@ from Backend.Regulation.ExtractedTask import Location, DayTime
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
-get_location = lambda v: Location(room=v)
+get_location = lambda v: Location(room=v, campus="Nguyễn Văn Cừ") if v else None
 def get_daytime(v: str):
     if not v: return (None, None)
     day, time_range = v.split(" ")
@@ -73,27 +73,29 @@ class PortalCrawler(PlaywrightCrawler):
             course = row["Tên MH"]
             
             dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or None, None)
+            duration, location = dur_loc(row["Lịch LT"]); time_range = get_daytime(duration)
             raw_task = RawTask(
                 title=title,
                 type="class",
-                description="Lý Thuyết",
-                start_time=get_daytime(dur_loc(row["Lịch LT"])[0])[0],
-                end_time=get_daytime(dur_loc(row["Lịch LT"])[0])[1],
+                description="Lý Thuyết" if row["Lịch LT"] else None,
+                start_time=time_range[0],
+                end_time=time_range[1],
                 course=course,
-                location=get_location(dur_loc(row["Lịch LT"])[1]),
+                location=get_location(location),
                 link=self.home_url
             )
             raw_tasks.append(raw_task)
             
             if row["Lịch TH"]:
+                duration, location = dur_loc(row["Lịch TH"]); time_range = get_daytime(duration)
                 raw_task = RawTask(
                     title=title,
                     type="class",
                     description="Thực Hành",
-                    start_time=get_daytime(dur_loc(row["Lịch TH"])[0])[0],
-                    end_time=get_daytime(dur_loc(row["Lịch TH"])[0])[1],
+                    start_time=time_range[0],
+                    end_time=time_range[1],
                     course=course,
-                    location=get_location(dur_loc(row["Lịch TH"])[1]),
+                    location=get_location(location),
                     link=self.home_url
                 )
                 raw_tasks.append(raw_task)
