@@ -1,8 +1,10 @@
-"""Run the live crawler-to-parser pipeline."""
+"""Run the live crawler-to-parser-to-scheduler pipeline."""
 
 import logging
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -34,6 +36,25 @@ def _ensure_crawler_runtime_directories() -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
+def _ensure_target_user(client: Any, user_id: int) -> int:
+    """Ensure target user exists in database; if not, create default user."""
+    try:
+        client.get_user(user_id)
+        return user_id
+    except Exception:
+        try:
+            created = client.create_user({
+                "username": f"student_{user_id}",
+                "email": f"student_{user_id}@fit.hcmus.edu.vn",
+                "full_name": f"FIT Student {user_id}",
+            })
+            LOGGER.info("user created id=%s username=%s", created.get("id"), created.get("username"))
+            return int(created.get("id", user_id))
+        except Exception as exc:
+            LOGGER.warning("could not ensure user %d: %s", user_id, _safe_message(exc))
+            return user_id
+
+
 def main() -> int:
     _configure_logging()
     try:
@@ -41,21 +62,27 @@ def main() -> int:
         _ensure_crawler_runtime_directories()
         LOGGER.info("pipeline=start")
 
+        # 1. Initialize Parser & Database Client
         parser = ParserManager.from_env()
+
+        # 2. Crawler Stage
+        LOGGER.info("stage=crawler start")
         creator = TaskCreator()
         crawler_results = creator.crawl_raw_task()
         source_counts = {
             source: len(records) for source, records in crawler_results.items()
         }
         LOGGER.info(
-            "crawler=complete total=%d sources=%s",
+            "stage=crawler complete total=%d sources=%s",
             sum(source_counts.values()),
             source_counts,
         )
 
+        # 3. Parser & Database Persistence Stage
+        LOGGER.info("stage=parser_and_database start")
         batch = parser.process_crawler_results(crawler_results)
         LOGGER.info(
-            "batch processed=%d skipped=%d failed=%d persisted=%d status=%s",
+            "stage=parser_and_database complete processed=%d skipped=%d failed=%d persisted=%d status=%s",
             batch.processed,
             batch.skipped,
             batch.failed,
@@ -73,7 +100,48 @@ def main() -> int:
                     _safe_message(item.error.type),
                     _safe_message(item.error.message),
                 )
-        return 0 if batch.failed == 0 and getattr(batch.status, "value", batch.status) != "failed" else 1
+
+        if batch.failed > 0 or getattr(batch.status, "value", batch.status) == "failed":
+            LOGGER.warning("crawler/parser encountered errors, continuing to scheduler...")
+
+        # 4. Scheduling Stage (Branch and Bound DRL Optimization)
+        target_user_id = int(os.getenv("SCHEDULE_USER_ID", "1"))
+        LOGGER.info("stage=scheduler start user_id=%d", target_user_id)
+        if parser.database_api is not None:
+            resolved_user_id = _ensure_target_user(parser.database_api, target_user_id)
+            try:
+                schedule = parser.database_api.schedule_user(resolved_user_id)
+                LOGGER.info(
+                    "stage=scheduler complete status=%s week=%s..%s tasks_loaded=%d prepared=%d drl_gained=+%d total_drl=%d",
+                    schedule.get("status"),
+                    schedule.get("week_start"),
+                    schedule.get("week_end"),
+                    schedule.get("total_tasks_loaded", 0),
+                    schedule.get("prepared_tasks_count", 0),
+                    schedule.get("total_drl_gained", 0),
+                    schedule.get("final_total_drl", 0),
+                )
+                events = schedule.get("selected_events", [])
+                if events:
+                    print("\n" + "=" * 75)
+                    print(f" OPTIMAL SCHEDULE (User {resolved_user_id}) - Week {schedule.get('week_start')} -> {schedule.get('week_end')}")
+                    print(f" Total DRL Gained: +{schedule.get('total_drl_gained')} | Final DRL: {schedule.get('final_total_drl')} pts")
+                    print(f" Breakdown: {schedule.get('final_drl')}")
+                    print("-" * 75)
+                    for ev in events:
+                        start_str = ev.get("start_time", "")[:16].replace("T", " ")
+                        end_str = ev.get("end_time", "")[11:16]
+                        print(f"  * [{start_str} - {end_str}] {ev.get('title')}")
+                        print(f"    Location: {ev.get('location')} | DRL: +{ev.get('points_gained')} ({ev.get('drl_category')})")
+                    print("=" * 75 + "\n")
+                else:
+                    LOGGER.info("No DRL events selected or no events within the current week window.")
+            except Exception as sched_err:
+                LOGGER.error("stage=scheduler failed: %s: %s", type(sched_err).__name__, _safe_message(sched_err))
+                return 1
+
+        LOGGER.info("pipeline=complete")
+        return 0
     except Exception as exc:
         LOGGER.error("pipeline failed: %s: %s", type(exc).__name__, _safe_message(exc))
         return 1

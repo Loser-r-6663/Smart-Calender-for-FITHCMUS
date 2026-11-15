@@ -136,3 +136,16 @@ class DatabaseApiClient:
 
     def delete_task(self, id: str) -> Any:
         return self._request("DELETE", f"/tasks/{id}")
+
+    def get_user(self, user_id: int) -> Any:
+        return self._request("GET", f"/users/{user_id}")
+
+    def create_user(self, payload: dict[str, Any]) -> Any:
+        return self._request("POST", "/users", payload)
+
+    def schedule_user(
+        self,
+        user_id: int,
+        payload: dict[str, Any] | None = None,
+    ) -> Any:
+        return self._request("POST", f"/users/{user_id}/schedule", payload or {})
