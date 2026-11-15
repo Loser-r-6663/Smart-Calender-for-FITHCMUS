@@ -51,9 +51,10 @@ class PlaywrightCrawler(BaseCrawler):
         headless = settings.get("headless", True)
         storage_state = settings.get("storage_state", self.state_file)
         
+        launch_args = ["--blink-settings=imagesEnabled=false"] if headless else []
         browser = self.crawler.chromium.launch(
             headless=headless,
-            args=["--blink-settings=imagesEnabled=false"]
+            args=launch_args,
         )
         context = browser.new_context(storage_state=storage_state)
         page = context.new_page()
