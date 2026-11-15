@@ -81,10 +81,11 @@ class BranchAndBoundScheduler:
             )
 
         # ---------------------------------------------------------------------
-        # BÀI TOÁN CON 1: TÁCH LỊCH HỌC CỐ ĐỊNH & SỰ KIỆN ĐRL ỨNG VIÊN
+        # BÀI TOÁN CON 1: TÁCH LỊCH HỌC CỐ ĐỊNH, NHIỆM VỤ LINH HOẠT & SỰ KIỆN ĐRL ỨNG VIÊN
         # ---------------------------------------------------------------------
         fixed_intervals: List[Tuple[datetime, datetime, str, str]] = []
         raw_candidates: List[Dict[str, Any]] = []
+        flexible_workloads: List[Dict[str, Any]] = []
 
         for item in tasks:
             task_dict: Dict[str, Any] = item if isinstance(item, dict) else item.__dict__
@@ -112,8 +113,43 @@ class BranchAndBoundScheduler:
                 st = dl - timedelta(minutes=30)
                 et = dl
 
+            # Nếu end_time thiếu nhưng có deadline
+            if et is None and dl is not None:
+                et = dl
+
+            # Assignment chỉ có deadline mà thiếu start_time
+            if st is None and et is not None and task_type == "assignment":
+                st = et - timedelta(hours=24)
+
             if st is None or et is None or st >= et:
                 continue
+
+            # Nhận diện task có thời gian làm linh hoạt:
+            # Chênh lệch giữa end/deadline và start >= 3.5h đối với assignment hoặc event online
+            is_online = (location == "ONLINE" or (loc_raw and "online" in str(loc_raw).lower()))
+            effective_end = dl or et
+            window_delta_hours = (effective_end - st).total_seconds() / 3600.0
+
+            if window_delta_hours >= 3.5 and (task_type == "assignment" or is_online):
+                raw_est = task_dict.get("estimated_hours")
+                if raw_est and float(raw_est) > 0:
+                    est_h = float(raw_est)
+                elif task_type == "assignment":
+                    est_h = 3.5
+                else:
+                    est_h = 0.5
+
+                flexible_workloads.append({
+                    "id": task_id,
+                    "title": title,
+                    "start_time": st,
+                    "end_time": effective_end,
+                    "estimated_hours": est_h,
+                })
+
+                # Task linh hoạt không có điểm ĐRL thì không đưa vào fixed_intervals (tránh chiếm khối bận lớn)
+                if t_points == 0:
+                    continue
 
             # Phân loại
             if task_type in FIXED_TASK_TYPES or t_points == 0:
@@ -130,6 +166,49 @@ class BranchAndBoundScheduler:
                     "training_points": t_points,
                     "drl_category": drl_cat,
                 })
+
+        # Hàm kiểm tra quỹ thời gian rảnh đủ để thực hiện các task linh hoạt
+        def is_workload_feasible(selected_events_list: List[Dict[str, Any]]) -> bool:
+            if not flexible_workloads:
+                return True
+
+            for wl in flexible_workloads:
+                w_st = wl["start_time"]
+                w_et = wl["end_time"]
+
+                total_window_hours = max(0.0, (w_et - w_st).total_seconds() / 3600.0)
+
+                # Tổng số giờ cần cho tất cả các task linh hoạt hoạt động trong cửa sổ này
+                needed_hours = 0.0
+                for o_wl in flexible_workloads:
+                    if not (o_wl["end_time"] <= w_st or o_wl["start_time"] >= w_et):
+                        needed_hours += o_wl["estimated_hours"]
+
+                # Thời gian bận bởi lịch cố định
+                busy_fixed = 0.0
+                for f_st, f_et, _, _ in fixed_intervals:
+                    overlap_st = max(w_st, f_st)
+                    overlap_et = min(w_et, f_et)
+                    if overlap_et > overlap_st:
+                        busy_fixed += (overlap_et - overlap_st).total_seconds() / 3600.0
+
+                base_free_hours = total_window_hours - busy_fixed
+                slack = max(0.0, base_free_hours - needed_hours)
+
+                # Thời gian bận bởi các sự kiện ĐRL được chọn trong cửa sổ này
+                busy_drl = 0.0
+                for ev in selected_events_list:
+                    e_st = ev["start_time"]
+                    e_et = ev["end_time"]
+                    overlap_st = max(w_st, e_st)
+                    overlap_et = min(w_et, e_et)
+                    if overlap_et > overlap_st:
+                        busy_drl += (overlap_et - overlap_st).total_seconds() / 3600.0
+
+                if busy_drl > slack:
+                    return False
+
+            return True
 
         # ---------------------------------------------------------------------
         # BÀI TOÁN CON 2: LỌC SƠ BỘ KHẢ THI (FEASIBILITY FILTERING)
@@ -216,6 +295,10 @@ class BranchAndBoundScheduler:
         for ev in feasible_events:
             tr = get_travel_buffer_minutes(last_loc_greedy, ev["location"], self.campus_travel_minutes) if last_end_greedy else 0
             if last_end_greedy is None or ev["start_time"] >= last_end_greedy + timedelta(minutes=tr):
+                cand_selection = [e for e, _ in best_selection] + [ev]
+                if not is_workload_feasible(cand_selection):
+                    continue
+
                 cat = ev["drl_category"]
                 cat_gap = self.drl_caps[cat] - greedy_pts[cat]
                 if self.global_cap is not None:
@@ -294,6 +377,11 @@ class BranchAndBoundScheduler:
 
                 gain = min(ev["training_points"], cat_gap)
                 if gain <= 0:
+                    continue
+
+                # Kiểm tra quỹ thời gian rảnh cho bài tập / quiz linh hoạt trước khi phân nhánh
+                cand_selection = [e for e, _ in current_selected] + [ev]
+                if not is_workload_feasible(cand_selection):
                     continue
 
                 # Nhảy cóc O(1) đến sự kiện tiếp theo không xung đột

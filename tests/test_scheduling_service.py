@@ -314,6 +314,56 @@ class SchedulingServiceTests(unittest.TestCase):
         self.assertEqual(override_res.schedule.total_drl_gained, 8)
         self.assertEqual(override_res.schedule.final_drl["dieu_1"], 28)
 
+    def test_flexible_workload_reserves_study_slack(self) -> None:
+        from Backend.Scheduling.branch_and_bound_scheduler import BranchAndBoundScheduler
+
+        scheduler = BranchAndBoundScheduler()
+        tasks = [
+            {
+                "id": "class-morning",
+                "title": "Lop hoc buoi sang",
+                "type": "class",
+                "start_time": datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 10, 0, tzinfo=GMT_PLUS_7),
+                "training_points": 0,
+            },
+            # Assignment window 08:00 - 13:00 (5h), needs 2.5h
+            {
+                "id": "assign-due-13",
+                "title": "Bai tap can nop 13h",
+                "type": "assignment",
+                "start_time": datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                "deadline": datetime(2026, 11, 9, 13, 0, tzinfo=GMT_PLUS_7),
+                "estimated_hours": 2.5,
+                "training_points": 0,
+            },
+            # Workshop A: 10:30 - 12:30 (2h overlap > 0.5h slack) -> must be pruned
+            {
+                "id": "ws-A",
+                "title": "Workshop A (Chiem het gio lam bai)",
+                "type": "event",
+                "start_time": datetime(2026, 11, 9, 10, 30, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 12, 30, tzinfo=GMT_PLUS_7),
+                "training_points": 10,
+                "drl_category": "dieu_3",
+            },
+            # Workshop B: 14:00 - 16:00 (outside window) -> can be selected
+            {
+                "id": "ws-B",
+                "title": "Workshop B (Sau deadline)",
+                "type": "event",
+                "start_time": datetime(2026, 11, 9, 14, 0, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 16, 0, tzinfo=GMT_PLUS_7),
+                "training_points": 8,
+                "drl_category": "dieu_3",
+            },
+        ]
+        res = scheduler.schedule(tasks)
+        selected_ids = [ev.task_id for ev in res.selected_events]
+        self.assertNotIn("ws-A", selected_ids)
+        self.assertIn("ws-B", selected_ids)
+        self.assertEqual(res.total_drl_gained, 8)
+
 
 if __name__ == "__main__":
     unittest.main()

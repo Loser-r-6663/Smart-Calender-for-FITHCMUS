@@ -166,8 +166,12 @@ def _effective_interval(data: Mapping[str, Any]) -> tuple[datetime, datetime] | 
 
     dl = data.get("deadline")
     t_points = int(data.get("training_points") or 0)
-    if st is None and et is None and isinstance(dl, datetime) and t_points > 0:
-        return dl - timedelta(minutes=30), dl
+    task_type = str(data.get("type") or "").lower()
+    if st is None and et is None and isinstance(dl, datetime):
+        if t_points > 0:
+            return dl - timedelta(minutes=30), dl
+        if task_type == "assignment":
+            return dl - timedelta(hours=24), dl
     return None
 
 
@@ -183,7 +187,7 @@ def _should_keep_task(
 
     task_type = str(data.get("type") or "").lower()
     training_points = int(data.get("training_points") or 0)
-    if task_type in FIXED_TASK_TYPES or training_points > 0:
+    if task_type in FIXED_TASK_TYPES or task_type == "assignment" or training_points > 0:
         return True
 
     if include_unassigned_zero_point_events or bool(data.get("is_manual")):
