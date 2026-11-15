@@ -158,6 +158,12 @@ def _effective_interval(data: Mapping[str, Any]) -> tuple[datetime, datetime] | 
     if isinstance(st, datetime) and isinstance(et, datetime) and st < et:
         return st, et
 
+    # If start_time is present but end_time is missing for a point-bearing event,
+    # assume a standard duration (default 2 hours or estimated_hours if set)
+    if isinstance(st, datetime) and et is None:
+        duration_hours = float(data.get("estimated_hours") or 2.0)
+        return st, st + timedelta(hours=duration_hours)
+
     dl = data.get("deadline")
     t_points = int(data.get("training_points") or 0)
     if st is None and et is None and isinstance(dl, datetime) and t_points > 0:
@@ -263,7 +269,11 @@ def prepare_tasks_for_scheduler(
             if not (eff_end > win_start_dt and eff_start < win_end_dt):
                 continue
 
-        prepared.append(data)
+        task_entry = dict(data)
+        eff_start, eff_end = interval
+        task_entry["start_time"] = eff_start
+        task_entry["end_time"] = eff_end
+        prepared.append(task_entry)
 
     return prepared
 
