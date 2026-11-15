@@ -7,6 +7,9 @@ from Backend.Regulation.RawTask import RawTask
 
 
 class ExtractedTask(BaseTask):
+    id: str | None = Field(
+        default=None
+    )
     title: str = Field(
         description="Tiêu đề chính xác, ngắn gọn và rõ ràng của nhiệm vụ, sự kiện hoặc thông báo"
     )

@@ -147,6 +147,20 @@ class Database():
         response.raise_for_status()
         return response
     
+    def delete_tasks(self, tasks: list[ExtractedTask]):
+        ids = [task.id for task in tasks if task.id is not None]
+        if not ids: return
+        
+        response = requests.delete(
+            self.TABLE_URL,
+            params={"id": f"in.({','.join(ids)})"},
+            headers=self.HEADERS,
+            timeout=30
+        )
+        
+        response.raise_for_status()
+        return response
+    
     def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
         response = requests.get(
             self.TABLE_URL,

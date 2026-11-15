@@ -1,10 +1,11 @@
 import unicodedata
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 
 from Backend.Regulation.ExtractedTask import ExtractedTask
 
 
-class Validation:
+class Validator:
     '''Class to deduplicate ExtractedTask instances based on specific criteria.'''
     def __init__(self):
         self.TEXT_SIMILARITY_THRESHOLD = 0.75
@@ -37,3 +38,16 @@ class Validation:
             if not any(self._is_duplicate(task, previous) for previous in retained):
                 retained.append(task)
         return retained
+
+    def filter_expired_tasks(self, tasks: list[ExtractedTask]):
+        """Return tasks that have expired as of reference_time (defaults to now)."""
+        now = datetime.now(tz=timezone.utc)
+        expired: list[ExtractedTask] = []
+        for task in tasks:
+            if isinstance(task.deadline, datetime) and task.deadline < now:
+                expired.append(task)
+            elif isinstance(task.registration_end, datetime) and task.registration_end < now:
+                expired.append(task)
+            elif isinstance(task.end_time, datetime) and task.end_time < now:
+                expired.append(task)
+        return expired
