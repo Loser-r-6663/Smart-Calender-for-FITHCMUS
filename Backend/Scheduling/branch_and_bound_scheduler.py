@@ -95,7 +95,13 @@ class BranchAndBoundScheduler:
             task_type = str(task_dict.get("type", "")).lower()
             status = str(task_dict.get("status", "active")).lower()
             loc_raw = task_dict.get("location")
-            location = normalize_location(loc_raw)
+            if task_type in {"class", "exam"}:
+                if not loc_raw:
+                    loc_raw = "Cơ sở 1"
+                elif "cơ sở 1" not in str(loc_raw).lower() and "cs1" not in str(loc_raw).lower():
+                    loc_raw = f"{loc_raw}, Cơ sở 1"
+                task_dict["location"] = loc_raw
+            location = normalize_location(loc_raw, default="CS1" if task_type in {"class", "exam"} else "ONLINE")
             t_points = int(task_dict.get("training_points") or 0)
             drl_cat = task_dict.get("drl_category")
             if drl_cat:

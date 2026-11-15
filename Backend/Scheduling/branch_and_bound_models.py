@@ -87,18 +87,18 @@ def parse_timestamp(value: Any) -> Optional[datetime]:
     return None
 
 
-def normalize_location(location: Optional[str]) -> str:
+def normalize_location(location: Optional[str], default: str = "ONLINE") -> str:
     """Chuẩn hóa vị trí địa lý: CS1, CS2 hoặc ONLINE."""
     if not location:
-        return "ONLINE"
+        return default
     loc_upper = str(location).upper()
-    if "CS1" in loc_upper or "CƠ SỞ 1" in loc_upper or "NGUYỄN VĂN CỪ" in loc_upper or "QUẬN 5" in loc_upper:
-        return "CS1"
     if "CS2" in loc_upper or "CƠ SỞ 2" in loc_upper or "LINH TRUNG" in loc_upper or "THỦ ĐỨC" in loc_upper:
         return "CS2"
+    if "CS1" in loc_upper or "CƠ SỞ 1" in loc_upper or "NGUYỄN VĂN CỪ" in loc_upper or "QUẬN 5" in loc_upper:
+        return "CS1"
     if "ONLINE" in loc_upper or "ZOOM" in loc_upper or "TEAMS" in loc_upper or "MEET" in loc_upper:
         return "ONLINE"
-    return "ONLINE"
+    return default
 
 
 def get_travel_buffer_minutes(loc1: str, loc2: str, campus_travel_minutes: int = 60) -> int:

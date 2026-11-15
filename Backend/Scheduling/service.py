@@ -260,6 +260,12 @@ def prepare_tasks_for_scheduler(
                     occurrence["end_time"] = datetime.combine(
                         day, end_t, tzinfo=GMT_PLUS_7
                     )
+                    if task_type in {"class", "exam"}:
+                        loc = occurrence.get("location")
+                        if not loc:
+                            occurrence["location"] = "Cơ sở 1"
+                        elif "cơ sở 1" not in str(loc).lower() and "cs1" not in str(loc).lower():
+                            occurrence["location"] = f"{loc}, Cơ sở 1"
                     prepared.append(occurrence)
                 day += timedelta(days=1)
             continue
@@ -277,6 +283,12 @@ def prepare_tasks_for_scheduler(
         eff_start, eff_end = interval
         task_entry["start_time"] = eff_start
         task_entry["end_time"] = eff_end
+        if task_type in {"class", "exam"}:
+            loc = task_entry.get("location")
+            if not loc:
+                task_entry["location"] = "Cơ sở 1"
+            elif "cơ sở 1" not in str(loc).lower() and "cs1" not in str(loc).lower():
+                task_entry["location"] = f"{loc}, Cơ sở 1"
         prepared.append(task_entry)
 
     return prepared

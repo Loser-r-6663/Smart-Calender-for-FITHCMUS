@@ -364,6 +364,50 @@ class SchedulingServiceTests(unittest.TestCase):
         self.assertIn("ws-B", selected_ids)
         self.assertEqual(res.total_drl_gained, 8)
 
+    def test_class_room_auto_tags_cs1_for_travel_buffer(self) -> None:
+        from Backend.Scheduling.branch_and_bound_scheduler import BranchAndBoundScheduler
+
+        scheduler = BranchAndBoundScheduler()
+        tasks = [
+            # Lớp học chỉ ghi tên phòng 'Phòng F.102' (không có chữ cơ sở 1)
+            {
+                "id": "class-room-only",
+                "title": "Co So Du Lieu",
+                "type": "class",
+                "location": "Phòng F.102",
+                "start_time": datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 10, 0, tzinfo=GMT_PLUS_7),
+                "training_points": 0,
+            },
+            # Sự kiện CS2 bắt đầu lúc 10:30 (cách 30m sau khi tan học CS1, thiếu buffer 60m) -> Phải bị loại
+            {
+                "id": "ev-cs2-too-close",
+                "title": "Hoi thao CS2 qua gan",
+                "type": "event",
+                "location": "Hội trường CS2, Linh Trung, Thủ Đức",
+                "start_time": datetime(2026, 11, 9, 10, 30, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 12, 0, tzinfo=GMT_PLUS_7),
+                "training_points": 10,
+                "drl_category": "dieu_3",
+            },
+            # Sự kiện CS2 bắt đầu lúc 11:30 (cách 90m sau khi tan học CS1, đủ buffer 60m) -> Được chọn
+            {
+                "id": "ev-cs2-safe",
+                "title": "Hoi thao CS2 du gio di chuyen",
+                "type": "event",
+                "location": "Hội trường CS2, Linh Trung, Thủ Đức",
+                "start_time": datetime(2026, 11, 9, 11, 30, tzinfo=GMT_PLUS_7),
+                "end_time": datetime(2026, 11, 9, 13, 0, tzinfo=GMT_PLUS_7),
+                "training_points": 8,
+                "drl_category": "dieu_3",
+            },
+        ]
+        res = scheduler.schedule(tasks)
+        selected_ids = [ev.task_id for ev in res.selected_events]
+        self.assertNotIn("ev-cs2-too-close", selected_ids)
+        self.assertIn("ev-cs2-safe", selected_ids)
+        self.assertEqual(res.total_drl_gained, 8)
+
 
 if __name__ == "__main__":
     unittest.main()
