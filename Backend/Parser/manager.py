@@ -351,7 +351,10 @@ class ParserManager:
 
         retained_candidates: list[TaskCandidate] = []
         results: list[PipelineItemResult] = []
-        for raw in inputs:
+        request_delay = float(os.getenv("PARSER_REQUEST_DELAY_SECONDS", "2.0"))
+        for index, raw in enumerate(inputs):
+            if index > 0 and request_delay > 0:
+                time.sleep(request_delay)
             item = self.process_raw(
                 raw,
                 api_already_checked=True,

@@ -40,7 +40,14 @@ class MoodleCrawler(PlaywrightCrawler):
         raw_tasks: list[RawTask] = []
         due_date = ""
         
-        page.locator('div[data-region="event-list-wrapper"]').scroll_into_view_if_needed()
+        try:
+            wrapper_loc = page.locator('div[data-region="event-list-wrapper"]')
+            wrapper_loc.wait_for(state="attached", timeout=5000)
+            wrapper_loc.scroll_into_view_if_needed(timeout=3000)
+        except Exception:
+            # Empty timeline or no assignments due on Moodle
+            return []
+            
         wrapper = page.locator('div[data-region="event-list-wrapper"] > div').all()
         for content in wrapper:
             try:

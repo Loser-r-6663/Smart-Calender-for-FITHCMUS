@@ -320,7 +320,7 @@ class GeminiClient:
                 if not transient or attempt >= self.config.retries:
                     raise ProviderRequestError("Gemini request failed") from exc
                 # Exponential backoff with jitter avoids synchronized retry bursts.
-                time.sleep(min(8.0, 0.5 * 2**attempt) + random.random() * 0.25)
+                time.sleep(min(15.0, 2.0 * 2**attempt) + random.random() * 0.5)
         raise ProviderRequestError("Gemini request failed") from last
 
 

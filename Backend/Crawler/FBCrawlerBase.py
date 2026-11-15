@@ -18,10 +18,15 @@ LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href,
 class FBCrawler(PlaywrightCrawler):
     is_valid = False
     
-    def __init__(self, history_file=None, home_url=None, crawl_limit=10):
+    def __init__(
+        self,
+        history_file: str | None = None,
+        home_url: str | None = None,
+        crawl_limit: int = 10,
+    ):
         self.state_file = "Backend/Crawler/State/FBState.json"
-        self.history_file = history_file
-        self.home_url = home_url
+        self.history_file = history_file or "Backend/Crawler/History/FBHistory.txt"
+        self.home_url = home_url or "https://www.facebook.com/VNUHCM.US"
         self.crawl_limit = crawl_limit
     
     def check_state(self, cookies):
