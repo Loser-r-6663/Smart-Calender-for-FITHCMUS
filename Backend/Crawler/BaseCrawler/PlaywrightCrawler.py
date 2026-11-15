@@ -49,17 +49,44 @@ class PlaywrightCrawler(BaseCrawler):
     
     def launch_engine(self, url, settings: dict = {}):
         headless = settings.get("headless", True)
-        storage_state = settings.get("storage_state", self.state_file)
+        raw_storage_state = settings.get("storage_state", self.state_file)
+        storage_state = (
+            raw_storage_state
+            if raw_storage_state and Path(raw_storage_state).is_file()
+            else None
+        )
         
-        launch_args = ["--blink-settings=imagesEnabled=false"] if headless else []
+        launch_args = []
+        if headless:
+            launch_args.append("--blink-settings=imagesEnabled=false")
+        else:
+            launch_args.extend([
+                "--disable-blink-features=AutomationControlled",
+                "--enable-webgl",
+                "--enable-accelerated-2d-canvas",
+            ])
+            
         browser = self.crawler.chromium.launch(
             headless=headless,
             args=launch_args,
         )
-        context = browser.new_context(storage_state=storage_state)
+        context = browser.new_context(
+            storage_state=storage_state,
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                if not headless else None
+            ),
+        )
+        if not headless:
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
         page = context.new_page()
         
-        page.goto(url,wait_until='domcontentloaded')
+        page.goto(url, wait_until='domcontentloaded')
         return page, context, browser
     
     def browse_page(self, page: Page):

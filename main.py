@@ -37,22 +37,39 @@ def _ensure_crawler_runtime_directories() -> None:
 
 
 def _ensure_target_user(client: Any, user_id: int) -> int:
-    """Ensure target user exists in database; if not, create default user."""
+    """Ensure target user exists in database; if not, find existing or create default user."""
     try:
-        client.get_user(user_id)
-        return user_id
+        user = client.get_user(user_id)
+        if user and user.get("id"):
+            return int(user["id"])
     except Exception:
+        pass
+
+    for probe_id in range(1, 21):
+        if probe_id == user_id:
+            continue
         try:
-            created = client.create_user({
-                "username": f"student_{user_id}",
-                "email": f"student_{user_id}@fit.hcmus.edu.vn",
-                "full_name": f"FIT Student {user_id}",
-            })
-            LOGGER.info("user created id=%s username=%s", created.get("id"), created.get("username"))
-            return int(created.get("id", user_id))
-        except Exception as exc:
-            LOGGER.warning("could not ensure user %d: %s", user_id, _safe_message(exc))
-            return user_id
+            user = client.get_user(probe_id)
+            if user and user.get("id"):
+                LOGGER.info("using existing database user id=%d", probe_id)
+                return int(user["id"])
+        except Exception:
+            continue
+
+    try:
+        import time
+        unique_suffix = f"{user_id}_{int(time.time())}"
+        created = client.create_user({
+            "username": f"student_{unique_suffix}",
+            "email": f"student_{unique_suffix}@fit.hcmus.edu.vn",
+            "full_name": f"FIT Student {user_id}",
+        })
+        new_id = int(created.get("id", user_id))
+        LOGGER.info("user created id=%d username=%s", new_id, created.get("username"))
+        return new_id
+    except Exception as exc:
+        LOGGER.warning("could not ensure user %d: %s", user_id, _safe_message(exc))
+        return user_id
 
 
 def main() -> int:

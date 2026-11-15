@@ -30,7 +30,7 @@ class FBCrawler(PlaywrightCrawler):
         self.crawl_limit = crawl_limit
     
     def check_state(self, cookies):
-        if not cookies:
+        if not cookies or "c_user" not in cookies:
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state_file}
@@ -39,53 +39,71 @@ class FBCrawler(PlaywrightCrawler):
                 self.login(settings)
                 FBCrawler.is_valid = True
             return True, settings
-        except ConnectionError:
-            return False, {"headless": False, "storage_state": self.state_file}
+        except Exception:
+            return False, {"headless": False, "storage_state": None}
     
     def login(self, settings):
+        headless = settings.get("headless", True)
         page, context, browser = self.launch_engine(self.home_url, settings)
         
-        # Initialize login checking variable
-        try:
-            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
-        except Exception as e:
-            browser.close()
-            return
-        login_notification = page.locator(LOGIN_NOTIFICATION)
+        if headless:
+            try:
+                page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=3000)
+                browser.close()
+                raise ConnectionError("Login required")
+            except Exception as e:
+                browser.close()
+                if isinstance(e, ConnectionError):
+                    raise
+                return
         
-        # Login required if the login notification is present
-        if login_notification.count() > 0:
-            if settings["headless"]:
-                raise ConnectionError("please log in manually")
-            
-            # Semi-automatic login process for headed mode (headless=False)
-            load_dotenv()
-            username = os.getenv("FB_USERNAME")
-            password = os.getenv("FB_PASSWORD")
-            if (
-                username
-                and password
-                and username not in {"your", "your_fb_username_here"}
-                and password not in {"your", "your_fb_password_here"}
-            ):
-                try:
-                    page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
-                    page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
-                    page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
-                except Exception:
-                    pass
-            else:
-                print("ℹ️ Vui lòng đăng nhập tài khoản Facebook trên cửa sổ trình duyệt đang mở...")
-            
-            # 2-step verification, wait until the user enters the code sent via email
-            page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
-            
-            # Store state file and close browser
+        # Headed mode: Interactive user login
+        load_dotenv()
+        username = os.getenv("FB_USERNAME")
+        password = os.getenv("FB_PASSWORD")
+        if (
+            username
+            and password
+            and username not in {"your", "your_fb_username_here"}
+            and password not in {"your", "your_fb_password_here"}
+        ):
+            try:
+                page.wait_for_selector('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]', timeout=5000)
+                page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
+                page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
+                page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
+            except Exception:
+                pass
+        else:
+            print("ℹ️ Vui lòng đăng nhập / xác minh tài khoản Facebook trên cửa sổ trình duyệt đang mở...")
+        
+        # Wait until user completes verification/login (c_user cookie set)
+        logged_in = False
+        for _ in range(300):
+            try:
+                current_cookies = {c["name"]: c for c in context.cookies()}
+                if "c_user" in current_cookies:
+                    logged_in = True
+                    break
+            except Exception:
+                pass
+            page.wait_for_timeout(1000)
+        
+        if logged_in:
+            page.wait_for_timeout(2000)
             context.storage_state(path=self.state_file)
-            browser.close()
+            FBCrawler.is_valid = True
+            print("✅ Đăng nhập Facebook thành công, đã lưu phiên!")
+        else:
+            print("⚠️ Hết thời gian chờ đăng nhập Facebook.")
+        
+        browser.close()
     
     def browse_page(self, page):
-        page.wait_for_selector(POST_SELECTOR, state='visible')
+        try:
+            page.wait_for_selector(POST_SELECTOR, state='visible', timeout=10000)
+        except Exception:
+            return []
         
         raw_tasks: list[RawTask] = []
         for post_crawled in range(1, self.crawl_limit + 1):

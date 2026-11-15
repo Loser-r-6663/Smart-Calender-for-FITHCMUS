@@ -15,23 +15,39 @@ class PortalCrawler(PlaywrightCrawler):
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
-        if self.time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
+        auth_cookie = cookies.get(".DOTNETNUKE") or cookies.get("TwoFaTrustedDevice")
+        if not auth_cookie:
             return False, {"headless": False, "storage_state": None}
-        else:
-            return False, {"headless": True, "storage_state": self.state_file}
+        
+        expires = auth_cookie.get("expires", -1)
+        if expires != -1 and self.time_is_expired(expires):
+            return False, {"headless": False, "storage_state": None}
+            
+        return True, {"headless": True, "storage_state": self.state_file}
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
         
-        if page.url == self.login_url:
+        if page.url == self.login_url or "Login" in page.url:
             # Fill in the login form and submit
             load_dotenv()
             username = os.getenv("PORTAL_USERNAME")
             password = os.getenv("PORTAL_PASSWORD")
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
-            page.locator('xpath=//*[@id="dnn_ctr_Login_DNN"]/div/div[3]/span[2]/span/span').click()
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
+            if (
+                username
+                and password
+                and username not in {"your", "your_portal_username_here"}
+                and password not in {"your", "your_portal_password_here"}
+            ):
+                try:
+                    page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
+                    page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
+                    page.locator('xpath=//*[@id="dnn_ctr_Login_DNN"]/div/div[3]/span[2]/span/span').click()
+                    page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
+                except Exception:
+                    pass
+            else:
+                print("ℹ️ Vui lòng đăng nhập tài khoản Portal trên cửa sổ trình duyệt đang mở...")
             
             # Manually enter the code from the email
             page.wait_for_url(self.home_url, timeout=120000) # 2 min
