@@ -4,20 +4,13 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
-import os
 from datetime import datetime
 import time
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .adapters import adapt_crawl_results
 from .api_client import DatabaseApiClient
-from .deduplication import (
-    deduplicate_task_candidates,
-    JsonRawFingerprintStore,
-    RawDedupAction,
-    RawDuplicateChecker,
-    RawFingerprint,
-)
+from .deduplication import deduplicate_task_candidates
 from .extraction import LLMExtractor, UNKNOWN_DEADLINE
 from .models import RawCrawlerInput, TaskCandidate
 from .providers import create_llm_gateway
@@ -31,13 +24,11 @@ class StageStatus(str, Enum):
 
 class PipelineStage(str, Enum):
     ADAPT = "adapt"
-    DUPLICATE = "duplicate"
     PARSE = "parse"
     CANDIDATE_DEDUP = "candidate_dedup"
     PREPARE = "prepare"
     API_HEALTH = "api_health"
     SEND = "send"
-    REMEMBER = "remember"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,33 +91,48 @@ class ParserManager:
     def __init__(
         self,
         extractor: Any,
-        duplicate_checker: RawDuplicateChecker,
         database_api: DatabaseApiClient | None = None,
         stop_on_error: bool = False,
-        id_factory: Callable[[RawFingerprint, int], str] | None = None,
+        id_factory: Callable[[TaskCandidate], str] | None = None,
     ) -> None:
         self.extractor = extractor
-        self.duplicate_checker = duplicate_checker
         self.database_api = database_api
         self.stop_on_error = stop_on_error
         self.id_factory = id_factory or self._default_id
 
     @staticmethod
-    def _default_id(fingerprint: RawFingerprint, candidate_index: int) -> str:
-        # Content plus candidate position gives a deterministic id for each task.
-        value = f"{fingerprint.content_hash}:{candidate_index}"
-        return "task-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+    def _default_id(candidate: TaskCandidate) -> str:
+        """Create a stable ID from persisted candidate data, before preparation."""
+
+        def serialize(value: Any) -> Any:
+            if isinstance(value, Enum):
+                return value.value
+            if isinstance(value, datetime):
+                return value.isoformat()
+            if isinstance(value, tuple):
+                return [serialize(item) for item in value]
+            if isinstance(value, dict):
+                return {key: serialize(item) for key, item in sorted(value.items())}
+            return value
+
+        identity = {
+            field: serialize(getattr(candidate, field))
+            for field in candidate.__dataclass_fields__
+            if field not in {"id", "embedding", "updated_at"}
+        }
+        canonical = json.dumps(
+            identity,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return "task-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
     @classmethod
     def from_env(cls, **kwargs: Any) -> "ParserManager":
         database_api = DatabaseApiClient()
         extractor = LLMExtractor(create_llm_gateway())
-        checker = RawDuplicateChecker(
-            JsonRawFingerprintStore(
-                os.getenv("PARSER_DEDUP_STATE_PATH", ".parser-dedup.json")
-            )
-        )
-        return cls(extractor, checker, database_api, **kwargs)
+        return cls(extractor, database_api, **kwargs)
 
     @staticmethod
     def _stage(
@@ -167,13 +173,6 @@ class ParserManager:
             lambda: adapt_crawl_results(results, captured_at=captured_at),
         )
 
-    def check_duplicate(self, raw: RawCrawlerInput) -> StageResult:
-        return self._stage(
-            PipelineStage.DUPLICATE,
-            raw,
-            lambda: self.duplicate_checker.check(raw),
-        )
-
     def parse(self, raw: RawCrawlerInput) -> StageResult:
         return self._stage(
             PipelineStage.PARSE,
@@ -182,25 +181,18 @@ class ParserManager:
         )
 
     def deduplicate_candidates(
-        self, candidates: tuple[TaskCandidate, ...]
+        self,
+        candidates: tuple[TaskCandidate, ...],
+        retained_candidates: Sequence[TaskCandidate] = (),
     ) -> StageResult:
         return self._stage(
             PipelineStage.CANDIDATE_DEDUP,
             candidates,
-            lambda: deduplicate_task_candidates(candidates),
+            lambda: deduplicate_task_candidates(candidates, retained_candidates),
         )
 
-    def prepare_task(
-        self,
-        candidate: TaskCandidate,
-        fingerprint: RawFingerprint,
-        candidate_index: int,
-    ) -> StageResult:
-        stage_input = {
-            "candidate": candidate,
-            "fingerprint": fingerprint,
-            "candidate_index": candidate_index,
-        }
+    def prepare_task(self, candidate: TaskCandidate) -> StageResult:
+        stage_input = {"candidate": candidate}
 
         def prepare() -> dict[str, Any]:
             fields = (
@@ -211,13 +203,14 @@ class ParserManager:
                 "source_platform", "updated_at",
             )
             data = {field: getattr(candidate, field) for field in fields}
+            # Generate the identity before adding the scheduler-only sentinel.
+            data["id"] = self.id_factory(candidate)
             if (
                 candidate.type.value in {"assignment", "tuition"}
                 and candidate.deadline is None
             ):
                 # Temporary cross-component sentinel; the scheduler must treat this as unknown.
                 data["deadline"] = UNKNOWN_DEADLINE
-            data["id"] = self.id_factory(fingerprint, candidate_index)
             # Convert domain enums and datetimes at the API serialization boundary.
             return {
                 key: (
@@ -250,17 +243,11 @@ class ParserManager:
 
         return self._stage(PipelineStage.SEND, payload, send)
 
-    def remember_fingerprint(self, fingerprint: RawFingerprint) -> StageResult:
-        return self._stage(
-            PipelineStage.REMEMBER,
-            fingerprint,
-            lambda: self.duplicate_checker.remember(fingerprint),
-        )
-
     def process_raw(
         self,
         raw: RawCrawlerInput,
         api_already_checked: bool = False,
+        retained_candidates: list[TaskCandidate] | None = None,
     ) -> PipelineItemResult:
         stages: list[StageResult] = []
         if not api_already_checked:
@@ -274,61 +261,33 @@ class ParserManager:
                     status=StageStatus.FAILED,
                     error=health.error,
                 )
-
-        duplicate = self.check_duplicate(raw)
-        stages.append(duplicate)
-        if duplicate.status is StageStatus.FAILED:
-            return PipelineItemResult(
-                raw=raw,
-                stages=tuple(stages),
-                status=StageStatus.FAILED,
-                error=duplicate.error,
-            )
-        if duplicate.output.action is RawDedupAction.SKIP:
-            return PipelineItemResult(
-                raw=raw,
-                stages=tuple(stages),
-                status=StageStatus.SKIPPED,
-            )
-
         parsed = self.parse(raw)
         stages.append(parsed)
-        candidates = (
-            parsed.output if parsed.status is StageStatus.SUCCESS else ()
-        )
         if parsed.status is StageStatus.FAILED:
             return PipelineItemResult(
                 raw=raw,
                 stages=tuple(stages),
-                candidates=tuple(candidates),
                 status=StageStatus.FAILED,
                 error=parsed.error,
             )
-
-        candidate_dedup = self.deduplicate_candidates(parsed.output)
-        stages.append(candidate_dedup)
-        candidates = (
-            candidate_dedup.output
-            if candidate_dedup.status is StageStatus.SUCCESS
-            else ()
+        candidate_dedup = self.deduplicate_candidates(
+            parsed.output,
+            retained_candidates if retained_candidates is not None else (),
         )
+        stages.append(candidate_dedup)
         if candidate_dedup.status is StageStatus.FAILED:
             return PipelineItemResult(
                 raw=raw,
                 stages=tuple(stages),
-                candidates=tuple(candidates),
+                candidates=tuple(parsed.output),
                 status=StageStatus.FAILED,
                 error=candidate_dedup.error,
             )
-
+        candidates = candidate_dedup.output
         persisted: list[dict[str, Any]] = []
         # One raw record may intentionally yield several independent task candidates.
-        for index, candidate in enumerate(candidates, 1):
-            prepared = self.prepare_task(
-                candidate,
-                duplicate.output.fingerprint,
-                index,
-            )
+        for candidate in candidates:
+            prepared = self.prepare_task(candidate)
             stages.append(prepared)
             if prepared.status is StageStatus.FAILED:
                 return PipelineItemResult(
@@ -339,7 +298,6 @@ class ParserManager:
                     status=StageStatus.FAILED,
                     error=prepared.error,
                 )
-
             sent = self.send_to_database(prepared.output)
             stages.append(sent)
             if sent.status is StageStatus.FAILED:
@@ -353,35 +311,14 @@ class ParserManager:
                 )
             if isinstance(sent.output, Mapping):
                 persisted.append(dict(sent.output))
-
+            if retained_candidates is not None:
+                retained_candidates.append(candidate)
         if not candidates:
-            remembered = self.remember_fingerprint(duplicate.output.fingerprint)
-            stages.append(remembered)
-            if remembered.status is StageStatus.FAILED:
-                return PipelineItemResult(
-                    raw=raw,
-                    stages=tuple(stages),
-                    status=StageStatus.FAILED,
-                    error=remembered.error,
-                )
             return PipelineItemResult(
                 raw=raw,
                 stages=tuple(stages),
                 candidates=tuple(candidates),
                 status=StageStatus.SKIPPED,
-            )
-
-        # Remember input only after every candidate has persisted successfully.
-        remembered = self.remember_fingerprint(duplicate.output.fingerprint)
-        stages.append(remembered)
-        if remembered.status is StageStatus.FAILED:
-            return PipelineItemResult(
-                raw=raw,
-                stages=tuple(stages),
-                candidates=tuple(candidates),
-                persisted=tuple(persisted),
-                status=StageStatus.FAILED,
-                error=remembered.error,
             )
         return PipelineItemResult(
             raw=raw,
@@ -412,9 +349,14 @@ class ParserManager:
                 error=health.error,
             )
 
+        retained_candidates: list[TaskCandidate] = []
         results: list[PipelineItemResult] = []
         for raw in inputs:
-            item = self.process_raw(raw, api_already_checked=True)
+            item = self.process_raw(
+                raw,
+                api_already_checked=True,
+                retained_candidates=retained_candidates,
+            )
             results.append(item)
             if self.stop_on_error and item.status is StageStatus.FAILED:
                 break

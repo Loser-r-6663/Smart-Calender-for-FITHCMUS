@@ -5,23 +5,70 @@ import html2text
 from pydantic import BaseModel
 
 
+from typing import Any
+from pydantic import BaseModel, ConfigDict, model_validator
+
+
 # HTML2Text configuration
 _h2t = html2text.HTML2Text()
 _h2t.ignore_images = True
 _h2t.body_width = 0
 
+_ALIASES = {
+    "title": "Title",
+    "type": "Type",
+    "description": "Description",
+    "create_date": "CreateDate",
+    "duration": "Duration",
+    "deadline": "Deadline",
+    "course": "Course",
+    "content": "Content",
+    "link": "Link",
+    "platform": "Platform",
+    "updated_at": "UpdatedAt",
+}
+
 
 class RawTask(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
     Title: str = "N/A"           # Title of the post
     Type: str = "N/A"            # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
     Description: str = "N/A"     # Description or brief summary of the post
     CreateDate: str = "N/A"      # Creation date of the post
     Duration: str = "N/A"        # Duration of the task or event
-    Deadline: str = "N/A"        # Assignment deadline
+    Deadline: Any = "N/A"        # Assignment deadline
     Course: str = "N/A"          # Course associated with the post
     Content: str = "N/A"         # Full content of the post
     Link: str = "N/A"            # Link to the original post
+    Platform: str | None = None
+    UpdatedAt: Any = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            remapped = {}
+            for k, v in data.items():
+                target = _ALIASES.get(k, k)
+                remapped[target] = v
+            return remapped
+        return data
     
+    def __getattr__(self, name: str) -> Any:
+        if name in _ALIASES:
+            return getattr(self, _ALIASES[name])
+        return super().__getattribute__(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        target = _ALIASES.get(name, name)
+        super().__setattr__(target, value)
+
+    def update(self, **kwargs: Any) -> "RawTask":
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        return self
+
     def __repr__(self):
         value = f"\nRawTask(\n" \
         f"\tTitle: {self.Title.__repr__()}\n" \
@@ -62,8 +109,10 @@ class BaseCrawler():
     
     def set_last_post(self, raw_tasks: list[RawTask]):
         """Update the history file with the link of the most recent task."""
-        if self.history_file and raw_tasks and (link := raw_tasks[-1].Link):
-            Path(self.history_file).write_text(link, encoding="utf-8")
+        if self.history_file and raw_tasks:
+            link = getattr(raw_tasks[-1], "link", None) or getattr(raw_tasks[-1], "Link", None)
+            if link and link != "N/A":
+                Path(self.history_file).write_text(str(link), encoding="utf-8")
     
     @contextmanager
     def load_engine(self):
