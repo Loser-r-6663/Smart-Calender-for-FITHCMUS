@@ -62,9 +62,20 @@ class FBCrawler(PlaywrightCrawler):
             load_dotenv()
             username = os.getenv("FB_USERNAME")
             password = os.getenv("FB_PASSWORD")
-            page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
-            page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
-            page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
+            if (
+                username
+                and password
+                and username not in {"your", "your_fb_username_here"}
+                and password not in {"your", "your_fb_password_here"}
+            ):
+                try:
+                    page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
+                    page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
+                    page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
+                except Exception:
+                    pass
+            else:
+                print("ℹ️ Vui lòng đăng nhập tài khoản Facebook trên cửa sổ trình duyệt đang mở...")
             
             # 2-step verification, wait until the user enters the code sent via email
             page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
