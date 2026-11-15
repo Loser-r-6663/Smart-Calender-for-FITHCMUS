@@ -1,6 +1,6 @@
-from pydantic import Field
-from datetime import datetime
 from typing import Literal
+from datetime import datetime
+from pydantic import Field, model_validator
 
 from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DayTime
 from Backend.Regulation.RawTask import RawTask
@@ -53,7 +53,7 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Số điểm rèn luyện (ĐRL) sinh viên nhận được nếu tham gia (ví dụ: 5, 10). Nếu không đề cập thì để None"
     )
-    training_point_category: Literal["articles 1", "articles 2", "articles 3", "articles 4", "articles 5"] | None = Field(
+    training_point_category: Literal["Articles 1", "Articles 2", "Articles 3", "Articles 4", "Articles 5"] | None = Field(
         default=None,
         description="Điều hoặc mục cộng điểm rèn luyện nếu có (ví dụ: 'Điều 3', 'Mục 2.1')"
     )
@@ -70,6 +70,21 @@ class ExtractedTask(BaseTask):
     updated_at: datetime = Field(
         description="Thời điểm trích xuất dữ liệu này"
     )
+    
+    @model_validator(mode="after")
+    def check_event_requires_training_points(self):
+        if self.type == "event" and (
+            self.training_points is None or not 0 <= self.training_points < 25 or 
+            self.training_point_category is None
+        ):
+            raise ValueError("training_points và training_point_category phải được cung cấp cho các sự kiện khi type là 'event'.")
+        return self
+    
+    @model_validator(mode="after")
+    def check_requires_estimated_hours(self):
+        if self.type in ["event", "assignment"] and (self.estimated_hours is None or self.estimated_hours <= 0):
+            raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event' hoặc 'assignment'.")
+        return self
     
     @classmethod
     def from_raw_task(cls, raw_task: RawTask) -> "ExtractedTask":

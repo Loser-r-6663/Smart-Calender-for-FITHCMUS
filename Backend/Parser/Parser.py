@@ -14,15 +14,16 @@ class LLMParser:
     def __init__(self):
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-            api_key = os.getenv("GEMINI_API_KEY")
+        with open("Backend/Parser/prompt.txt", "r", encoding="utf-8") as f:
+            prompt = f.read()
         self.client = genai.Client(api_key=api_key)
         self.config = types.GenerateContentConfig(
             system_instruction=(
                 "Bạn là trợ lý thông minh chuyên trích xuất dữ liệu từ các thông báo của trường đại học Khoa học tự nhiên. "
                 "Tất cả các mốc thời gian (datetime) trích xuất được PHẢI LUÔN thuộc múi giờ GMT+7 (Việt Nam, UTC+7). "
                 "Chỉ trích xuất các thông tin có bằng chứng rõ ràng trong văn bản, không tự suy diễn."
+                "\n\n"
+                f"{prompt}"
             ),
             response_mime_type="application/json",
             response_schema=list[ExtractedTask],
@@ -37,7 +38,7 @@ class LLMParser:
             
             except errors.APIError as exc:
                 if exc.code not in (429, 503) or attempt == max_retries:
-                    traceback.print_exc()
+                    traceback.print_exc(); break
                 
                 attempt += 1
                 delay = min(2 ** attempt, 32) + random.uniform(0, 1)
@@ -54,6 +55,6 @@ class LLMParser:
             ).parsed,
             max_retries=max_retries
         )
-        return response
+        return response or []
 
 Parser = LLMParser()

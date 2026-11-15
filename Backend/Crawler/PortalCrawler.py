@@ -7,7 +7,7 @@ from Backend.Regulation.ExtractedTask import Location, DayTime
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
-get_location = lambda v: Location(room=v, campus="Nguyễn Văn Cừ") if v else None
+get_location = lambda v: Location(room=v, campus="Nguyễn Văn Cừ (cơ sở 1)") if v else None
 def get_daytime(v: str):
     if not v: return (None, None)
     day, time_range = v.split(" ")

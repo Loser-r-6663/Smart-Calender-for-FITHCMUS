@@ -2,19 +2,21 @@ from pydantic import BaseModel, Field
 from datetime import datetime, time
 from typing import Literal
 
+YEAR = datetime.now().year
+
 
 class TargetAudience(BaseModel):
-    year: str | None = Field(
+    year: Literal["1", "2", "3", "4"] | None = Field(
         default=None,
-        description="Năm học hoặc khóa sinh viên áp dụng (ví dụ: 'năm 1', 'khóa 2023', 'tất cả')"
+        description=f"Năm học áp dụng (năm 1 = khóa {YEAR}, năm 2 = khóa {YEAR-1}, năm 3 = khóa {YEAR-2}, năm 4 = khóa {YEAR-3}). Nếu không đề cập thì để None"
     )
-    program: str | None = Field(
+    program: Literal["Đại trà (chuẩn)", "Đề án", "Tăng cường tiếng Anh (chất lượng cao)", "Tiên tiến / Liên kết quốc tế", "Cử nhân tài năng", "Đại học chính quy", "Sau đại học"] | None = Field(
         default=None,
-        description="Chương trình đào tạo áp dụng (ví dụ: 'Chuẩn', 'Chất lượng cao', 'Đề án', 'Tiên tiến', 'tất cả')"
+        description="Chương trình đào tạo áp dụng. Nếu không đề cập thì để None"
     )
-    faculty: str | None = Field(
+    faculty: Literal["Toán - Tin học", "Công nghệ Thông tin", "Vật lý - Vật lý Kỹ thuật", "Hóa học", "Sinh học - Công nghệ Sinh học", "Điện tử - Viễn thông", "Khoa học và Công nghệ Vật liệu", "Môi trường", "Địa chất", "Khoa học Liên ngành"] | None = Field(
         default=None,
-        description="Khoa hoặc chuyên ngành áp dụng (ví dụ: 'Công nghệ thông tin', 'Toán - Tin', 'Hóa học', 'tất cả')"
+        description="Khoa hoặc chuyên ngành áp dụng. Nếu không đề cập thì để None"
     )
     other: str | None = Field(
         default=None,
@@ -27,9 +29,9 @@ class Location(BaseModel):
         default=None,
         description="Phòng học, hội trường hoặc liên kết/nền tảng trực tuyến (ví dụ: 'C.32', 'Giảng đường 1', 'Hội trường I', 'Google Meet', 'MS Teams')"
     )
-    campus: str | None = Field(
+    campus: Literal["Nguyễn Văn Cừ (cơ sở 1)", "Thủ Đức (cơ sở 2)"] | None = Field(
         default=None,
-        description="Cơ sở tổ chức (ví dụ: 'Nguyễn Văn Cừ', 'Thủ Đức', 'Online', '1', '2')"
+        description="Cơ sở tổ chức"
     )
     detail: str | None = Field(
         default=None,
