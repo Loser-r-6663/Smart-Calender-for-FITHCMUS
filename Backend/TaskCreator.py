@@ -4,6 +4,7 @@ from datetime import datetime
 
 from Backend.Regulation.RawTask import RawTask
 from Backend.Regulation.ExtractedTask import ExtractedTask
+from Backend.Regulation.User import User
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.Crawler.PortalCrawler import PortalCrawler
@@ -17,13 +18,17 @@ from Backend.Parser.Parser import Parser
 
 
 class TaskCreator():
-    def __init__(self):
+    def __init__(self, user: User | None = None):
         os.makedirs("Backend/Crawler/History", exist_ok=True)
         os.makedirs("Backend/Crawler/State", exist_ok=True)
         
-        self.crawlers: dict[str, BaseCrawler] = {
-            "Portal": PortalCrawler(),
-            "Moodle": MoodleCrawler(),
+        self.user = user
+        if user:
+            self.personal_crawlers: dict[str, BaseCrawler] = {
+                "Portal": PortalCrawler(user),
+                "Moodle": MoodleCrawler(user)
+            }
+        self.public_crawlers: dict[str, BaseCrawler] = {
             "Khoa Công nghệ thôn tin": FITCrawler(),
             "Trường đại học Khoa học tự nhiên": HCMUSCrawler(),
             "Phòng Công tác sinh viên": OSACrawler(),
@@ -37,14 +42,16 @@ class TaskCreator():
             "Facebook Khoa Công nghệ thôn tin": FBCrawler_FIT()
         }
     
-    def crawl_raw_tasks(self):
+    def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler]):
         """Start the crawling process"""
         raw_tasks: list[RawTask] = []
-        for platform, crawler in self.crawlers.items():
+        for platform, crawler in crawlers.items():
             try:
                 # Fetch data from the crawler and update the platform and updated_at fields
                 for task in crawler.fetch_data():
                     raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
+            except AssertionError:
+                self.user[f"{platform.lower()}_status"] = False
             except:
                 print(f"An error occurred while crawling {platform} data:")
                 traceback.print_exc()
@@ -54,20 +61,22 @@ class TaskCreator():
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
         for task in raw_tasks:
-            # Use the Parser to extract structured information (not needed for Portal and Moodle)
+            # Use the Parser to extract structured information (not needed for Portal)
             if task.platform == "Portal":
                 extracted_tasks.append(ExtractedTask.from_raw_task(task))
             else:
                 for extracted_task in Parser.parse(task):
                     if extracted_task: extracted_tasks.append(extracted_task.update(
-                        link=task.link,
-                        platform=task.platform,
+                        source_url=task.link,
+                        source_platform=task.platform,
                         updated_at=task.updated_at
                     ))
         return extracted_tasks
     
     def create_task(self):
         """Create structured data from website data"""
-        raw_tasks = self.crawl_raw_tasks()
+        raw_tasks = self.crawl_raw_tasks(
+            self.personal_crawlers if self.user else self.public_crawlers
+        )
         extracted_tasks = self.parse_tasks(raw_tasks)
         return extracted_tasks

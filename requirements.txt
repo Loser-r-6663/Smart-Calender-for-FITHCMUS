@@ -1,5 +1,6 @@
 beautifulsoup4
 playwright
 python-dotenv
+cryptography
 html2text
 pydantic

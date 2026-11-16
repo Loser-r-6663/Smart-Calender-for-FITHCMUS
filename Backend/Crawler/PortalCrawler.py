@@ -1,9 +1,8 @@
-import os
 from datetime import datetime
-from dotenv import load_dotenv
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Regulation.ExtractedTask import Location, DayTime
+from Backend.Regulation.User import User
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
@@ -20,13 +19,23 @@ def get_daytime(v: str):
 
 
 class PortalCrawler(PlaywrightCrawler):
-    def __init__(self):
+    def __init__(self, user: User):
         self.history_file = None
-        self.state_file = "Backend/Crawler/State/PortalState.json"
+        
+        if user.portal_session:
+            self.state_file = "Backend/Crawler/State/PortalState.json"
+            with open(self.state_file, "w") as f:
+                f.write(user.portal_session)
+        else: self.state_file = None
+        
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
+        self.user = user
     
     def check_state(self, cookies):
+        assert self.user.portal_username and self.user.portal_password
+        assert self.user.portal_session
+        
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
@@ -40,9 +49,9 @@ class PortalCrawler(PlaywrightCrawler):
         
         if page.url == self.login_url:
             # Fill in the login form and submit
-            load_dotenv()
-            username = os.getenv("PORTAL_USERNAME")
-            password = os.getenv("PORTAL_PASSWORD")
+            username = self.user.portal_username
+            password = self.user.portal_password
+            print(f"Logging in with username: {username} and password: {password}")
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
             page.locator('xpath=//*[@id="dnn_ctr_Login_DNN"]/div/div[3]/span[2]/span/span').click()

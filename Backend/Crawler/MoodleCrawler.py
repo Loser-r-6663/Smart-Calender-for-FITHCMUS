@@ -1,17 +1,27 @@
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
+from Backend.Regulation.User import User
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 
 class MoodleCrawler(PlaywrightCrawler):
-    def __init__(self):
-        self.history_file = "Backend/Crawler/History/MoodleHistory.txt"
-        self.state_file = "Backend/Crawler/State/MoodleState.json"
+    def __init__(self, user: User):
+        self.history_file = None
+        
+        if user.moodle_session:
+            self.state_file = "Backend/Crawler/State/MoodleState.json"
+            with open(self.state_file, "w") as f:
+                f.write(user.moodle_session)
+        else: self.state_file = None
+        
         self.login_url = "https://courses.ctda.hcmus.edu.vn/login/index.php"
         self.home_url = "https://courses.ctda.hcmus.edu.vn/my/"
+        self.user = user
     
     def check_state(self, cookies):
+        assert self.user.moodle_session
+        
         if not cookies:
             return False, {"headless": False, "storage_state": None}
         
