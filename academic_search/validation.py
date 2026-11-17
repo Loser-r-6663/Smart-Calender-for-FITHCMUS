@@ -25,6 +25,12 @@ def check(condition, message):
         raise SearchValidationError(message)
 
 
+def validate_user_id(user_id):
+    check(type(user_id) is int and 1 <= user_id <= 2_147_483_647,
+          "user_id must be a positive PostgreSQL integer")
+    return user_id
+
+
 def validate_task_id(task_id):
     """Normalize an ID using the Database TaskData text/length rules."""
     check(isinstance(task_id, str), "task_id must be a string")

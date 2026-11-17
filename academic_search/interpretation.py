@@ -36,6 +36,11 @@ class InterpretedSearch:
 
 def interpret_request(request):
     """Interpret a normal Search request without mutating it or accessing storage."""
+    interpretation, _ = _prepare_interpreted_request(request)
+    return interpretation
+
+
+def _prepare_interpreted_request(request):
     validate_request(request)
     original = request.get("keyword", "")
     text = " ".join(unicodedata.normalize("NFC", original).split())
@@ -84,5 +89,5 @@ def interpret_request(request):
     if ("min_training_points" in effective and "max_training_points" in effective
             and effective["min_training_points"] > effective["max_training_points"]):
         raise SearchInterpretationError("Conflicting training-point constraints")
-    validate_request({**request, "keyword": remaining, "filters": effective})
-    return Interpretation(original, remaining, inferred, effective)
+    validated = validate_request({**request, "keyword": remaining, "filters": effective})
+    return Interpretation(original, remaining, inferred, effective), validated

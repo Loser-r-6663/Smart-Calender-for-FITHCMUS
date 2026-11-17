@@ -1,8 +1,8 @@
 # Structured task search
 
-`academic_search.SearchService` reads existing PostgreSQL `tasks` through the
-shared connection exposed by `Database/DatabaseManager.py`. It never imports
-fixtures, creates a database, or falls back to SQLite. All six task types are
+`academic_search.SearchService` reads existing PostgreSQL `tasks` through a
+borrowed connection. `academic_search.TransactionalSearch` supplies that
+connection through the integration manager's transaction provider. All six task types are
 eligible by default: `class`, `assignment`, `exam`, `event`, `personal`, `tuition`.
 
 ## Reference revisions
@@ -29,7 +29,30 @@ exposed by the reviewed uppercase manager.
 
 ## PostgreSQL usage and configuration
 
-The application supplies an initialized instance of the exact selected manager.
+For the integration application, pass its lowercase manager and a user ID
+resolved from the application's authorized context.
+
+```python
+from Database.database_manager import DatabaseManager
+from academic_search import TransactionalSearch
+
+
+def search_for_user(manager: DatabaseManager, trusted_user_id: int, query: str):
+    search = TransactionalSearch(manager, user_id=trusted_user_id)
+    return search.interpret_and_search({"keyword": query, "limit": 10})
+```
+
+`TransactionalSearch` supports lookup, structured search, and interpreted search.
+It validates input before opening one `manager.database.transaction()` per call.
+Search closes its cursor and converts rows inside the transaction. The provider
+opens the connection, commits on success, rolls back on failure, and closes the
+connection. Results are returned only after the context exits successfully.
+Input errors keep their Search validation or interpretation type. Acquisition,
+query, conversion, and transaction failures raise a chained `SearchDatabaseError`.
+
+### Shared and explicitly borrowed connections
+
+For the legacy constructor, supply an initialized instance of the selected manager.
 The Database package and its dependencies (`psycopg2-binary`, Pydantic v2,
 `python-dotenv`) must be available in the integrated application's Python path.
 The four-feature application's `requirements.txt` provides those dependencies.
@@ -93,8 +116,9 @@ permission checks; wider visibility needs team agreement.
   cursor and row-conversion failures raise `SearchDatabaseError`, retaining the
   original exception in `__cause__`. A failed query never becomes `[]` or `None`.
 
-The application owns transaction boundaries, successful read completion, rollback
-on failure and final manager shutdown. PostgreSQL SELECTs can start transactions.
+For a shared or explicitly borrowed connection, the caller owns transaction
+boundaries, successful read completion, rollback on failure and final connection
+shutdown. PostgreSQL SELECTs can start transactions.
 After `SearchDatabaseError`, the owner must roll back the failed unit of work
 before reuse; Search cannot roll back unrelated pending writes. Serialize use of
 the singleton connection and supply a suitable transaction snapshot when needed.

@@ -2,25 +2,23 @@
 from typing import TYPE_CHECKING
 
 from .postgres import compile_lookup, compile_request, task_record
-from .validation import check, validate_request, validate_task_id
-from .interpretation import InterpretedSearch, interpret_request
+from .validation import validate_request, validate_task_id, validate_user_id
+from .interpretation import InterpretedSearch, _prepare_interpreted_request
 
 if TYPE_CHECKING:
     from Database.DatabaseManager import DatabaseManager
 
 
 class SearchDatabaseError(RuntimeError):
-    """A PostgreSQL operation or database record conversion failed."""
+    """A PostgreSQL operation, record conversion, or transaction failed."""
 
 
 class SearchService:
     """Search tasks assigned to a trusted user; the caller owns transactions."""
 
     def __init__(self, database_manager: "DatabaseManager | None", *, user_id: int):
-        check(type(user_id) is int and 1 <= user_id <= 2_147_483_647,
-              "user_id must be a positive PostgreSQL integer")
+        self.user_id = validate_user_id(user_id)
         self.database_manager = database_manager
-        self.user_id = user_id
         self._connection = None
 
     @classmethod
@@ -46,19 +44,23 @@ class SearchService:
 
     def get_task_by_id(self, task_id):
         """Look up an assigned task across all statuses, returning None if absent."""
-        task_id = validate_task_id(task_id)
+        return self._get_task_by_id(validate_task_id(task_id))
+
+    def _get_task_by_id(self, task_id):
         sql, params = compile_lookup(task_id, self.user_id)
         return self._query(sql, params, single=True)
 
     def search_tasks(self, request):
         """Return a stable page of matching assigned task dictionaries."""
-        validated = validate_request(request)
+        return self._search_tasks(validate_request(request))
+
+    def _search_tasks(self, validated):
         sql, params = compile_request(validated, self.user_id)
         return self._query(sql, params)
 
     def interpret_and_search(self, request):
         """Return point-expression metadata and results through ordinary task search."""
-        interpretation = interpret_request(request)
-        results = self.search_tasks({**request, "keyword": interpretation.remaining_keyword,
-                                     "filters": interpretation.effective_filters})
-        return InterpretedSearch(interpretation, results)
+        return self._interpret_and_search(*_prepare_interpreted_request(request))
+
+    def _interpret_and_search(self, interpretation, validated):
+        return InterpretedSearch(interpretation, self._search_tasks(validated))
