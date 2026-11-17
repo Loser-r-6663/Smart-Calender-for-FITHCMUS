@@ -1,0 +1,13 @@
+{
+  "actorSpecification": 1,
+  "name": "hcmus-assistant-crawler",
+  "title": "HCMUS Assistant Crawler",
+  "version": "1.0.0",
+  "buildTag": "latest",
+  "environmentVariables": {
+    "GEMINI_API_KEY": "@GEMINI_API_KEY",
+    "SUPABASE_URL": "@SUPABASE_URL",
+    "SUPABASE_KEY": "@SUPABASE_KEY",
+    "SUPABASE_ENCRYPTION_KEY": "@SUPABASE_ENCRYPTION_KEY"
+  }
+}

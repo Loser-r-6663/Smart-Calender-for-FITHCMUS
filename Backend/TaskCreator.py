@@ -29,17 +29,17 @@ class TaskCreator():
                 "Moodle": MoodleCrawler(user)
             }
         self.public_crawlers: dict[str, BaseCrawler] = {
-            "Khoa Công nghệ thôn tin": FITCrawler(),
+            "Khoa Công nghệ thông tin": FITCrawler(),
             "Trường đại học Khoa học tự nhiên": HCMUSCrawler(),
             "Phòng Công tác sinh viên": OSACrawler(),
-            "VNUHMCUS": FBCrawler_VNUHCMUS(),
+            "VNUHCMUS": FBCrawler_VNUHCMUS(),
             "Đoàn trường Khoa học tự nhiên": FBCrawler_YUHCMUS(),
             "Đoàn khoa - Liên chi hội khoa Môi trường": FBCrawler_YUE(),
             "Đoàn khoa - Liên chi hội khoa Hóa học": FBCrawler_YUC(),
             "Đoàn khoa - Liên chi hội khoa Sinh học": FBCrawler_YUB(),
             "Đoàn khoa - Liên chi hội khoa Địa chất": FBCrawler_YUG(),
             "Đoàn khoa - Liên chi hội khoa Vật lý": FBCrawler_YUP(),
-            "Facebook Khoa Công nghệ thôn tin": FBCrawler_FIT()
+            "Facebook Khoa Công nghệ thông tin": FBCrawler_FIT()
         }
     
     def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler]):
@@ -66,11 +66,14 @@ class TaskCreator():
                 extracted_tasks.append(ExtractedTask.from_raw_task(task))
             else:
                 for extracted_task in Parser.parse(task):
-                    if extracted_task: extracted_tasks.append(extracted_task.update(
-                        source_url=task.link,
-                        source_platform=task.platform,
-                        updated_at=task.updated_at
-                    ))
+                    try:
+                        if extracted_task: extracted_tasks.append(extracted_task.update(
+                            source_url=task.link,
+                            source_platform=task.platform,
+                            updated_at=task.updated_at
+                        ))
+                    except Exception:
+                        continue
         return extracted_tasks
     
     def create_task(self):

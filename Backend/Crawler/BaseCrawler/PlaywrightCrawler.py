@@ -52,7 +52,7 @@ class PlaywrightCrawler(BaseCrawler):
         storage_state = settings.get("storage_state", self.state_file)
         
         browser = self.crawler.chromium.launch(
-            headless=headless,
+            headless = headless,
             args=["--blink-settings=imagesEnabled=false"]
         )
         context = browser.new_context(storage_state=storage_state)

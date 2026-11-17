@@ -3,7 +3,7 @@ from pathlib import Path
 from contextlib import contextmanager
 import html2text
 
-
+from apify import Actor
 from Backend.Regulation.RawTask import RawTask
 
 
@@ -18,7 +18,7 @@ class BaseCrawler():
         self.crawler = None
         
         self.state_file: str
-        self.history_file: str
+        self.history_key: str | None = None
         self.home_url: str
     
     @staticmethod
@@ -33,13 +33,15 @@ class BaseCrawler():
     
     def get_last_post(self):
         """Retrieve the last crawled task from the history file."""
-        if self.history_file and (path := Path(self.history_file)).is_file():
-            return path.read_text(encoding="utf-8").strip()
-    
+        if self.history_key:
+            store = Actor.open_key_value_store(name="History")
+            return store.get_value(self.history_key)
+        
     def set_last_post(self, raw_tasks: list[RawTask]):
         """Update the history file with the link of the most recent task."""
-        if self.history_file and raw_tasks and (link := raw_tasks[-1].link):
-            Path(self.history_file).write_text(link, encoding="utf-8")
+        if self.history_key and (lastlink := raw_tasks[-1].link):
+            store = Actor.open_key_value_store(name="History")
+            store.set_value(self.history_key,lastlink)
     
     @contextmanager
     def load_engine(self):
@@ -71,6 +73,11 @@ class BaseCrawler():
             print(f"🌐 Last crawled task: {self.last_post}\n")
             
             driver = driver[0] if isinstance(driver, tuple) else driver
-            raw_tasks: list[RawTask] = self.browse_page(driver)
-            self.set_last_post(raw_tasks)
+            browser = driver[2] if isinstance(driver, tuple) else None
+            try:
+                raw_tasks: list[RawTask] = self.browse_page(driver)
+                self.set_last_post(raw_tasks)
+            finally:
+                if browser:
+                    browser.close()
         return raw_tasks

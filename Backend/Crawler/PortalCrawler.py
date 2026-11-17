@@ -20,7 +20,7 @@ def get_daytime(v: str):
 
 class PortalCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
-        self.history_file = None
+        self.history_key = None
         
         if user.portal_session:
             self.state_file = "Backend/Crawler/State/PortalState.json"

@@ -5,7 +5,7 @@ import json
 
 class OSACrawler(BaseCrawler):
     def __init__(self):
-        self.history_file = "Backend/Crawler/History/OSAHistory.txt"
+        self.history_key = "OSAHistory"
         self.home_url = "https://ctsv.hcmus.edu.vn/api/news/latest?limit=10"
     
     def launch_engine(self, url: str):

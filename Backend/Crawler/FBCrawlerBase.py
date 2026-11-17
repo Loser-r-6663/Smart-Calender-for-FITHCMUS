@@ -18,9 +18,9 @@ LINK_ELEMENT_SELECTOR = 'xpath=//a[contains(@href, "/posts/") or contains(@href,
 class FBCrawler(PlaywrightCrawler):
     is_valid = False
     
-    def __init__(self, history_file=None, home_url=None, crawl_limit=10):
+    def __init__(self, history_key=None, home_url=None, crawl_limit=10):
         self.state_file = "Backend/Crawler/State/FBState.json"
-        self.history_file = history_file
+        self.history_key = history_key
         self.home_url = home_url
         self.crawl_limit = crawl_limit
     

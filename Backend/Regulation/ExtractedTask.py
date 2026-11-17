@@ -67,7 +67,7 @@ class ExtractedTask(BaseTask):
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )
-    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thôn tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHMCUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thôn tin"] = Field(
+    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thông tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHCMUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thông tin"] = Field(
         description="Nền tảng nguồn"
     )
     updated_at: datetime = Field(
@@ -76,11 +76,11 @@ class ExtractedTask(BaseTask):
     
     @model_validator(mode="after")
     def check_event_requires_training_points(self):
-        if self.type == "event" and (
-            self.training_points is None or not 0 <= self.training_points < 25 or 
-            self.training_point_category is None
-        ):
-            raise ValueError("training_points và training_point_category phải được cung cấp cho các sự kiện khi type là 'event'.")
+        if self.type == "event":
+            if self.training_points is None or not (0 <= self.training_points <= 24):
+                raise ValueError("training_points phải nằm trong khoảng 0-24 cho sự kiện.")
+            if self.training_points > 0 and self.training_point_category is None:
+                raise ValueError("training_point_category bắt buộc phải có khi training_points > 0.")
         return self
     
     @model_validator(mode="after")

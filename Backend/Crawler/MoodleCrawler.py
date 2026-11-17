@@ -7,7 +7,7 @@ from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 class MoodleCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
-        self.history_file = None
+        self.history_key = None
         
         if user.moodle_session:
             self.state_file = "Backend/Crawler/State/MoodleState.json"

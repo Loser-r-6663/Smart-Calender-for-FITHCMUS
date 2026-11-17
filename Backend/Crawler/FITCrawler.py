@@ -4,7 +4,7 @@ from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawle
 
 class FITCrawler(BeautifulSoupCrawler):
     def __init__(self):
-        self.history_file = "Backend/Crawler/History/FITHistory.txt"
+        self.history_key = "FITHistory"
         self.home_url = "https://www.ctda.hcmus.edu.vn/vi/thong-bao/"
     
     def browse_page(self, page):

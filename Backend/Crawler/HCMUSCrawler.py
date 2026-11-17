@@ -4,7 +4,7 @@ from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawle
 
 class HCMUSCrawler(BeautifulSoupCrawler):
     def __init__(self):
-        self.history_file = "Backend/Crawler/History/HCMUSHistory.txt"
+        self.history_key = "HCMUSHistory"
         self.home_url = "https://hcmus.edu.vn/category/dao-tao/dai-hoc/thong-tin-danh-cho-sinh-vien/"
     
     def browse_page(self, page):

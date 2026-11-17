@@ -1,9 +1,10 @@
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
 from Backend.Regulation.ExtractedTask import ExtractedTask
 
+VN_TZ = timezone(timedelta(hours=7))
 
 class Validator:
     '''Class to deduplicate ExtractedTask instances based on specific criteria.'''
@@ -12,6 +13,10 @@ class Validator:
         self.TASK_FIELDS = (
             "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
+
+    @staticmethod
+    def _aware_timezone(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=VN_TZ) if dt.tzinfo is None else dt
     
     @staticmethod
     def _clean_text(value: str):
@@ -41,13 +46,13 @@ class Validator:
 
     def filter_expired_tasks(self, tasks: list[ExtractedTask]):
         """Return tasks that have expired as of reference_time (defaults to now)."""
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=VN_TZ)
         expired: list[ExtractedTask] = []
         for task in tasks:
-            if isinstance(task.deadline, datetime) and task.deadline < now:
+            if isinstance(task.deadline, datetime) and self._aware_timezone(task.deadline) < now:
                 expired.append(task)
-            elif isinstance(task.registration_end, datetime) and task.registration_end < now:
+            elif isinstance(task.registration_end, datetime) and self._aware_timezone(task.registration_end) < now:
                 expired.append(task)
-            elif isinstance(task.end_time, datetime) and task.end_time < now:
+            elif isinstance(task.end_time, datetime) and self._aware_timezone(task.end_time) < now:
                 expired.append(task)
         return expired
