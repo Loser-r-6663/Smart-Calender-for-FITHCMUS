@@ -51,6 +51,7 @@ class TaskCreator():
                 for task in crawler.fetch_data():
                     raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
             except AssertionError:
+                traceback.print_exc()
                 self.user[f"{platform.lower()}_status"] = False
             except:
                 print(f"An error occurred while crawling {platform} data:")
@@ -60,6 +61,7 @@ class TaskCreator():
     def parse_tasks(self, raw_tasks: list[RawTask]):
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
+        len_raw_tasks = len(raw_tasks)
         for task in raw_tasks:
             # Use the Parser to extract structured information (not needed for Portal)
             if task.platform == "Portal":
@@ -67,11 +69,15 @@ class TaskCreator():
             else:
                 for extracted_task in Parser.parse(task):
                     try:
-                        if extracted_task: extracted_tasks.append(extracted_task.update(
-                            source_url=task.link,
-                            source_platform=task.platform,
-                            updated_at=task.updated_at
-                        ))
+                        if extracted_task:
+                            extracted_tasks.append(
+                                extracted_task.update(
+                                    source_url=task.link,
+                                    source_platform=task.platform,
+                                    updated_at=task.updated_at
+                                )
+                            )
+                            print(f"Extracted {len(extracted_tasks)} / {len_raw_tasks} tasks from {task.platform}")
                     except Exception:
                         continue
         return extracted_tasks

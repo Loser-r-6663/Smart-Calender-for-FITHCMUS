@@ -19,6 +19,16 @@ class Validator:
         return dt.replace(tzinfo=VN_TZ) if dt.tzinfo is None else dt
     
     @staticmethod
+    def _to_vn_time(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        # Nếu là naive datetime (như từ Moodle), gán tzinfo là VN_TZ
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=VN_TZ)
+        # Nếu đã có timezone khác, chuyển về VN_TZ
+        return dt.astimezone(VN_TZ)
+    
+    @staticmethod
     def _clean_text(value: str):
         return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
     
@@ -49,10 +59,10 @@ class Validator:
         now = datetime.now(tz=VN_TZ)
         expired: list[ExtractedTask] = []
         for task in tasks:
-            if isinstance(task.deadline, datetime) and self._aware_timezone(task.deadline) < now:
+            if isinstance(task.deadline, datetime) and self._to_vn_time(task.deadline) < now:
                 expired.append(task)
-            elif isinstance(task.registration_end, datetime) and self._aware_timezone(task.registration_end) < now:
+            elif isinstance(task.registration_end, datetime) and self._to_vn_time(task.registration_end) < now:
                 expired.append(task)
-            elif isinstance(task.end_time, datetime) and self._aware_timezone(task.end_time) < now:
+            elif isinstance(task.end_time, datetime) and self._to_vn_time(task.end_time) < now:
                 expired.append(task)
         return expired

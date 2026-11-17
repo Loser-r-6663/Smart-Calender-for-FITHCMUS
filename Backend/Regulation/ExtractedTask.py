@@ -84,9 +84,15 @@ class ExtractedTask(BaseTask):
         return self
     
     @model_validator(mode="after")
-    def check_requires_estimated_hours(self):
-        if self.type in ["event", "assignment"] and (self.estimated_hours is None or self.estimated_hours <= 0):
-            raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event' hoặc 'assignment'.")
+    def check_event_requires_estimated_hours(self):
+        if self.type == "event" and (self.estimated_hours is None or self.estimated_hours <= 0):
+            raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event'.")
+        return self
+    
+    @model_validator(mode="after")
+    def check_assignment_estimated_hours(self):
+        if self.type == "assignment" and self.estimated_hours is not None and self.estimated_hours <= 0:
+            raise ValueError("Khi type là 'assignment'. Nếu thiếu thông tin để tính estimated_hours, chia thành 2 trường hợp, ngắn hạn thì estimated_hours = 1-4, dài hạn thì estimated_hours = None")
         return self
     
     @classmethod

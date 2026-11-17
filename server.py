@@ -1,7 +1,12 @@
+import os
+
 from Backend.Regulation.User import User
 from Backend.TaskCreator import TaskCreator
 from Backend.Validator import Validator
 from Database.Database import Database
+
+SERVER, USER = "SERVER", "USER"
+os.environ["APP_ROLE"] = SERVER
 
 
 def task_creator(user: User | None = None):
@@ -13,19 +18,38 @@ def task_creator(user: User | None = None):
     validator = Validator()
     tasks = validator.deduplicate_task(extracted_tasks, retained_tasks)
     
-    new_tasks = [task for task in tasks if task not in retained_tasks]
-    database.save_tasks(new_tasks)
-    
     expired_tasks = validator.filter_expired_tasks(tasks)
     database.delete_tasks(expired_tasks)
     
-    return tasks
+    new_tasks = [task for task in tasks if task not in retained_tasks and task not in expired_tasks]
+    database.save_tasks(new_tasks)
+
+def update_session(user: User):
+    # Make sure the state directory not expired
+    with open("Backend/Crawler/State/PortalState.json", "r") as f:
+        portal_session = f.read()
+    with open("Backend/Crawler/State/MoodleState.json", "r") as f:
+        moodle_session = f.read()
+    
+    database = Database()
+    database.update_user(
+        user, {
+            "portal_session": portal_session,
+            "portal_status": True,
+            "moodle_session": moodle_session,
+            "moodle_status": True
+    })
 
 
 if __name__ == "__main__":
+    database = Database()
+    if os.environ.get("APP_ROLE") == USER:
+        update_session(database.get_user("username...", "password..."))
+    
+    # Crawl tasks from public platforms without user credentials
     task_creator()
     
-    database = Database()
+    # Crawl tasks for each user with their credentials
     for user in database.get_users():
         if user.portal_status or user.moodle_status:
             task_creator(user)
