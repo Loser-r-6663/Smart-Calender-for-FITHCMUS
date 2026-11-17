@@ -541,7 +541,86 @@ The PostgreSQL path does not coerce or import them. Unknown training-point polic
 still needs confirmation from the Database and training-point/scheduling teammates:
 the schema cannot preserve the null-versus-zero distinction from SQLite tests.
 
+## Transactional PostgreSQL profile
+
+`tests/test_transactional_search_postgres.py` tests `TransactionalSearch` with
+the lowercase `Database.database_manager.DatabaseManager`, its repositories,
+and the production `DatabaseConnection.transaction()` lifecycle. Search uses
+the trusted caller's assignments in `user_tasks`. For each operation the
+provider supplies a fresh connection and owns commit, rollback, and close.
+Search owns cursor cleanup and row conversion.
+
+The profile pins normalized SHA-256 source hashes from
+`09681446ea856efcd709aeec88101f9cac2b4f50` in
+[`tests/transactional_search_profile.py`](../tests/transactional_search_profile.py).
+It covers the SQL schema, lowercase manager, connection provider, task and user
+repositories, models, validators, task configuration, and enums. The suite
+checks both the hashes and the local Database import paths before connecting.
+Compared with the historical `7aa63cf` profile, the current schema adds assignment
+preferences and `user_drl_scores`. The task repository adds listing, and the
+lowercase manager has a per-operation transaction API and an atomic personal
+task creation and assignment method. The Search projection and assignment
+predicate use the shared task and assignment columns. The historical source
+guards and standalone sample SQL snapshot still use their original revision.
+
+Use Python 3.12 or newer with `psycopg2-binary`, Pydantic v2, and
+`python-dotenv`. Start a dedicated local PostgreSQL database using the
+[guarded sample setup](../README.md#local-postgresql-search-sample), or use an
+existing equivalent server. Use a role with CONNECT and CREATE-schema
+privileges for the dedicated database. On a fresh sample, run the guarded
+`search_sample seed` command twice and expect 45 tasks each time. For an
+initialized sample, use its existing credentials and establish the baseline
+with `demo`. Keep edits in that sample and review any demo expectation failures
+before proceeding.
+
+From the repository root, using the Python environment with those dependencies
+and the six existing `SEARCH_SAMPLE_DB_*` values already set:
+
+```powershell
+$env:RUN_SEARCH_POSTGRES_INTEGRATION = "0"
+$env:RUN_TRANSACTIONAL_SEARCH_POSTGRES_INTEGRATION = "1"
+$env:SEARCH_TEST_DB_HOST = $env:SEARCH_SAMPLE_DB_HOST
+$env:SEARCH_TEST_DB_PORT = $env:SEARCH_SAMPLE_DB_PORT
+$env:SEARCH_TEST_DB_NAME = $env:SEARCH_SAMPLE_DB_NAME
+$env:SEARCH_TEST_DB_USER = $env:SEARCH_SAMPLE_DB_USER
+$env:SEARCH_TEST_DB_PASSWORD = $env:SEARCH_SAMPLE_DB_PASSWORD
+$env:SEARCH_TEST_DB_CONFIRM = $env:SEARCH_TEST_DB_NAME
+$before = @(python -B -X utf8 -m search_sample demo)
+if ($LASTEXITCODE) { throw "Baseline demo failed" }
+foreach ($run in 1, 2) {
+    python -B -X utf8 -m unittest discover -s tests -p test_transactional_search_postgres.py -v
+    if ($LASTEXITCODE) { throw "Live run $run failed" }
+}
+$after = @(python -B -X utf8 -m search_sample demo)
+if ($LASTEXITCODE) { throw "Final demo failed" }
+if (($before -join "`n") -cne ($after -join "`n")) { throw "Sample demo output changed" }
+$env:RUN_TRANSACTIONAL_SEARCH_POSTGRES_INTEGRATION = "0"
+```
+
+Each test connection verifies the dedicated database, role, host, port, and
+startup search path. That path includes only the generated scratch schema,
+`pg_catalog`, and the session's temporary namespace. The suite uses the reviewed
+DDL for schema setup and manager calls for ordinary writes. Each case registers
+cleanup before creating its scratch schema and verifies the exact name is absent
+from `pg_namespace` after committed cleanup. Each successful run prints ten
+`Verified scratch schema absent` lines, including the deliberate setup and body
+failure cases. Missing settings, imports, source mismatches, or connection
+failures surface as errors after opt-in. The disabled suite reports eight skips.
+
+Verification used PostgreSQL 17.12 (UTF-8 with ICU `en-US`), Python 3.12.14,
+`psycopg2-binary` 2.9.13, Pydantic 2.14.3, and `python-dotenv` 1.2.4.
+Both live runs passed all eight tests and independently found zero remaining
+scratch schemas. Both sample seed calls reported 45 tasks. The before-and-after
+demos passed with identical output, and sorted row digests for the five sample
+tables matched after each run. The historical live profile was disabled.
+The offline run passed 213 tests, including five profile guards, 13 mocked
+transaction lifecycle tests, and the scheduler tests in `Backend/Unit_Test`.
+It skipped 20 historical Search cases, eight transactional Search cases, and
+one general Database PostgreSQL case. It reported zero failures or errors.
+
 ## Dedicated PostgreSQL integration tests
+
+This section describes the historical profile.
 
 `tests/test_postgres_search_integration.py` uses the real production SearchService,
 the exact `Database/DatabaseManager.py`, its task repository and PostgreSQL. The
@@ -623,7 +702,7 @@ filters, owner scope, sorting/pagination, blank inputs and query failures.
 It never mocks query execution or substitutes SQLite. Offline setup-guard and
 fixture-adapter tests are separate and do not count as real PostgreSQL checks.
 
-### Verification record: 2026-11-08 (blocked)
+### Historical profile verification record: 2026-11-08 (blocked)
 
 Search revision inspected and exercised offline:
 `10fadafc36ec2870085eaa4f053052b50e206ff8` on `Search` (initially clean).

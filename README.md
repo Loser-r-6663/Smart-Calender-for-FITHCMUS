@@ -309,6 +309,14 @@ Offline tests and fixture checks:
 git diff --check
 ```
 
+For the current lowercase manager and `TransactionalSearch`, use the separate
+`RUN_TRANSACTIONAL_SEARCH_POSTGRES_INTEGRATION` profile. The
+[transactional Search verification instructions](docs/structured-search.md#transactional-postgresql-profile)
+cover setup, two live runs, cleanup verification, and a before-and-after sample
+demo. The historical profile below has its own opt-in and source fingerprints.
+
+#### Historical PostgreSQL profile
+
 The guarded PostgreSQL Search suite requires the historical Database sources at
 `7aa63cfc`, plus Pydantic v2 and python-dotenv. Run it from a separate checkout
 or runtime with those sources on its Python import path. The four-feature
@@ -373,6 +381,8 @@ uses the transaction-based `Database/database_manager.py`; it exposes no Search
 endpoint. SQL constraints validate sample seeding. See the
 [schema/model discrepancies](docs/structured-search.md#discrepancies-requiring-database-confirmation).
 
-Docker, PostgreSQL and the driver were unavailable during preparation. The setup
-files, offline guards and deterministic expectations were checked; container
-startup, real seeding/idempotency, demo retrieval and live cleanup remain unverified.
+The sample seeded 45 tasks on two successive calls and its demo passed before
+and after both transactional-profile runs on local PostgreSQL 17.12. Its output
+and the row hashes for all five sample tables matched across the runs. This
+verification used a portable Windows cluster. Docker Compose startup was outside
+that run.
