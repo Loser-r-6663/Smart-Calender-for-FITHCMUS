@@ -39,7 +39,7 @@ khi trả về từ `DatabaseManager`.
 |---|---|
 | `tasks.py` | Tạo, đọc, liệt kê (có lọc theo `status`, `type`), cập nhật và xóa task; xác thực task trước khi ghi. |
 | `users.py` | Tạo, đọc, cập nhật và xóa user. |
-| `user_tasks.py` | Gán/bỏ gán task và truy vấn các liên kết user-task. |
+| `user_tasks.py` | Gán/bỏ gán task, cập nhật tùy chọn ghim/bỏ qua/dời giờ (`pin_status`, `custom_start_time`, `custom_end_time`) và truy vấn các liên kết user-task. |
 | `user_drl.py` | Đọc và cập nhật điểm rèn luyện 5 Điều (`user_drl_scores`) của từng user. |
 | `daily_tasks.py` | Thêm task vào ngày, truy vấn lịch ngày và cập nhật trạng thái hoàn thành. |
 
@@ -47,7 +47,7 @@ khi trả về từ `DatabaseManager`.
 
 | File | Vai trò |
 |---|---|
-| `enums.py` | Enum dùng chung cho loại task, trạng thái, tiêu chí ĐRL và nền tảng nguồn. |
+| `enums.py` | Enum dùng chung cho loại task, trạng thái, tiêu chí ĐRL, nền tảng nguồn và `UserTaskPinStatus`. |
 | `task_config.py` | Tập trung các trường task, giá trị mặc định và hàm tạo timestamp hiện tại. |
 | `task_validation.py` | Model task và quy tắc kiểm tra định dạng, miền giá trị, thời gian và quan hệ trường. |
 | `user_validation.py` | Model user và kiểm tra dữ liệu user. |

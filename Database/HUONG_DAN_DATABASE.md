@@ -52,7 +52,13 @@ Lưu `id`, `username`, `email` và `full_name`. Username và email là duy nhấ
 ### `user_tasks`
 
 Bảng liên kết user với task. Mỗi cặp `(user_id, task_id)` chỉ xuất hiện một
-lần. Khi xóa user hoặc task, liên kết tương ứng được xóa theo khóa ngoại.
+lần. Khi xóa user hoặc task, liên kết tương ứng được xóa theo khóa ngoại. Ngoài
+`assigned_at`, bảng còn lưu tùy chọn riêng của user cho task đó:
+
+- `pin_status`: `'default'`, `'pinned'` (đánh dấu giữ cố định) hoặc
+  `'rejected'` (bỏ qua không gợi ý lại).
+- `custom_start_time`, `custom_end_time`: khung giờ tự chọn của user cho task
+  linh hoạt (khi có cả hai giá trị, bắt buộc `custom_start_time < custom_end_time`).
 
 ### `daily_tasks`
 
@@ -141,7 +147,7 @@ cấu hình HTTPS và biện pháp bảo vệ vận hành phù hợp.
    ```
 
    Các quyền endpoint hiện có gồm `tasks:create/read/update/delete`,
-   `users:create/read/update/delete`, `user_tasks:create/read/delete` và
+   `users:create/read/update/delete`, `user_tasks:create/read/update/delete` và
    `daily_tasks:create/read/update/delete`. `*` cấp mọi quyền; role `admin`
    bắt buộc phải có `*`. Để giữ đúng nguyên tắc tối thiểu, không thêm quyền
    khác vào role `llm` nếu LLM chỉ được tạo task.
@@ -293,6 +299,7 @@ Task đọc qua `DatabaseManager` được trả về dưới dạng object tron
 | `DELETE` | `/users/{user_id}` | Xóa user |
 | `GET` | `/users/{user_id}/tasks` | Xem các task đã gán |
 | `PUT` | `/users/{user_id}/tasks/{task_id}` | Gán task cho user |
+| `PATCH` | `/users/{user_id}/tasks/{task_id}` | Ghim (`pinned`), bỏ qua (`rejected`) hoặc đặt khung giờ riêng cho task của user |
 | `DELETE` | `/users/{user_id}/tasks/{task_id}` | Bỏ gán task |
 | `GET` | `/users/{user_id}/drl` | Xem điểm ĐRL hiện tại 5 Điều của user |
 | `PUT` | `/users/{user_id}/drl` | Đặt lại toàn bộ điểm ĐRL 5 Điều (mặc định 0) |
@@ -305,6 +312,16 @@ Body tạo user:
   "username": "sinhvien01",
   "email": "sinhvien01@example.edu",
   "full_name": "Nguyễn Văn A"
+}
+```
+
+Body cập nhật tùy chọn user-task (`PATCH /users/{user_id}/tasks/{task_id}`):
+
+```json
+{
+  "pin_status": "pinned",
+  "custom_start_time": "2026-11-12T19:00:00+07:00",
+  "custom_end_time": "2026-11-12T19:30:00+07:00"
 }
 ```
 
