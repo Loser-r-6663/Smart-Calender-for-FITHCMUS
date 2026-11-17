@@ -54,7 +54,6 @@ class PortalCrawler(PlaywrightCrawler):
             # Fill in the login form and submit
             username = self.user.portal_username
             password = self.user.portal_password
-            print(f"Logging in with username: {username} and password: {password}")
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
             page.locator('xpath=//*[@id="dnn_ctr_Login_DNN"]/div/div[3]/span[2]/span/span').click()
