@@ -70,20 +70,37 @@ class PortalCrawler(PlaywrightCrawler):
         # Process table data and create RawTask objects
         raw_tasks: list[RawTask] = []
         for row in table:
-            raw_task = RawTask(
-                Title=row["Tên MH"],
-                Course=row["Mã MH"],
-                Description="LT",
-                Duration=row["Lịch LT"],
-            )
-            raw_tasks.append(raw_task)
-            
-            if row["Lịch TH"]:
-                raw_task = RawTask(
-                    Title=f'{row["Mã MH"]} {row["Tên MH"]}',
-                    Description="TH",
-                    Duration=row["Lịch TH"],
+            title = f'{row["Mã MH"]} · {row["Tên MH"]}'
+            course = row["Tên MH"]
+
+            for col_name, desc in (("Lịch LT", "Lý Thuyết"), ("Lịch TH", "Thực Hành")):
+                schedule_val = row.get(col_name)
+                if not schedule_val:
+                    continue
+
+                text = str(schedule_val).strip()
+                if "(" in text:
+                    duration, location = text.rstrip(")").split(" (", 1)
+                else:
+                    duration, location = text, None
+
+                if not location:
+                    loc_str = "Cơ sở 1"
+                elif any(k in location.lower() for k in ("cơ sở", "cs1", "cs2", "linh trung")):
+                    loc_str = location
+                else:
+                    loc_str = f"{location}, Cơ sở 1"
+
+                raw_tasks.append(
+                    RawTask(
+                        Title=title,
+                        Type="class",
+                        Course=course,
+                        Description=desc,
+                        Duration=duration,
+                        Location=loc_str,
+                        Link=self.home_url,
+                    )
                 )
-                raw_tasks.append(raw_task)
-        
+
         return raw_tasks
