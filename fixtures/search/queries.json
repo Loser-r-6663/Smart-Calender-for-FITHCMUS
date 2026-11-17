@@ -1,0 +1,816 @@
+[
+  {
+    "id": "q01",
+    "text": "CSC10004 assignments",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10004",
+        "types": [
+          "assignment"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Exact course and type, including overdue active work.",
+    "coverage_tags": [
+      "course-isolation",
+      "overdue"
+    ],
+    "excluded_ids": [
+      "asg-csc10005-lab",
+      "asg-csc10005-project"
+    ],
+    "expected_ids": [
+      "asg-csc10004-lab",
+      "asg-csc10004-project",
+      "asg-overdue"
+    ]
+  },
+  {
+    "id": "q02",
+    "text": "Search project môn CSC10005",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10005"
+      },
+      "keyword": "Search project"
+    },
+    "ordering_required": false,
+    "rationale": "Lexical hybrid branch with a hard course constraint; no semantic branch requested.",
+    "coverage_tags": [
+      "course-isolation",
+      "mixed-language"
+    ],
+    "excluded_ids": [
+      "asg-csc10004-project"
+    ],
+    "expected_ids": [
+      "asg-csc10005-project"
+    ]
+  },
+  {
+    "id": "q03",
+    "text": "học phí",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "học phí"
+    },
+    "ordering_required": false,
+    "rationale": "All normalized tokens must occur; no English translation.",
+    "coverage_tags": [
+      "accent-equivalence"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "fee-hk1",
+      "fee-installment",
+      "fee-mixed"
+    ]
+  },
+  {
+    "id": "q04",
+    "text": "hoc phi",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "hoc phi"
+    },
+    "ordering_required": false,
+    "rationale": "Same tokens after Vietnamese accent folding.",
+    "coverage_tags": [
+      "accent-equivalence"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "fee-hk1",
+      "fee-installment",
+      "fee-mixed"
+    ]
+  },
+  {
+    "id": "q05",
+    "text": "Registration closes today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "registration_end_within": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Closing today is a date test, including already closed registrations.",
+    "coverage_tags": [
+      "closes-today"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-reg-before",
+      "evt-reg-exact",
+      "evt-reg-after"
+    ]
+  },
+  {
+    "id": "q06",
+    "text": "Python registration open now",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T12:00:00+07:00"
+      },
+      "keyword": "Python"
+    },
+    "ordering_required": false,
+    "rationale": "11:00 is closed, 12:00 inclusive, 13:00 still open.",
+    "coverage_tags": [
+      "registration-boundary",
+      "before-exact-after"
+    ],
+    "excluded_ids": [
+      "evt-reg-before"
+    ],
+    "expected_ids": [
+      "evt-reg-exact",
+      "evt-reg-after"
+    ]
+  },
+  {
+    "id": "q07",
+    "text": "Python registration at 11:59:59",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T11:59:59+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T11:59:59+07:00"
+      },
+      "keyword": "Python"
+    },
+    "ordering_required": false,
+    "rationale": "One second before the noon closing instant.",
+    "coverage_tags": [
+      "registration-boundary"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-reg-exact",
+      "evt-reg-after"
+    ]
+  },
+  {
+    "id": "q08",
+    "text": "Python registration at 12:00:01",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:01+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T12:00:01+07:00"
+      },
+      "keyword": "Python"
+    },
+    "ordering_required": false,
+    "rationale": "One second after noon removes the noon workshop.",
+    "coverage_tags": [
+      "registration-boundary"
+    ],
+    "excluded_ids": [
+      "evt-reg-exact"
+    ],
+    "expected_ids": [
+      "evt-reg-after"
+    ]
+  },
+  {
+    "id": "q09",
+    "text": "Events overlapping today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "event_overlaps": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Half-open intervals include spanning events, exclude midnight touching.",
+    "coverage_tags": [
+      "overlap",
+      "day-boundary"
+    ],
+    "excluded_ids": [
+      "evt-end-midnight",
+      "evt-next-midnight"
+    ],
+    "expected_ids": [
+      "evt-overlap",
+      "evt-today"
+    ]
+  },
+  {
+    "id": "q10",
+    "text": "Events starting today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "start_time_within": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Starts-within is narrower than overlap.",
+    "coverage_tags": [
+      "starts-within"
+    ],
+    "excluded_ids": [
+      "evt-overlap"
+    ],
+    "expected_ids": [
+      "evt-today"
+    ]
+  },
+  {
+    "id": "q11",
+    "text": "Robotics registration definitely open",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T12:00:00+07:00"
+      },
+      "keyword": "Robotics"
+    },
+    "ordering_required": false,
+    "rationale": "Missing registration start is unknown.",
+    "coverage_tags": [
+      "missing-start"
+    ],
+    "excluded_ids": [
+      "evt-missing-start"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q12",
+    "text": "AI reading registration definitely open",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T12:00:00+07:00"
+      },
+      "keyword": "AI reading"
+    },
+    "ordering_required": false,
+    "rationale": "Missing registration end is unknown.",
+    "coverage_tags": [
+      "missing-end"
+    ],
+    "excluded_ids": [
+      "evt-missing-end"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q13",
+    "text": "Coding circle registration definitely open",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "registration_open_at": "2026-10-30T12:00:00+07:00"
+      },
+      "keyword": "coding circle"
+    },
+    "ordering_required": false,
+    "rationale": "Both registration endpoints are unknown.",
+    "coverage_tags": [
+      "missing-both"
+    ],
+    "excluded_ids": [
+      "evt-missing-both"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q14",
+    "text": "Workshop AI",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Workshop AI"
+    },
+    "ordering_required": false,
+    "rationale": "Default active-only policy hides cancelled and done tasks.",
+    "coverage_tags": [
+      "status-default"
+    ],
+    "excluded_ids": [
+      "evt-cancelled",
+      "evt-done"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q15",
+    "text": "Cancelled AI workshop",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "statuses": [
+          "cancelled"
+        ]
+      },
+      "keyword": "Workshop AI"
+    },
+    "ordering_required": false,
+    "rationale": "Explicit status replaces the active default.",
+    "coverage_tags": [
+      "status-cancelled"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-cancelled"
+    ]
+  },
+  {
+    "id": "q16",
+    "text": "Completed AI workshop",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "statuses": [
+          "done"
+        ]
+      },
+      "keyword": "Workshop AI"
+    },
+    "ordering_required": false,
+    "rationale": "Completed is represented by the existing done value.",
+    "coverage_tags": [
+      "status-done"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-done"
+    ]
+  },
+  {
+    "id": "q17",
+    "text": "quantum pineapple",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "quantum pineapple"
+    },
+    "ordering_required": false,
+    "rationale": "No relevant token match; no active-task fallback.",
+    "coverage_tags": [
+      "negative"
+    ],
+    "excluded_ids": [],
+    "expected_ids": []
+  },
+  {
+    "id": "q18",
+    "text": "quantum pineapple CSC10004",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10004"
+      },
+      "keyword": "quantum pineapple"
+    },
+    "ordering_required": false,
+    "rationale": "A course filter does not justify fallback on keyword miss.",
+    "coverage_tags": [
+      "negative",
+      "course-isolation"
+    ],
+    "excluded_ids": [],
+    "expected_ids": []
+  },
+  {
+    "id": "q19",
+    "text": "Tuition deadlines in November before the 16th",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "tuition"
+        ],
+        "deadline_within": [
+          "2026-11-01T00:00:00+07:00",
+          "2026-11-16T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Filter the payment deadline, not registration or event times.",
+    "coverage_tags": [
+      "tuition",
+      "deadline-role"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "fee-hk1",
+      "fee-english",
+      "fee-mixed"
+    ]
+  },
+  {
+    "id": "q20",
+    "text": "CS2 events worth at least 5 points today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "location_prefix": "CS2",
+        "min_training_points": 5,
+        "event_overlaps": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Combines location, minimum points, type and overlap.",
+    "coverage_tags": [
+      "combined-filters",
+      "training-points"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-overlap",
+      "evt-today"
+    ]
+  },
+  {
+    "id": "q21",
+    "text": "Upcoming environmental volunteering",
+    "mode": "semantic",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "start_time_within": [
+          "2026-10-31T00:00:00+07:00",
+          "2026-11-10T00:00:00+07:00"
+        ]
+      },
+      "semantic_text": "Upcoming environmental volunteering"
+    },
+    "ordering_required": false,
+    "rationale": "Green campus cleanup and coastal litter collection directly address this intent; coding is unrelated.",
+    "coverage_tags": [
+      "semantic",
+      "environment"
+    ],
+    "excluded_ids": [],
+    "relevance_labels": {
+      "evt-green": 2,
+      "evt-beach": 2
+    },
+    "unlisted_eligible_grade": 0
+  },
+  {
+    "id": "q22",
+    "text": "Activities for K26 to improve public speaking",
+    "mode": "semantic",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "target_audience": "K26"
+      },
+      "semantic_text": "Activities for K26 to improve public speaking"
+    },
+    "ordering_required": false,
+    "rationale": "Presentation practice directly fits; bilingual debate practices related communication skills.",
+    "coverage_tags": [
+      "semantic",
+      "audience"
+    ],
+    "excluded_ids": [],
+    "relevance_labels": {
+      "evt-speaking": 2,
+      "evt-debate": 1
+    },
+    "unlisted_eligible_grade": 0
+  },
+  {
+    "id": "q23",
+    "text": "CSC10004 Moodle work due today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10004",
+        "types": [
+          "assignment"
+        ],
+        "source_platform": "moodle",
+        "deadline_within": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Course, source, type and due-date intersection.",
+    "coverage_tags": [
+      "combined-filters",
+      "source",
+      "deadline-role"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "asg-csc10004-lab"
+    ]
+  },
+  {
+    "id": "q24",
+    "text": "Archived worksheets",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "statuses": [
+          "archived"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Explicit archived status is supported independently of current dates.",
+    "coverage_tags": [
+      "status-archived"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "asg-archived"
+    ]
+  },
+  {
+    "id": "q25",
+    "text": "Bản nháp",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Bản nháp"
+    },
+    "ordering_required": false,
+    "rationale": "Old title is searchable before the edit.",
+    "coverage_tags": [
+      "update-title"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "asg-update"
+    ]
+  },
+  {
+    "id": "q26",
+    "text": "Bản nháp after edit",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "edited",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Bản nháp"
+    },
+    "ordering_required": false,
+    "rationale": "Old title must leave every retrieval index.",
+    "coverage_tags": [
+      "update-title"
+    ],
+    "excluded_ids": [
+      "asg-update"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q27",
+    "text": "CSC10014 due today",
+    "mode": "structured",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10014",
+        "deadline_within": [
+          "2026-10-30T00:00:00+07:00",
+          "2026-10-31T00:00:00+07:00"
+        ]
+      }
+    },
+    "ordering_required": false,
+    "rationale": "Original deadline lies today.",
+    "coverage_tags": [
+      "update-deadline"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "asg-update"
+    ]
+  },
+  {
+    "id": "q28",
+    "text": "Final retrieval report due November 2",
+    "mode": "hybrid",
+    "evaluation": "retrieval",
+    "state": "edited",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {
+        "course_code": "CSC10014",
+        "deadline_within": [
+          "2026-11-02T00:00:00+07:00",
+          "2026-11-03T00:00:00+07:00"
+        ]
+      },
+      "keyword": "Final retrieval"
+    },
+    "ordering_required": false,
+    "rationale": "New title and deadline belong to the same stable ID.",
+    "coverage_tags": [
+      "update-deadline",
+      "update-title"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "asg-update"
+    ]
+  },
+  {
+    "id": "q29",
+    "text": "Security seminar",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Security seminar"
+    },
+    "ordering_required": false,
+    "rationale": "Active before cancellation.",
+    "coverage_tags": [
+      "cancel-operation"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-cancel"
+    ]
+  },
+  {
+    "id": "q30",
+    "text": "Security seminar after cancellation",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "cancelled",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Security seminar"
+    },
+    "ordering_required": false,
+    "rationale": "Cancelled records disappear from default results.",
+    "coverage_tags": [
+      "cancel-operation"
+    ],
+    "excluded_ids": [
+      "evt-cancel"
+    ],
+    "expected_ids": []
+  },
+  {
+    "id": "q31",
+    "text": "Chess evening",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "base",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Chess evening"
+    },
+    "ordering_required": false,
+    "rationale": "Present before explicit deletion.",
+    "coverage_tags": [
+      "delete-operation"
+    ],
+    "excluded_ids": [],
+    "expected_ids": [
+      "evt-delete"
+    ]
+  },
+  {
+    "id": "q32",
+    "text": "Chess evening after deletion",
+    "mode": "keyword",
+    "evaluation": "retrieval",
+    "state": "deleted",
+    "reference_time": "2026-10-30T12:00:00+07:00",
+    "request": {
+      "filters": {},
+      "keyword": "Chess evening"
+    },
+    "ordering_required": false,
+    "rationale": "Deleted records cannot survive in any retrieval index.",
+    "coverage_tags": [
+      "delete-operation"
+    ],
+    "excluded_ids": [
+      "evt-delete"
+    ],
+    "expected_ids": []
+  }
+]
