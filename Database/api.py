@@ -12,6 +12,7 @@ from Database.api_authorization import require_permission
 from Database.api_schemas import (
     CompletionUpdate,
     DailyTaskUpdate,
+    PersonalTaskCreate,
     SchedulePersistenceResponse,
     ScheduleRunRequest,
     ScheduleRunResponse,
@@ -271,6 +272,24 @@ def get_user_tasks(
     database: DatabaseManager = Depends(get_database_manager),
 ) -> list[UserTaskObject]:
     return database.get_user_tasks(user_id)
+
+
+@app.post(
+    "/users/{user_id}/personal-tasks",
+    status_code=201,
+    dependencies=[Depends(require_permission("user_tasks:create"))],
+)
+def create_personal_task(
+    payload: PersonalTaskCreate,
+    user_id: int = Path(ge=1),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> dict[str, Any]:
+    created = database.create_personal_task(
+        user_id, payload.model_dump(exclude_unset=True)
+    )
+    if created is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return created
 
 
 @app.put(

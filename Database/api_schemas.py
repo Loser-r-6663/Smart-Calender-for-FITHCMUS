@@ -177,3 +177,29 @@ class UserTaskPreferencesUpdate(BaseModel):
         ):
             raise ValueError("custom_start_time must be earlier than custom_end_time")
         return self
+
+
+class PersonalTaskCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"\S")
+    title: str = Field(min_length=2, max_length=255, pattern=r"\S")
+    description: str | None = None
+    location: str | None = Field(default=None, min_length=1)
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    deadline: datetime | None = None
+    estimated_hours: float | None = Field(
+        default=None, ge=0.25, le=40.0, strict=True
+    )
+    recurrence: str | None = Field(default=None, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "PersonalTaskCreate":
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.start_time >= self.end_time
+        ):
+            raise ValueError("start_time must be earlier than end_time")
+        return self

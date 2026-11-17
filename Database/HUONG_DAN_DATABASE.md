@@ -298,6 +298,7 @@ Task đọc qua `DatabaseManager` được trả về dưới dạng object tron
 | `PATCH` | `/users/{user_id}` | Cập nhật user |
 | `DELETE` | `/users/{user_id}` | Xóa user |
 | `GET` | `/users/{user_id}/tasks` | Xem các task đã gán |
+| `POST` | `/users/{user_id}/personal-tasks` | Tạo `personal` task (`is_manual=true`) và gán thẳng cho user |
 | `PUT` | `/users/{user_id}/tasks/{task_id}` | Gán task cho user |
 | `PATCH` | `/users/{user_id}/tasks/{task_id}` | Ghim (`pinned`), bỏ qua (`rejected`) hoặc đặt khung giờ riêng cho task của user |
 | `DELETE` | `/users/{user_id}/tasks/{task_id}` | Bỏ gán task |

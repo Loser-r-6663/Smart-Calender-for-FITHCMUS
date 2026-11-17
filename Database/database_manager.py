@@ -99,6 +99,28 @@ class DatabaseManager:
     def unassign_task(self, user_id: int, task_id: str) -> bool:
         return self._run(self.user_tasks.unassign, user_id, task_id)
 
+    def create_personal_task(
+        self, user_id: int, task_data: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
+        from uuid import uuid4
+
+        def _create_and_assign(db_connection: Any) -> dict[str, Any] | None:
+            if self.users.get_by_id(db_connection, user_id) is None:
+                return None
+            payload = dict(task_data)
+            if not payload.get("id"):
+                payload["id"] = f"personal-{uuid4().hex[:12]}"
+            payload["type"] = "personal"
+            payload["is_manual"] = True
+            payload.setdefault("source_platform", "custom")
+            payload.setdefault("training_points", 0)
+            payload.setdefault("status", "active")
+            created = self.tasks.create(db_connection, payload)
+            self.user_tasks.assign(db_connection, user_id, created["id"])
+            return created
+
+        return self._run(_create_and_assign)
+
     def get_user_drl_scores(self, user_id: int) -> UserDRLScoresObject | None:
         def _load(db_connection: Any) -> UserDRLScoresObject | None:
             if self.users.get_by_id(db_connection, user_id) is None:
