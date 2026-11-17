@@ -6,7 +6,10 @@ from Backend.Validator import Validator
 from Database.Database import Database
 
 
-def run_pipeline(database: Database, validator: Validator, user: User | None = None):
+def run_pipeline(user: User | None = None):
+    database = Database(user)
+    validator = Validator()
+    
     extracted_tasks = TaskCreator(user).create_task()
     retained_tasks = database.get_tasks(limit=1000)
 
@@ -28,20 +31,17 @@ def run_pipeline(database: Database, validator: Validator, user: User | None = N
 def main():
     with Actor:
         actor_input: dict = Actor.get_input() or {}
-        mode = actor_input.get("mode", "all")  # "public", "personal", hoặc "all"
-
-        database = Database()
-        validator = Validator()
+        mode = actor_input.get("mode", "all")  # NOTE: "public", "personal", or "all"
 
         if mode in ("public", "all"):
             Actor.log.info("Crawling public sources...")
-            run_pipeline(database, validator, user=None)
+            run_pipeline(user=None)
 
         if mode in ("personal", "all"):
             Actor.log.info("Crawling personal user sources...")
-            for user in database.get_users():
+            for user in Database().get_users():
                 if user.portal_status or user.moodle_status:
-                    run_pipeline(database, validator, user=user)
+                    run_pipeline(user=user)
 
 
 if __name__ == "__main__":

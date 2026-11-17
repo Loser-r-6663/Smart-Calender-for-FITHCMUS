@@ -1,3 +1,8 @@
+-- ==============================================================================
+-- Bảng public.tasks: CHỈ LƯU TASK CHUNG (Public / Common tasks)
+-- Các task riêng của từng người dùng được lưu ở bảng public.user_task
+-- ==============================================================================
+
 create table public.tasks (
   id uuid not null default gen_random_uuid (),
   title text not null,

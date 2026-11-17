@@ -11,9 +11,11 @@ class TaskRepository(BaseSupabaseClient):
         self,
         supabase_url: str | None = None,
         supabase_key: str | None = None,
+        table_name: str = "tasks",
     ):
         super().__init__(supabase_url, supabase_key)
-        self.table_url = f"{self.supabase_url}/rest/v1/tasks"
+        self.table_name = table_name
+        self.table_url = f"{self.supabase_url}/rest/v1/{table_name}"
 
     @staticmethod
     def serialize_time(value: datetime | DayTime | None, prefix: str):

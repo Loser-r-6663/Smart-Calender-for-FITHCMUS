@@ -10,6 +10,10 @@ class ExtractedTask(BaseTask):
     id: str | None = Field(
         default=None
     )
+    user_id: str | None = Field(
+        default=None,
+        description="ID của người dùng nếu đây là task riêng (user_task)"
+    )
     title: str = Field(
         description="Tiêu đề chính xác, ngắn gọn và rõ ràng của nhiệm vụ, sự kiện hoặc thông báo"
     )

@@ -5,6 +5,7 @@ from Backend.Regulation.ExtractedTask import ExtractedTask
 from Backend.Regulation.User import User
 
 from Database.task_repository import TaskRepository
+from Database.user_task_repository import UserTaskRepository
 from Database.user_repository import UserRepository
 from Database import crypto
 
@@ -15,14 +16,32 @@ class Database:
     while delegating specific domain operations to specialized repositories.
     """
 
-    def __init__(self, supabase_url: str | None = None, supabase_key: str | None = None):
-        self.tasks = TaskRepository(supabase_url=supabase_url, supabase_key=supabase_key)
+    def __init__(
+        self,
+        user: User | str | None = None,
+        supabase_url: str | None = None,
+        supabase_key: str | None = None,
+    ):
+        self.user = user
+        self.public_tasks = TaskRepository(supabase_url=supabase_url, supabase_key=supabase_key)
+        self.user_tasks = UserTaskRepository(supabase_url=supabase_url, supabase_key=supabase_key)
         self.users = UserRepository(supabase_url=supabase_url, supabase_key=supabase_key)
+
+        # Route self.tasks based on user
+        self.tasks = self.user_tasks if self.user else self.public_tasks
 
         # Retain backward-compatible attributes
         self.TASKS_TABLE_URL = self.tasks.table_url
         self.USERS_TABLE_URL = self.users.table_url
         self.HEADERS = self.tasks.headers
+
+    def _resolve_user_id(self, user: User | str | None = None) -> str | None:
+        target_user = user if user is not None else self.user
+        if target_user is None:
+            return None
+        if isinstance(target_user, User):
+            return str(target_user.id) if target_user.id else None
+        return str(target_user)
 
     # --- Security / Encryption Backward Compatibility ---
     @staticmethod
@@ -55,7 +74,9 @@ class Database:
         return TaskRepository.deserialize_time(row, prefix)
 
     @classmethod
-    def _task_to_row(cls, task: ExtractedTask):
+    def _task_to_row(cls, task: ExtractedTask, user_id: str | None = None):
+        if user_id or getattr(task, "user_id", None):
+            return UserTaskRepository.task_to_row(task, user_id=user_id)
         return TaskRepository.task_to_row(task)
 
     @classmethod
@@ -72,17 +93,25 @@ class Database:
         return UserRepository.row_to_user(row, include_password_hash=include_password_hash)
 
     # --- Task Operations ---
-    def save_tasks(self, tasks: list[ExtractedTask]):
-        return self.tasks.save(tasks)
+    def save_tasks(self, tasks: list[ExtractedTask], user: User | str | None = None):
+        user_id = self._resolve_user_id(user)
+        if user_id: return self.user_tasks.save(tasks, user_id=user_id)
+        return self.public_tasks.save(tasks)
 
-    def delete_tasks(self, tasks: list[ExtractedTask]):
-        return self.tasks.delete(tasks)
+    def delete_tasks(self, tasks: list[ExtractedTask], user: User | str | None = None):
+        user_id = self._resolve_user_id(user)
+        if user_id: return self.user_tasks.delete(tasks, user_id=user_id)
+        return self.public_tasks.delete(tasks)
 
-    def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
-        return self.tasks.get(limit=limit)
+    def get_tasks(self, limit: int = 100, user: User | str | None = None) -> list[ExtractedTask]:
+        user_id = self._resolve_user_id(user)
+        if user_id: return self.user_tasks.get(user_id=user_id, limit=limit)
+        return self.public_tasks.get(limit=limit)
 
-    def update_task(self, task_id: str, data: ExtractedTask | dict):
-        return self.tasks.update(task_id=task_id, data=data)
+    def update_task(self, task_id: str, data: ExtractedTask | dict, user: User | str | None = None):
+        user_id = self._resolve_user_id(user)
+        if user_id: return self.user_tasks.update(task_id=task_id, data=data, user_id=user_id)
+        return self.public_tasks.update(task_id=task_id, data=data)
 
     # --- User Operations ---
     def save_user(self, user: User) -> User:

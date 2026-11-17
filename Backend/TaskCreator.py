@@ -82,4 +82,7 @@ class TaskCreator():
             self.personal_crawlers if self.user else self.public_crawlers
         )
         extracted_tasks = self.parse_tasks(raw_tasks)
+        if self.user and self.user.id:
+            for task in extracted_tasks:
+                task.user_id = str(self.user.id)
         return extracted_tasks
