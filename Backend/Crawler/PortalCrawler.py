@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
@@ -37,9 +38,11 @@ class PortalCrawler(PlaywrightCrawler):
         assert self.user.portal_session
         
         if not cookies:
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         if self.time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         else:
             return False, {"headless": True, "storage_state": self.state_file}

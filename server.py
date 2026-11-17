@@ -1,7 +1,11 @@
+import os
+
 from Backend.Regulation.User import User
 from Backend.TaskCreator import TaskCreator
 from Backend.Validator import Validator
 from Database.Database import Database
+
+os.environ["APP_ROLE"] = "SERVER"
 
 
 def task_creator(user: User | None = None):

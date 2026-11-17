@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
@@ -23,6 +24,7 @@ class MoodleCrawler(PlaywrightCrawler):
         assert self.user.moodle_session
         
         if not cookies:
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state_file}
@@ -30,6 +32,7 @@ class MoodleCrawler(PlaywrightCrawler):
             self.login(settings)
             return True, settings
         except ConnectionError:
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": self.state_file}
     
     def login(self, settings):
