@@ -63,6 +63,7 @@ class BranchAndBoundScheduler:
             for cat, pts in initial_drl.items():
                 if cat in curr_drl:
                     curr_drl[cat] = min(max(0, int(pts)), self.drl_caps[cat])
+        base_initial_drl: Dict[str, int] = dict(curr_drl)
 
         init_total = sum(curr_drl.values())
         if self.global_cap is not None and init_total >= self.global_cap:
@@ -71,7 +72,7 @@ class BranchAndBoundScheduler:
                 status="OPTIMAL",
                 selected_events=[],
                 total_drl_gained=0,
-                initial_drl=curr_drl,
+                initial_drl=base_initial_drl,
                 final_drl=curr_drl,
                 drl_caps=self.drl_caps,
                 execution_time_seconds=exec_duration,
@@ -86,10 +87,17 @@ class BranchAndBoundScheduler:
         fixed_intervals: List[Tuple[datetime, datetime, str, str]] = []
         raw_candidates: List[Dict[str, Any]] = []
         flexible_workloads: List[Dict[str, Any]] = []
+        pinned_scheduled_events: List[ScheduledDRLEvent] = []
+        pinned_drl_gained = 0
 
         for item in tasks:
             task_dict: Dict[str, Any] = item if isinstance(item, dict) else item.__dict__
             
+            pin_status = str(task_dict.get("pin_status") or "default").lower()
+            if pin_status == "rejected":
+                continue
+            is_pinned = bool(task_dict.get("is_pinned")) or pin_status == "pinned"
+
             task_id = str(task_dict.get("id", ""))
             title = str(task_dict.get("title", "Không tên"))
             task_type = str(task_dict.get("type", "")).lower()
@@ -163,15 +171,34 @@ class BranchAndBoundScheduler:
             elif t_points > 0:
                 if drl_cat not in self.drl_caps:
                     drl_cat = "dieu_3"
-                raw_candidates.append({
-                    "id": task_id,
-                    "title": title,
-                    "start_time": st,
-                    "end_time": et,
-                    "location": location,
-                    "training_points": t_points,
-                    "drl_category": drl_cat,
-                })
+                if is_pinned:
+                    fixed_intervals.append((st, et, location, title))
+                    cat_gap = self.drl_caps[drl_cat] - curr_drl[drl_cat]
+                    if self.global_cap is not None:
+                        cat_gap = min(cat_gap, self.global_cap - sum(curr_drl.values()))
+                    gain = min(t_points, max(0, cat_gap))
+                    curr_drl[drl_cat] += gain
+                    pinned_drl_gained += gain
+                    pinned_scheduled_events.append(ScheduledDRLEvent(
+                        task_id=task_id,
+                        title=title,
+                        start_time=st,
+                        end_time=et,
+                        location=location,
+                        training_points=t_points,
+                        drl_category=drl_cat,
+                        points_gained=gain,
+                    ))
+                else:
+                    raw_candidates.append({
+                        "id": task_id,
+                        "title": title,
+                        "start_time": st,
+                        "end_time": et,
+                        "location": location,
+                        "training_points": t_points,
+                        "drl_category": drl_cat,
+                    })
 
         # Hàm kiểm tra quỹ thời gian rảnh đủ để thực hiện các task linh hoạt
         def is_workload_feasible(selected_events_list: List[Dict[str, Any]]) -> bool:
@@ -257,16 +284,18 @@ class BranchAndBoundScheduler:
 
         if total_candidates == 0:
             exec_duration = time.perf_counter() - start_exec_time
+            pinned_scheduled_events.sort(key=lambda ev: (ev.start_time, ev.end_time))
             return BranchAndBoundResult(
-                status="FEASIBLE",
-                selected_events=[],
-                total_drl_gained=0,
-                initial_drl=curr_drl,
-                final_drl=curr_drl,
+                status="OPTIMAL" if pinned_scheduled_events else "FEASIBLE",
+                selected_events=pinned_scheduled_events,
+                total_drl_gained=pinned_drl_gained,
+                initial_drl=base_initial_drl,
+                final_drl=dict(curr_drl),
                 drl_caps=self.drl_caps,
                 execution_time_seconds=exec_duration,
                 nodes_explored=0,
                 total_candidates_considered=0,
+                global_cap=self.global_cap,
             )
 
         cat_list = tuple(sorted(self.drl_caps.keys()))
@@ -402,7 +431,7 @@ class BranchAndBoundScheduler:
         exec_duration = time.perf_counter() - start_exec_time
 
         # Chuẩn bị danh sách sự kiện trả về
-        final_events: List[ScheduledDRLEvent] = []
+        final_events: List[ScheduledDRLEvent] = list(pinned_scheduled_events)
         final_drl: Dict[str, int] = dict(curr_drl)
 
         for ev_data, pts_gain in best_selection:
@@ -418,11 +447,13 @@ class BranchAndBoundScheduler:
                 points_gained=pts_gain,
             ))
 
+        final_events.sort(key=lambda ev: (ev.start_time, ev.end_time))
+
         return BranchAndBoundResult(
             status="OPTIMAL",
             selected_events=final_events,
-            total_drl_gained=best_score,
-            initial_drl=curr_drl,
+            total_drl_gained=pinned_drl_gained + best_score,
+            initial_drl=base_initial_drl,
             final_drl=final_drl,
             drl_caps=self.drl_caps,
             execution_time_seconds=exec_duration,

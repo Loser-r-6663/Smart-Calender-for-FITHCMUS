@@ -408,6 +408,152 @@ class SchedulingServiceTests(unittest.TestCase):
         self.assertIn("ev-cs2-safe", selected_ids)
         self.assertEqual(res.total_drl_gained, 8)
 
+    def test_personal_task_scoped_to_assigned_user_only(self) -> None:
+        user_personal = make_task_object(
+            id="personal-u1",
+            title="Lich kham rang cua User 1",
+            type="personal",
+            start_time=datetime(2026, 11, 10, 14, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 10, 16, 0, tzinfo=GMT_PLUS_7),
+            is_manual=True,
+        )
+        other_personal = make_task_object(
+            id="personal-u2",
+            title="Lich ca nhan cua User khac",
+            type="personal",
+            start_time=datetime(2026, 11, 11, 14, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 11, 16, 0, tzinfo=GMT_PLUS_7),
+            is_manual=True,
+        )
+        ev_conflict_u1 = make_task_object(
+            id="ev-tue",
+            title="Workshop chieu T3",
+            type="event",
+            start_time=datetime(2026, 11, 10, 14, 30, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 10, 15, 30, tzinfo=GMT_PLUS_7),
+            training_points=10,
+            drl_category="dieu_3",
+        )
+        ev_during_u2_personal = make_task_object(
+            id="ev-wed",
+            title="Workshop chieu T4",
+            type="event",
+            start_time=datetime(2026, 11, 11, 14, 30, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 11, 15, 30, tzinfo=GMT_PLUS_7),
+            training_points=6,
+            drl_category="dieu_3",
+        )
+
+        database = Mock()
+        database.get_user.return_value = UserObject(id=1, username="sv01", email="sv01@example.edu")
+        database.get_user_tasks.return_value = [
+            UserTaskObject(
+                user_id=1,
+                task_id="personal-u1",
+                assigned_at=datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+            )
+        ]
+        database.get_user_drl_scores.return_value = UserDRLScoresObject(user_id=1)
+        database.list_tasks.return_value = [
+            user_personal,
+            other_personal,
+            ev_conflict_u1,
+            ev_during_u2_personal,
+        ]
+
+        res = SchedulingService(database=database).run(user_id=1, week_start=date(2026, 11, 9), persist=False)
+        selected_ids = [ev.task_id for ev in res.schedule.selected_events]
+        self.assertNotIn("ev-tue", selected_ids)
+        self.assertIn("ev-wed", selected_ids)
+        self.assertEqual(res.schedule.total_drl_gained, 6)
+
+    def test_user_task_pin_reject_and_custom_reschedule(self) -> None:
+        pinned_low_pts = make_task_object(
+            id="ev-pinned",
+            title="Hoi thao da danh dau",
+            type="event",
+            location="CS1",
+            start_time=datetime(2026, 11, 12, 9, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 12, 11, 0, tzinfo=GMT_PLUS_7),
+            training_points=4,
+            drl_category="dieu_3",
+        )
+        higher_conflicting = make_task_object(
+            id="ev-conflict-high",
+            title="Hoi thao trung gio diem cao hon",
+            type="event",
+            location="CS1",
+            start_time=datetime(2026, 11, 12, 9, 30, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 12, 10, 30, tzinfo=GMT_PLUS_7),
+            training_points=12,
+            drl_category="dieu_3",
+        )
+        rejected_high = make_task_object(
+            id="ev-rejected",
+            title="Su kien user khong thich",
+            type="event",
+            location="CS1",
+            start_time=datetime(2026, 11, 13, 9, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 13, 11, 0, tzinfo=GMT_PLUS_7),
+            training_points=15,
+            drl_category="dieu_3",
+        )
+        flexible_rescheduled = make_task_object(
+            id="ev-flex-custom",
+            title="Khao sat online doi gio",
+            type="event",
+            location="ONLINE",
+            start_time=datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+            end_time=datetime(2026, 11, 15, 23, 0, tzinfo=GMT_PLUS_7),
+            training_points=5,
+            drl_category="dieu_4",
+        )
+
+        custom_start = datetime(2026, 11, 14, 19, 0, tzinfo=GMT_PLUS_7)
+        custom_end = datetime(2026, 11, 14, 19, 30, tzinfo=GMT_PLUS_7)
+
+        database = Mock()
+        database.get_user.return_value = UserObject(id=1, username="sv01", email="sv01@example.edu")
+        database.get_user_tasks.return_value = [
+            UserTaskObject(
+                user_id=1,
+                task_id="ev-pinned",
+                assigned_at=datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                pin_status="pinned",
+            ),
+            UserTaskObject(
+                user_id=1,
+                task_id="ev-rejected",
+                assigned_at=datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                pin_status="rejected",
+            ),
+            UserTaskObject(
+                user_id=1,
+                task_id="ev-flex-custom",
+                assigned_at=datetime(2026, 11, 9, 8, 0, tzinfo=GMT_PLUS_7),
+                pin_status="pinned",
+                custom_start_time=custom_start,
+                custom_end_time=custom_end,
+            ),
+        ]
+        database.get_user_drl_scores.return_value = UserDRLScoresObject(user_id=1)
+        database.list_tasks.return_value = [
+            pinned_low_pts,
+            higher_conflicting,
+            rejected_high,
+            flexible_rescheduled,
+        ]
+
+        res = SchedulingService(database=database).run(user_id=1, week_start=date(2026, 11, 9), persist=False)
+        selected_map = {ev.task_id: ev for ev in res.schedule.selected_events}
+        self.assertIn("ev-pinned", selected_map)
+        self.assertNotIn("ev-conflict-high", selected_map)
+        self.assertNotIn("ev-rejected", selected_map)
+        self.assertIn("ev-flex-custom", selected_map)
+        self.assertEqual(selected_map["ev-flex-custom"].start_time, custom_start)
+        self.assertEqual(selected_map["ev-flex-custom"].end_time, custom_end)
+        self.assertEqual(res.schedule.total_drl_gained, 9)
+
 
 if __name__ == "__main__":
     unittest.main()

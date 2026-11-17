@@ -185,16 +185,38 @@ def _should_keep_task(
     if status in _INACTIVE_STATUSES:
         return False
 
+    task_id = str(data.get("id") or "")
     task_type = str(data.get("type") or "").lower()
     training_points = int(data.get("training_points") or 0)
-    if task_type in FIXED_TASK_TYPES or task_type == "assignment" or training_points > 0:
+
+    if task_type == "personal":
+        return assigned_task_ids is None or task_id in assigned_task_ids
+
+    if task_type in {"class", "exam"} or task_type == "assignment" or training_points > 0:
         return True
 
     if include_unassigned_zero_point_events or bool(data.get("is_manual")):
         return True
 
-    task_id = str(data.get("id") or "")
     return assigned_task_ids is not None and task_id in assigned_task_ids
+
+
+def _extract_user_task_pref(
+    pref: Any,
+) -> tuple[str, datetime | None, datetime | None]:
+    if pref is None:
+        return "default", None, None
+    if isinstance(pref, Mapping):
+        pin_raw = pref.get("pin_status", "default")
+        c_st = pref.get("custom_start_time")
+        c_et = pref.get("custom_end_time")
+    else:
+        pin_raw = getattr(pref, "pin_status", "default")
+        c_st = getattr(pref, "custom_start_time", None)
+        c_et = getattr(pref, "custom_end_time", None)
+
+    pin_status = str(getattr(pin_raw, "value", pin_raw) or "default").lower()
+    return pin_status, _coerce_datetime(c_st), _coerce_datetime(c_et)
 
 
 def prepare_tasks_for_scheduler(
@@ -205,11 +227,15 @@ def prepare_tasks_for_scheduler(
     restrict_to_window: bool = False,
     include_unassigned_zero_point_events: bool = False,
     assigned_task_ids: set[str] | None = None,
+    user_task_prefs: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Convert database tasks into scheduler-ready dicts with GMT+7 datetimes
     and expanded weekly recurrence slots.
     """
+    if assigned_task_ids is None and user_task_prefs is not None:
+        assigned_task_ids = set(user_task_prefs.keys())
+
     base_start, base_end = _resolve_window(week_start, week_end)
     normalized = [_to_task_dict(task) for task in tasks]
 
@@ -225,6 +251,17 @@ def prepare_tasks_for_scheduler(
 
     prepared: list[dict[str, Any]] = []
     for data in normalized:
+        task_id = str(data.get("id") or "")
+        pin_status, custom_st, custom_et = _extract_user_task_pref(
+            user_task_prefs.get(task_id) if user_task_prefs is not None else None
+        )
+        if pin_status == "rejected":
+            continue
+
+        if custom_st is not None and custom_et is not None and custom_st < custom_et:
+            data["start_time"] = custom_st
+            data["end_time"] = custom_et
+
         if not _should_keep_task(
             data,
             include_unassigned_zero_point_events=include_unassigned_zero_point_events,
@@ -283,6 +320,8 @@ def prepare_tasks_for_scheduler(
         eff_start, eff_end = interval
         task_entry["start_time"] = eff_start
         task_entry["end_time"] = eff_end
+        task_entry["pin_status"] = pin_status
+        task_entry["is_pinned"] = pin_status == "pinned"
         if task_type in {"class", "exam"}:
             loc = task_entry.get("location")
             if not loc:
@@ -320,14 +359,15 @@ class SchedulingService:
             raise ValueError("user_id is required when persist=True")
 
         assigned_task_ids: set[str] | None = None
+        user_task_prefs: dict[str, Any] | None = None
         resolved_initial_drl = dict(initial_drl) if initial_drl is not None else None
         if user_id is not None:
             user = self.database.get_user(user_id)
             if user is None:
                 raise UserNotFoundError(f"User {user_id} not found")
-            assigned_task_ids = {
-                item.task_id for item in self.database.get_user_tasks(user_id)
-            }
+            user_tasks = self.database.get_user_tasks(user_id)
+            user_task_prefs = {item.task_id: item for item in user_tasks}
+            assigned_task_ids = set(user_task_prefs.keys())
             if resolved_initial_drl is None:
                 stored_scores = self.database.get_user_drl_scores(user_id)
                 if isinstance(stored_scores, UserDRLScoresObject):
@@ -342,6 +382,7 @@ class SchedulingService:
             restrict_to_window=restrict_to_window,
             include_unassigned_zero_point_events=include_unassigned_zero_point_events,
             assigned_task_ids=assigned_task_ids,
+            user_task_prefs=user_task_prefs,
         )
 
         schedule_result = self.scheduler.schedule(
