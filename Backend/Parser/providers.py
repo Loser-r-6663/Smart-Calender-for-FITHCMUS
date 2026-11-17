@@ -33,7 +33,7 @@ from .errors import (
 
 
 TaskTypeValue = Literal[
-    "class", "assignment", "exam", "event", "personal", "tuition"
+    "class", "assignment", "exam", "event", "tuition"
 ]
 DRLCategoryValue = Literal[
     "dieu_1", "dieu_2", "dieu_3", "dieu_4", "dieu_5"
@@ -91,6 +91,13 @@ class ExtractedTask(BaseModel):
     training_points: int | None = Field(default=None, ge=0, le=25) # Capped max training point to 25, which is the same as the official mapping according to STSV
     drl_category: DRLCategoryValue | None = None
     recurrence: str | None = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def disallow_personal_for_crawled_tasks(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip().lower() == "personal":
+            return "event"
+        return value
 
     @field_validator("estimated_hours", mode="before")
     @classmethod
