@@ -22,10 +22,8 @@ class Validator:
     def _to_vn_time(dt: datetime | None) -> datetime | None:
         if dt is None:
             return None
-        # Nếu là naive datetime (như từ Moodle), gán tzinfo là VN_TZ
         if dt.tzinfo is None:
             return dt.replace(tzinfo=VN_TZ)
-        # Nếu đã có timezone khác, chuyển về VN_TZ
         return dt.astimezone(VN_TZ)
     
     @staticmethod

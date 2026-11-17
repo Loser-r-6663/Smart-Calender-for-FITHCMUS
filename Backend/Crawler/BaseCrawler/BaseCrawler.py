@@ -1,10 +1,13 @@
 import time
-from pathlib import Path
-from contextlib import contextmanager
 import html2text
+from contextlib import contextmanager
 
 from apify import Actor
+from apify.storages import KeyValueStore
+
 from Backend.Regulation.RawTask import RawTask
+from playwright.sync_api import Page, BrowserContext, Browser
+from bs4 import BeautifulSoup
 
 
 # HTML2Text configuration
@@ -34,14 +37,14 @@ class BaseCrawler():
     def get_last_post(self):
         """Retrieve the last crawled task from the history file."""
         if self.history_key:
-            store = Actor.open_key_value_store(name="History")
+            store: KeyValueStore = Actor.open_key_value_store(name="History")
             return store.get_value(self.history_key)
         
     def set_last_post(self, raw_tasks: list[RawTask]):
         """Update the history file with the link of the most recent task."""
         if self.history_key and (lastlink := raw_tasks[-1].link):
-            store = Actor.open_key_value_store(name="History")
-            store.set_value(self.history_key,lastlink)
+            store: KeyValueStore = Actor.open_key_value_store(name="History")
+            store.set_value(self.history_key, lastlink)
     
     @contextmanager
     def load_engine(self):
@@ -51,7 +54,7 @@ class BaseCrawler():
     def authenticate(self):
         """Authenticate the crawler if necessary."""
     
-    def launch_engine(self, url: str):
+    def launch_engine(self, url: str) -> tuple[Page, BrowserContext, Browser] | BeautifulSoup:
         """Launch the crawling engine with the given URL."""
     
     def browse_page(self, page):
@@ -72,12 +75,11 @@ class BaseCrawler():
             self.last_post = self.get_last_post()
             print(f"🌐 Last crawled task: {self.last_post}\n")
             
-            driver = driver[0] if isinstance(driver, tuple) else driver
             browser = driver[2] if isinstance(driver, tuple) else None
+            driver = driver[0] if isinstance(driver, tuple) else driver
             try:
                 raw_tasks: list[RawTask] = self.browse_page(driver)
                 self.set_last_post(raw_tasks)
             finally:
-                if browser:
-                    browser.close()
+                if browser: browser.close()
         return raw_tasks

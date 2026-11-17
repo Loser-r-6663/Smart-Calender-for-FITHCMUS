@@ -25,10 +25,9 @@ def run_pipeline(database: Database, validator: Validator, user: User | None = N
     if user:
         database.update_user(user)
 
-
 def main():
     with Actor:
-        actor_input = Actor.get_input() or {}
+        actor_input: dict = Actor.get_input() or {}
         mode = actor_input.get("mode", "all")  # "public", "personal", hoặc "all"
 
         database = Database()

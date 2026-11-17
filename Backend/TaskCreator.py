@@ -68,18 +68,12 @@ class TaskCreator():
                 extracted_tasks.append(ExtractedTask.from_raw_task(task))
             else:
                 for extracted_task in Parser.parse(task):
-                    try:
-                        if extracted_task:
-                            extracted_tasks.append(
-                                extracted_task.update(
-                                    source_url=task.link,
-                                    source_platform=task.platform,
-                                    updated_at=task.updated_at
-                                )
-                            )
-                            print(f"Extracted {len(extracted_tasks)} / {len_raw_tasks} tasks from {task.platform}")
-                    except Exception:
-                        continue
+                    if extracted_task: extracted_tasks.append(extracted_task.update(
+                        source_url=task.link,
+                        source_platform=task.platform,
+                        updated_at=task.updated_at
+                    ))
+                    print(f"Extracted {len(extracted_tasks)} / {len_raw_tasks} tasks from {task.platform}")
         return extracted_tasks
     
     def create_task(self):
