@@ -91,7 +91,32 @@ CREATE TABLE IF NOT EXISTS user_tasks (
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     task_id VARCHAR(64) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, task_id)
+    pin_status VARCHAR(20) NOT NULL DEFAULT 'default',
+    custom_start_time TIMESTAMPTZ,
+    custom_end_time TIMESTAMPTZ,
+    PRIMARY KEY (user_id, task_id),
+    CONSTRAINT user_tasks_pin_status_valid CHECK (
+        pin_status IN ('default', 'pinned', 'rejected')
+    ),
+    CONSTRAINT user_tasks_custom_time_range CHECK (
+        custom_start_time IS NULL
+        OR custom_end_time IS NULL
+        OR custom_start_time < custom_end_time
+    )
+);
+
+ALTER TABLE user_tasks ADD COLUMN IF NOT EXISTS pin_status VARCHAR(20) NOT NULL DEFAULT 'default';
+ALTER TABLE user_tasks ADD COLUMN IF NOT EXISTS custom_start_time TIMESTAMPTZ;
+ALTER TABLE user_tasks ADD COLUMN IF NOT EXISTS custom_end_time TIMESTAMPTZ;
+ALTER TABLE user_tasks DROP CONSTRAINT IF EXISTS user_tasks_pin_status_valid;
+ALTER TABLE user_tasks ADD CONSTRAINT user_tasks_pin_status_valid CHECK (
+    pin_status IN ('default', 'pinned', 'rejected')
+);
+ALTER TABLE user_tasks DROP CONSTRAINT IF EXISTS user_tasks_custom_time_range;
+ALTER TABLE user_tasks ADD CONSTRAINT user_tasks_custom_time_range CHECK (
+    custom_start_time IS NULL
+    OR custom_end_time IS NULL
+    OR custom_start_time < custom_end_time
 );
 
 CREATE TABLE IF NOT EXISTS daily_tasks (

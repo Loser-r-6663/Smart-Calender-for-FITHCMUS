@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from Database.enums import DRLCategory
+from Database.enums import DRLCategory, UserTaskPinStatus
 
 
 class UserObject(BaseModel):
@@ -21,11 +21,14 @@ class UserObject(BaseModel):
 
 
 class UserTaskObject(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     user_id: int
     task_id: str
     assigned_at: datetime
+    pin_status: UserTaskPinStatus = UserTaskPinStatus.DEFAULT
+    custom_start_time: datetime | None = None
+    custom_end_time: datetime | None = None
 
     @classmethod
     def from_record(cls, record: Mapping[str, Any]) -> "UserTaskObject":

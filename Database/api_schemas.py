@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from Database.enums import DRLCategory, SourcePlatform, TaskStatus, TaskType
+from Database.enums import DRLCategory, SourcePlatform, TaskStatus, TaskType, UserTaskPinStatus
 from Database.task_validation import validate_datetime_input
 from Database.user_drl import validate_drl_scores
 
@@ -159,3 +159,21 @@ class ScheduleRunResponse(BaseModel):
     final_drl: dict[str, int]
     selected_events: list[ScheduledEventResponse]
     persistence: SchedulePersistenceResponse | None = None
+
+
+class UserTaskPreferencesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    pin_status: UserTaskPinStatus = UserTaskPinStatus.DEFAULT
+    custom_start_time: datetime | None = None
+    custom_end_time: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_custom_time_range(self) -> "UserTaskPreferencesUpdate":
+        if (
+            self.custom_start_time is not None
+            and self.custom_end_time is not None
+            and self.custom_start_time >= self.custom_end_time
+        ):
+            raise ValueError("custom_start_time must be earlier than custom_end_time")
+        return self

@@ -30,3 +30,9 @@ class SourcePlatform(str, Enum):
     PORTAL = "portal"
     FACEBOOK = "facebook"
     CUSTOM = "custom"
+
+
+class UserTaskPinStatus(str, Enum):
+    DEFAULT = "default"
+    PINNED = "pinned"
+    REJECTED = "rejected"

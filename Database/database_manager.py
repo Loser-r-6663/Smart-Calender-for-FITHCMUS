@@ -73,6 +73,25 @@ class DatabaseManager:
     def assign_task(self, user_id: int, task_id: str) -> bool:
         return self._run(self.user_tasks.assign, user_id, task_id)
 
+    def set_user_task_preferences(
+        self,
+        user_id: int,
+        task_id: str,
+        *,
+        pin_status: str = "default",
+        custom_start_time: Any = None,
+        custom_end_time: Any = None,
+    ) -> UserTaskObject:
+        record = self._run(
+            self.user_tasks.upsert_preferences,
+            user_id,
+            task_id,
+            pin_status=str(getattr(pin_status, "value", pin_status)),
+            custom_start_time=custom_start_time,
+            custom_end_time=custom_end_time,
+        )
+        return UserTaskObject.from_record(record)
+
     def get_user_tasks(self, user_id: int) -> list[UserTaskObject]:
         records = self._run(self.user_tasks.get_for_user, user_id)
         return [UserTaskObject.from_record(record) for record in records]

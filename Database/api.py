@@ -19,6 +19,7 @@ from Database.api_schemas import (
     TaskUpdate,
     UserDRLScoresSet,
     UserDRLScoresUpdate,
+    UserTaskPreferencesUpdate,
     UserUpdate,
 )
 from Database.database_manager import DatabaseManager
@@ -285,6 +286,25 @@ def assign_task(
     if not database.assign_task(user_id, task_id):
         raise HTTPException(status_code=409, detail="Task is already assigned")
     return {"user_id": user_id, "task_id": task_id, "assigned": True}
+
+
+@app.patch(
+    "/users/{user_id}/tasks/{task_id}",
+    dependencies=[Depends(require_permission("user_tasks:update"))],
+)
+def update_user_task_preferences(
+    task_id: str,
+    payload: UserTaskPreferencesUpdate,
+    user_id: int = Path(ge=1),
+    database: DatabaseManager = Depends(get_database_manager),
+) -> UserTaskObject:
+    return database.set_user_task_preferences(
+        user_id,
+        task_id,
+        pin_status=payload.pin_status,
+        custom_start_time=payload.custom_start_time,
+        custom_end_time=payload.custom_end_time,
+    )
 
 
 @app.delete(
