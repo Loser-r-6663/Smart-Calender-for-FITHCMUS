@@ -84,7 +84,7 @@ def main() -> int:
 
         # 2. Crawler Stage
         LOGGER.info("stage=crawler start")
-        creator = TaskCreator()
+        creator = TaskCreator(include_all_fb_pages=True)
         crawler_results = creator.crawl_raw_task()
         source_counts = {
             source: len(records) for source, records in crawler_results.items()

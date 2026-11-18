@@ -111,11 +111,15 @@ class FBCrawler(PlaywrightCrawler):
                 # Define raw task
                 raw_task = RawTask()
                 
-                # Get post
+                # Get post (scroll once to trigger lazy-loading if not yet in DOM)
                 post = page.locator(f'{POST_SELECTOR}[{post_crawled}][node() and not(@class)]')
+                if post.count() == 0:
+                    page.evaluate("window.scrollBy(0, 800);")
+                    page.wait_for_timeout(1500)
                 if post.count() > 0:
                     post.scroll_into_view_if_needed()
-                else: break
+                else:
+                    break
                 
                 # Get specific crawl zone in a post and content container
                 post_crawl_zone = post.locator(POST_CRAWL_ZONE_SELECTOR)
