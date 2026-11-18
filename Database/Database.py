@@ -16,12 +16,7 @@ class Database:
     while delegating specific domain operations to specialized repositories.
     """
 
-    def __init__(
-        self,
-        user: User | str | None = None,
-        supabase_url: str | None = None,
-        supabase_key: str | None = None,
-    ):
+    def __init__(self, user: User | None = None, supabase_url: str | None = None, supabase_key: str | None = None):
         self.user = user
         self.public_tasks = TaskRepository(supabase_url=supabase_url, supabase_key=supabase_key)
         self.user_tasks = UserTaskRepository(supabase_url=supabase_url, supabase_key=supabase_key)
@@ -103,7 +98,7 @@ class Database:
         if user_id: return self.user_tasks.delete(tasks, user_id=user_id)
         return self.public_tasks.delete(tasks)
 
-    def get_tasks(self, limit: int = 100, user: User | str | None = None) -> list[ExtractedTask]:
+    def get_tasks(self, limit: int = 1000, user: User | str | None = None) -> list[ExtractedTask]:
         user_id = self._resolve_user_id(user)
         if user_id: return self.user_tasks.get(user_id=user_id, limit=limit)
         return self.public_tasks.get(limit=limit)

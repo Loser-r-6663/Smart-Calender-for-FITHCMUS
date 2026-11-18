@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
@@ -22,30 +23,29 @@ def get_daytime(v: str):
 class PortalCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
         self.history_key = None
+        self.state_key = "PortalState"
         
+        self.state: dict[str, list[dict]] = {}
         if user.portal_session:
-            self.state_file = "Backend/Crawler/State/PortalState.json"
-            with open(self.state_file, "w") as f:
-                f.write(user.portal_session)
-        else: self.state_file = None
+            self.state = json.loads(user.portal_session)
         
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
         self.user = user
     
-    def check_state(self, cookies):
+    def check_state(self):
         assert self.user.portal_username and self.user.portal_password
-        assert self.user.portal_session
         
-        if not cookies:
+        if not self.state:
             assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
-        if self.time_is_expired(cookies["TwoFaTrustedDevice"]["expires"]):
+        expires = (c["expires"] for c in self.state["cookies"] if c["name"] == "TwoFaTrustedDevice")
+        if any(self.time_is_expired(t) for t in expires):
             assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         else:
-            return False, {"headless": True, "storage_state": self.state_file}
+            return False, {"headless": True, "storage_state": self.state}
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
@@ -61,8 +61,12 @@ class PortalCrawler(PlaywrightCrawler):
             
             # Manually enter the code from the email
             page.wait_for_url(self.home_url, timeout=120000) # 2 min
-            
-            context.storage_state(path=self.state_file)
+        
+            if os.environ.get("APP_ROLE") == "SERVER":
+                self.state.update(context.storage_state())
+            else:
+                state_file = f"Backend/Crawler/State/{self.state_key}.json"
+                self.state.update(context.storage_state(path=state_file))
         browser.close()
     
     def browse_page(self, page):

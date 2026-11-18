@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
@@ -9,31 +10,28 @@ from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 class MoodleCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
         self.history_key = None
+        self.state_key = "MoodleState"
         
+        self.state: dict[str, list[dict]] = {}
         if user.moodle_session:
-            self.state_file = "Backend/Crawler/State/MoodleState.json"
-            with open(self.state_file, "w") as f:
-                f.write(user.moodle_session)
-        else: self.state_file = None
+            self.state = json.loads(user.moodle_session)
         
         self.login_url = "https://courses.ctda.hcmus.edu.vn/login/index.php"
         self.home_url = "https://courses.ctda.hcmus.edu.vn/my/"
         self.user = user
     
-    def check_state(self, cookies):
-        assert self.user.moodle_session
-        
-        if not cookies:
+    def check_state(self):
+        if not self.state:
             assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
-        settings = {"headless": True, "storage_state": self.state_file}
+        settings = {"headless": True, "storage_state": self.state}
         try:
             self.login(settings)
             return True, settings
         except ConnectionError:
             assert os.environ.get("APP_ROLE") != "SERVER"
-            return False, {"headless": False, "storage_state": self.state_file}
+            return False, {"headless": False, "storage_state": self.state}
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
@@ -48,7 +46,11 @@ class MoodleCrawler(PlaywrightCrawler):
         page.wait_for_url(self.home_url, timeout=0)
         page.wait_for_load_state("networkidle")
         
-        context.storage_state(path=self.state_file)
+        if os.environ.get("APP_ROLE") == "SERVER":
+            self.state.update(context.storage_state())
+        else:
+            state_file = f"Backend/Crawler/State/{self.state_key}.json"
+            self.state.update(context.storage_state(path=state_file))
         browser.close()
     
     def browse_page(self, page):

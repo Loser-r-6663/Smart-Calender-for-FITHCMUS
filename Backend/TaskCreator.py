@@ -19,16 +19,15 @@ from Backend.Parser.Parser import Parser
 
 class TaskCreator():
     def __init__(self, user: User | None = None):
-        os.makedirs("Backend/Crawler/History", exist_ok=True)
-        os.makedirs("Backend/Crawler/State", exist_ok=True)
+        if os.environ.get("APP_ROLE") != "SERVER":
+            os.makedirs("Backend/Crawler/History", exist_ok=True)
+            os.makedirs("Backend/Crawler/State", exist_ok=True)
         
         self.user = user
-        if user:
-            self.personal_crawlers: dict[str, BaseCrawler] = {
-                "Portal": PortalCrawler(user),
-                "Moodle": MoodleCrawler(user)
-            }
-        self.public_crawlers: dict[str, BaseCrawler] = {
+        self.crawlers = lambda user: {
+            "Portal": PortalCrawler(user),
+            "Moodle": MoodleCrawler(user)
+        } if user else {
             "Khoa Công nghệ thông tin": FITCrawler(),
             "Trường đại học Khoa học tự nhiên": HCMUSCrawler(),
             "Phòng Công tác sinh viên": OSACrawler(),
@@ -61,28 +60,26 @@ class TaskCreator():
     def parse_tasks(self, raw_tasks: list[RawTask]):
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
-        len_raw_tasks = len(raw_tasks)
-        for task in raw_tasks:
-            # Use the Parser to extract structured information (not needed for Portal)
+        total_raw = len(raw_tasks)
+        for i, task in enumerate(raw_tasks, start=1):
             if task.platform == "Portal":
-                extracted_tasks.append(ExtractedTask.from_raw_task(task))
+                tasks = [ExtractedTask.from_raw_task(task)]
             else:
-                for extracted_task in Parser.parse(task):
-                    if extracted_task: extracted_tasks.append(extracted_task.update(
+                tasks = [
+                    t.update(
+                        user_id=self.user.id if self.user else None,
                         source_url=task.link,
                         source_platform=task.platform,
                         updated_at=task.updated_at
-                    ))
-                    print(f"Extracted {len(extracted_tasks)} / {len_raw_tasks} tasks from {task.platform}")
+                    )
+                    for t in Parser.parse(task) if t
+                ]
+            extracted_tasks.extend(tasks)
+            print(f"[{i}/{total_raw}] {task.platform}: +{len(tasks)} task (tổng: {len(extracted_tasks)})")
         return extracted_tasks
     
     def create_task(self):
         """Create structured data from website data"""
-        raw_tasks = self.crawl_raw_tasks(
-            self.personal_crawlers if self.user else self.public_crawlers
-        )
+        raw_tasks = self.crawl_raw_tasks(self.crawlers(self.user))
         extracted_tasks = self.parse_tasks(raw_tasks)
-        if self.user and self.user.id:
-            for task in extracted_tasks:
-                task.user_id = str(self.user.id)
         return extracted_tasks

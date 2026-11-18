@@ -1,6 +1,10 @@
+import os
 import json
 from pathlib import Path
 from contextlib import contextmanager
+
+from apify import Actor
+from apify.storages import KeyValueStore
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from playwright.sync_api import sync_playwright, Playwright, Page
@@ -9,6 +13,7 @@ from playwright.sync_api import sync_playwright, Playwright, Page
 class PlaywrightCrawler(BaseCrawler):
     def __init__(self):
         self.crawler: Playwright = None
+        self.state_key: str | None = None
     
     @contextmanager
     def load_engine(self):
@@ -20,13 +25,18 @@ class PlaywrightCrawler(BaseCrawler):
         Returns:
             cookies (dict): A dictionary of cookies if the state file is valid, otherwise None
         """
-        if not (self.state_file and (path := Path(self.state_file)).is_file()):
-            return None
-        
-        state: dict[str, list[dict[str, int|str]]] = json.loads(path.read_text(encoding="utf-8"))
-        return {cookie["name"]: cookie for cookie in state.get("cookies", [])}
+        state: dict[str, list[dict]] = {}
+        if self.state_key:
+            if os.environ.get("APP_ROLE") == "SERVER":
+                store: KeyValueStore = Actor.open_key_value_store(name="State")
+                state = store.get_value(self.state_key, default_value=None)
+            
+            elif (path := Path(f"Backend/Crawler/State/{self.state_key}.json")).is_file():
+                state = json.loads(path.read_text(encoding="utf-8"))
+            
+        return state
     
-    def check_state(self, cookies: dict[str, dict[str, int | str]] | None):
+    def check_state(self):
         """Check if the storage state file is valid and not expired
         Returns:
             - is_valid (bool): True if the state file is valid, otherwise False
@@ -40,8 +50,8 @@ class PlaywrightCrawler(BaseCrawler):
     def authenticate(self):
         print(f"🌐 Checking login state for {self.__class__.__name__}...")
         
-        cookies = self.get_state()
-        is_valid, settings = self.check_state(cookies)
+        self.state = self.get_state()
+        is_valid, settings = self.check_state()
         if not is_valid:
             self.login(settings)
         
@@ -49,7 +59,7 @@ class PlaywrightCrawler(BaseCrawler):
     
     def launch_engine(self, url, settings: dict = {}):
         headless = settings.get("headless", True)
-        storage_state = settings.get("storage_state", self.state_file)
+        storage_state = settings.get("storage_state", self.state)
         
         browser = self.crawler.chromium.launch(
             headless = headless,

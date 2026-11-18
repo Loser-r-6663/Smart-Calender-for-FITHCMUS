@@ -2,6 +2,9 @@ import os
 from dotenv import load_dotenv
 from urllib.parse import urlparse, urljoin
 
+from apify import Actor
+from apify.storages import KeyValueStore
+
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
@@ -19,23 +22,25 @@ class FBCrawler(PlaywrightCrawler):
     is_valid = False
     
     def __init__(self, history_key=None, home_url=None, crawl_limit=10):
-        self.state_file = "Backend/Crawler/State/FBState.json"
+        self.state_key = "FBState"
         self.history_key = history_key
         self.home_url = home_url
         self.crawl_limit = crawl_limit
     
-    def check_state(self, cookies):
-        if not cookies:
+    def check_state(self):
+        if not self.state:
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
-        settings = {"headless": True, "storage_state": self.state_file}
+        settings = {"headless": True, "storage_state": self.state}
         try:
             if not FBCrawler.is_valid:
                 self.login(settings)
                 FBCrawler.is_valid = True
             return True, settings
         except ConnectionError:
-            return False, {"headless": False, "storage_state": self.state_file}
+            assert os.environ.get("APP_ROLE") != "SERVER"
+            return False, {"headless": False, "storage_state": self.state}
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
@@ -43,7 +48,7 @@ class FBCrawler(PlaywrightCrawler):
         # Initialize login checking variable
         try:
             page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
-        except Exception as e:
+        except Exception:
             browser.close()
             return
         login_notification = page.locator(LOGIN_NOTIFICATION)
@@ -65,7 +70,13 @@ class FBCrawler(PlaywrightCrawler):
             page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
             
             # Store state file and close browser
-            context.storage_state(path=self.state_file)
+            if os.environ.get("APP_ROLE") == "SERVER":
+                self.state.update(context.storage_state())
+                store: KeyValueStore = Actor.open_key_value_store(name="State")
+                store.set_value(self.state_key, self.state)
+            else:
+                state_file = f"Backend/Crawler/State/{self.state_key}.json"
+                self.state.update(context.storage_state(path=state_file))
             browser.close()
     
     def browse_page(self, page):
