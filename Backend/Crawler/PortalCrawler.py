@@ -23,12 +23,22 @@ class PortalCrawler(PlaywrightCrawler):
         if expires != -1 and self.time_is_expired(expires):
             return False, {"headless": False, "storage_state": None}
             
-        return True, {"headless": True, "storage_state": self.state_file}
+        settings = {"headless": True, "storage_state": self.state_file}
+        try:
+            self.login(settings)
+            return True, settings
+        except ConnectionError:
+            return False, {"headless": False, "storage_state": None}
     
     def login(self, settings):
+        headless = settings.get("headless", False)
         page, context, browser = self.launch_engine(self.home_url, settings)
         
-        if page.url == self.login_url or "Login" in page.url:
+        if page.url == self.login_url or "login" in page.url.lower():
+            if headless:
+                browser.close()
+                raise ConnectionError("Portal login session expired.")
+
             # Fill in the login form and submit
             load_dotenv()
             username = os.getenv("PORTAL_USERNAME")
@@ -56,7 +66,7 @@ class PortalCrawler(PlaywrightCrawler):
         browser.close()
     
     def browse_page(self, page):
-        page.wait_for_selector("table", timeout=10000)
+        page.wait_for_selector("table", timeout=15000)
         rows = page.locator("table tr").all()
         if not rows: return []
         
