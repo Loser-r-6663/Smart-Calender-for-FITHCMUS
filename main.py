@@ -127,7 +127,9 @@ def main() -> int:
         if parser.database_api is not None:
             resolved_user_id = _ensure_target_user(parser.database_api, target_user_id)
             try:
-                schedule = parser.database_api.schedule_user(resolved_user_id)
+                schedule = parser.database_api.schedule_user(
+                    resolved_user_id, {"persist": True}
+                )
                 LOGGER.info(
                     "stage=scheduler complete status=%s week=%s..%s tasks_loaded=%d prepared=%d drl_gained=+%d total_drl=%d",
                     schedule.get("status"),
