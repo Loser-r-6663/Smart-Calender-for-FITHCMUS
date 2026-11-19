@@ -8,8 +8,6 @@ from Backend.Validator import Validator
 from Database.Database import Database
 from Backend.utils.apify_storage import *
 
-os.environ.setdefault("APP_ROLE", "SERVER")
-
 
 def run_pipeline(user: User | None = None):
     database = Database(user)
