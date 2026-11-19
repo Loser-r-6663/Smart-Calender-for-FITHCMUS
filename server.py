@@ -36,22 +36,21 @@ async def main(mode = None):
 
             if mode in ("public", "all"):
                 Actor.log.info("Crawling public sources...")
-                await asyncio.to_thread(run_pipeline,user=None)
+                await asyncio.to_thread(run_pipeline, user=None)
 
             if mode in ("personal", "all"):
                 Actor.log.info("Crawling personal user sources...")
                 users = await asyncio.to_thread(Database().get_users)
                 for user in users:
                     if user.portal_status or user.moodle_status:
-                        await asyncio.to_thread(run_pipeline,user=user)
+                        await asyncio.to_thread(run_pipeline, user=user)
     else:
         if mode in ("public", "all"):
             await asyncio.to_thread(run_pipeline, user=None)
         if mode in ("personal", "all"):
             users = await asyncio.to_thread(Database().get_users)
             for user in users:
-                if user.portal_status or user.moodle_status:
-                    await asyncio.to_thread(run_pipeline, user=user)
+                await asyncio.to_thread(run_pipeline, user=user)
 
 if __name__ == "__main__":
     asyncio.run(main(mode="all"))

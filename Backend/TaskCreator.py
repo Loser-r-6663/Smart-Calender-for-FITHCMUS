@@ -1,5 +1,6 @@
 import os
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from Backend.Regulation.RawTask import RawTask
@@ -41,42 +42,62 @@ class TaskCreator():
             "Facebook Khoa Công nghệ thông tin": FBCrawler_FIT()
         }
     
-    def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler]):
+    def _crawl_one(self, platform: str, crawler: BaseCrawler):
+        try:
+            tasks = [
+                task.update(platform=platform, updated_at=datetime.now())
+                for task in crawler.fetch_data()
+            ]
+            return platform, tasks, None
+        except AssertionError as exc:
+            return platform, [], exc
+        except Exception as exc:
+            return platform, [], exc
+
+    def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler], max_workers: int = 4):
         """Start the crawling process"""
         raw_tasks: list[RawTask] = []
-        for platform, crawler in crawlers.items():
-            try:
-                # Fetch data from the crawler and update the platform and updated_at fields
-                for task in crawler.fetch_data():
-                    raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
-            except AssertionError:
-                traceback.print_exc()
-                if self.user and platform in ("Portal", "Moodle"):
-                    self.user[f"{platform.lower()}_status"] = False
-            except:
-                print(f"An error occurred while crawling {platform} data:")
-                traceback.print_exc()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = executor.map(
+                self._crawl_one,
+                crawlers.keys(),
+                crawlers.values(),
+            )
+            for platform, tasks, error in results:
+                if error is not None:
+                    traceback.print_exception(error)
+                    if isinstance(error, AssertionError):
+                        if self.user and platform in ("Portal", "Moodle"):
+                            self.user[f"{platform.lower()}_status"] = False
+                    else:
+                        print(f"An error occurred while crawling {platform} data:")
+                raw_tasks.extend(tasks)
         return raw_tasks
     
-    def parse_tasks(self, raw_tasks: list[RawTask]):
+    def _parse_one(self, task: RawTask):
+        if task.platform == "Portal":
+            tasks = [ExtractedTask.from_raw_task(task)]
+        else:
+            tasks = [
+                extracted_task.update(
+                    user_id=self.user.id if self.user else None,
+                    source_url=task.link,
+                    source_platform=task.platform,
+                    updated_at=task.updated_at
+                )
+                for extracted_task in Parser.parse(task) if extracted_task
+            ]
+        return task, tasks
+
+    def parse_tasks(self, raw_tasks: list[RawTask], max_workers: int = 4):
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
         total_raw = len(raw_tasks)
-        for i, task in enumerate(raw_tasks, start=1):
-            if task.platform == "Portal":
-                tasks = [ExtractedTask.from_raw_task(task)]
-            else:
-                tasks = [
-                    t.update(
-                        user_id=self.user.id if self.user else None,
-                        source_url=task.link,
-                        source_platform=task.platform,
-                        updated_at=task.updated_at
-                    )
-                    for t in Parser.parse(task) if t
-                ]
-            extracted_tasks.extend(tasks)
-            print(f"[{i}/{total_raw}] {task.platform}: +{len(tasks)} task (tổng: {len(extracted_tasks)})")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = executor.map(self._parse_one, raw_tasks)
+            for i, (task, tasks) in enumerate(results, start=1):
+                extracted_tasks.extend(tasks)
+                print(f"[{i}/{total_raw}] {task.platform}: +{len(tasks)} task (tổng: {len(extracted_tasks)})")
         return extracted_tasks
     
     def create_task(self):
