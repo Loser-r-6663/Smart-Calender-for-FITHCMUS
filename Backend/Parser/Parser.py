@@ -37,13 +37,25 @@ class LLMParser:
             try:
                 return func()
             
-            except errors.APIError and ValidationError as exc:
-                if exc.code not in (429, 503) or attempt == max_retries:
-                    traceback.print_exc(); break
+            except errors.APIError as exc:
+                # if exc.code not in (429, 503) or attempt == max_retries:
+                #     traceback.print_exc(); break
                 
-                attempt += 1
-                delay = min(2 ** attempt, 32) + random.uniform(0, 1)
-                print(f"⚠️ Lỗi {exc.code}, thử lại lần {attempt}/{max_retries} sau {delay:.1f}s...")
+                # attempt += 1
+                # delay = min(2 ** attempt, 32) + random.uniform(0, 1)
+                # print(f"⚠️ Lỗi {exc.code}, thử lại lần {attempt}/{max_retries} sau {delay:.1f}s...")
+                # time.sleep(delay)
+
+                status_code = getattr(exc, "code", None)
+                is_rate_limit = (status_code == 429) or ("429" in str(exc)) or ("RESOURCE_EXHAUSTED" in str(exc))
+                is_server_error = (status_code == 503) or ("503" in str(exc))
+
+                if (not is_rate_limit and not is_server_error) or attempt == max_retries:
+                    traceback.print_exc()
+                    break
+
+                delay = (25 if is_rate_limit else min(2 ** (attempt + 1), 32)) + random.uniform(1, 3)
+                print(f"⚠️ Lỗi API ({status_code or '429/503'}), thử lại lần {attempt + 1}/{max_retries} sau {delay:.1f}s...")
                 time.sleep(delay)
     
     def parse(self, raw_task: RawTask, max_retries = 5) -> list[ExtractedTask]:

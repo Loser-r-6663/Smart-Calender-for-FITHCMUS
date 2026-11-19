@@ -48,11 +48,12 @@ async def main(mode = None):
                         await asyncio.to_thread(run_pipeline,user=user)
     else:
         if mode in ("public", "all"):
-            run_pipeline(user=None)
+            await asyncio.to_thread(run_pipeline, user=None)
         if mode in ("personal", "all"):
-            for user in Database().get_users():
+            users = await asyncio.to_thread(Database().get_users)
+            for user in users:
                 if user.portal_status or user.moodle_status:
-                    run_pipeline(user=user)
+                    await asyncio.to_thread(run_pipeline, user=user)
 
 if __name__ == "__main__":
     asyncio.run(main(mode="all"))
