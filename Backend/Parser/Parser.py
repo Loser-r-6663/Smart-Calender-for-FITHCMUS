@@ -2,6 +2,7 @@ import os
 import random
 import time
 import traceback
+from pydantic import ValidationError
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
@@ -36,7 +37,7 @@ class LLMParser:
             try:
                 return func()
             
-            except errors.APIError as exc:
+            except errors.APIError and ValidationError as exc:
                 if exc.code not in (429, 503) or attempt == max_retries:
                     traceback.print_exc(); break
                 

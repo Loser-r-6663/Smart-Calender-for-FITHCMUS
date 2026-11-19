@@ -115,4 +115,4 @@ class PortalCrawler(PlaywrightCrawler):
                 )
                 raw_tasks.append(raw_task)
         
-        return [task.update(Platform="Portal") for task in raw_tasks]
+        return [task.update(platform="Portal") for task in raw_tasks]

@@ -6,3 +6,4 @@ html2text
 pydantic
 apify>=2.0.0
 google-genai
+requests

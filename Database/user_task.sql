@@ -49,7 +49,7 @@ create table public.user_task (
       array[
         'Portal'::text,
         'Moodle'::text,
-        'Khoa Công nghệ thôn tin'::text,
+        'Khoa Công nghệ thông tin'::text,
         'Khoa Công nghệ thông tin'::text,
         'Trường đại học Khoa học tự nhiên'::text,
         'Phòng Công tác sinh viên'::text,
@@ -61,7 +61,7 @@ create table public.user_task (
         'Đoàn khoa - Liên chi hội khoa Sinh học'::text,
         'Đoàn khoa - Liên chi hội khoa Địa chất'::text,
         'Đoàn khoa - Liên chi hội khoa Vật lý'::text,
-        'Facebook Khoa Công nghệ thôn tin'::text,
+        'Facebook Khoa Công nghệ thông tin'::text,
         'Facebook Khoa Công nghệ thông tin'::text
       ]
     )

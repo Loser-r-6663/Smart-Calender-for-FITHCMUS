@@ -10,6 +10,7 @@ from apify.storages import KeyValueStore
 from Backend.Regulation.RawTask import RawTask
 from playwright.sync_api import Page, BrowserContext, Browser
 from bs4 import BeautifulSoup
+from Backend.utils.apify_storage import *
 
 
 # HTML2Text configuration
@@ -38,8 +39,9 @@ class BaseCrawler():
         """Retrieve the last crawled task from the history file."""
         if self.history_key:
             if os.environ.get("APP_ROLE") == "SERVER":
-                store: KeyValueStore = Actor.open_key_value_store(name="History")
-                return store.get_value(self.history_key, default_value=None)
+                # store: KeyValueStore = Actor.open_key_value_store(name="History")
+                # return store.get_value(self.history_key, default_value=None)
+                return kv_get(store_name="History", key=self.history_key, default=None)
             
             elif (path := Path(f"Backend/Crawler/History/{self.history_key}.txt")).is_file():
                 return path.read_text(encoding="utf-8").strip()
@@ -48,8 +50,10 @@ class BaseCrawler():
         """Update the history file with the link of the most recent task."""
         if self.history_key and raw_tasks and (lastlink := raw_tasks[-1].link):
             if os.environ.get("APP_ROLE") == "SERVER":
-                store: KeyValueStore = Actor.open_key_value_store(name="History")
-                store.set_value(self.history_key, lastlink)
+                # store: KeyValueStore = Actor.open_key_value_store(name="History")
+                # store.set_value(self.history_key, lastlink)
+                kv_set(store_name="History" ,key=self.history_key, value=lastlink)
+
             else:
                 history_file = f"Backend/Crawler/History/{self.history_key}.txt"
                 Path(history_file).write_text(lastlink, encoding="utf-8")

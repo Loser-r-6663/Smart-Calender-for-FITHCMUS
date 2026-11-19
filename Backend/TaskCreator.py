@@ -51,7 +51,7 @@ class TaskCreator():
                     raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
             except AssertionError:
                 traceback.print_exc()
-                self.user[f"{platform.lower()}_status"] = False
+                if self.user and platform in ("Portal", "Moodle"): setattr(self.user, f"{platform.lower()}_status", False)
             except:
                 print(f"An error occurred while crawling {platform} data:")
                 traceback.print_exc()

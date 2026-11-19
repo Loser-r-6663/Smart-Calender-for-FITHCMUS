@@ -7,6 +7,7 @@ from apify import Actor
 from apify.storages import KeyValueStore
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
+from Backend.utils.apify_storage import *
 from playwright.sync_api import sync_playwright, Playwright, Page
 
 
@@ -28,8 +29,9 @@ class PlaywrightCrawler(BaseCrawler):
         state: dict[str, list[dict]] = {}
         if self.state_key:
             if os.environ.get("APP_ROLE") == "SERVER":
-                store: KeyValueStore = Actor.open_key_value_store(name="State")
-                state = store.get_value(self.state_key, default_value=None)
+                # store: KeyValueStore = Actor.open_key_value_store(name="State")
+                # state = store.get_value(self.state_key, default_value=None)
+                state = kv_get(store_name="State", key=self.state_key, default=None)
             
             elif (path := Path(f"Backend/Crawler/State/{self.state_key}.json")).is_file():
                 state = json.loads(path.read_text(encoding="utf-8"))
