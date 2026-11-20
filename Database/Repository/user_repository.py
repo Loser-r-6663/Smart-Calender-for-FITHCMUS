@@ -1,7 +1,7 @@
 import requests
 
 from Backend.Regulation.User import User
-from Database.base import BaseSupabaseClient
+from Database.Repository.base import BaseSupabaseClient
 from Database import crypto
 
 
@@ -10,8 +10,9 @@ class UserRepository(BaseSupabaseClient):
         self,
         supabase_url: str | None = None,
         supabase_key: str | None = None,
+        access_token: str | None = None,
     ):
-        super().__init__(supabase_url, supabase_key)
+        super().__init__(supabase_url, supabase_key, access_token)
         self.table_url = f"{self.supabase_url}/rest/v1/users"
 
     @classmethod
@@ -21,17 +22,12 @@ class UserRepository(BaseSupabaseClient):
 
         if not user.username:
             raise ValueError("username must not be empty")
-
-        if user.password:
-            password_hash = crypto.hash_password(user.password)
-        elif user.password_hash:
-            password_hash = user.password_hash
-        else:
-            raise ValueError("password must not be empty")
+        if not user.id:
+            raise ValueError("id (auth_id) must not be empty")
 
         return {
+            "id": user.id,
             "username": user.username,
-            "password_hash": password_hash,
             "portal_username": crypto.encrypt(user.portal_username),
             "portal_password": crypto.encrypt(user.portal_password),
             "moodle_session": crypto.encrypt(user.moodle_session),
@@ -41,7 +37,7 @@ class UserRepository(BaseSupabaseClient):
         }
 
     @classmethod
-    def row_to_user(cls, row: dict, include_password_hash: bool = False) -> User:
+    def row_to_user(cls, row: dict) -> User:
         user_data = {
             "id": row.get("id"),
             "username": row.get("username"),
@@ -52,11 +48,9 @@ class UserRepository(BaseSupabaseClient):
             "portal_session": crypto.decrypt(row.get("portal_session")),
             "portal_status": bool(row.get("portal_status", False)),
         }
-        if include_password_hash and "password_hash" in row:
-            user_data["password_hash"] = row["password_hash"]
         return User.model_validate(user_data)
 
-    def save(self, user: User) -> User:
+    def save_user(self, user: User) -> User:
         if not isinstance(user, User):
             raise TypeError("save_user requires a User")
 
@@ -66,37 +60,29 @@ class UserRepository(BaseSupabaseClient):
             json=self.user_to_row(user),
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return self.row_to_user(response.json()[0])
 
-    def get(self, username: str, password: str | None = None) -> User | None:
+    def get_user(self, user_id: str) -> User | None:
         response = requests.get(
             self.table_url,
             params={
                 "select": (
-                    "id,username,password_hash,portal_username,"
-                    "portal_password,moodle_session,moodle_status,"
+                    "id,username,portal_username,portal_password,"
+                    "moodle_session,moodle_status,"
                     "portal_session,portal_status"
                 ),
-                "username": f"eq.{username}",
+                "id": f"eq.{user_id}",
                 "limit": 1,
             },
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         rows = response.json()
-        if not rows:
-            return None
+        return self.row_to_user(rows[0]) if rows else None
 
-        row = rows[0]
-        if password is not None and not crypto.verify_password(
-            password, row["password_hash"]
-        ):
-            return None
-        return self.row_to_user(row)
-
-    def get_all(self, page_size: int = 1000) -> list[User]:
+    def get_all_users(self, page_size: int = 100) -> list[User]:
         if page_size <= 0:
             raise ValueError("page_size must be greater than zero")
 
@@ -119,7 +105,7 @@ class UserRepository(BaseSupabaseClient):
                 headers=self.headers,
                 timeout=30,
             )
-            response.raise_for_status()
+            self._raise(response)
             rows = response.json()
             users.extend(self.row_to_user(row) for row in rows)
 
@@ -127,7 +113,7 @@ class UserRepository(BaseSupabaseClient):
                 return users
             offset += page_size
 
-    def update(self, user_or_id: str | User, data: User | dict | None = None) -> User:
+    def update_user(self, user_or_id: str | User, data: User | dict | None = None) -> User:
         if isinstance(user_or_id, User):
             id_ = user_or_id.id
             if not id_:
@@ -145,10 +131,6 @@ class UserRepository(BaseSupabaseClient):
             payload = {}
             if update_data.username is not None:
                 payload["username"] = update_data.username
-            if update_data.password:
-                payload["password_hash"] = crypto.hash_password(update_data.password)
-            elif update_data.password_hash:
-                payload["password_hash"] = update_data.password_hash
             if update_data.portal_username is not None:
                 payload["portal_username"] = crypto.encrypt(update_data.portal_username)
             if update_data.portal_password is not None:
@@ -161,8 +143,6 @@ class UserRepository(BaseSupabaseClient):
             payload["portal_status"] = bool(update_data.portal_status)
         elif isinstance(update_data, dict):
             payload = dict(update_data)
-            if "password" in payload:
-                payload["password_hash"] = crypto.hash_password(payload.pop("password"))
 
             for field in (
                 "portal_username",
@@ -182,10 +162,10 @@ class UserRepository(BaseSupabaseClient):
             json=payload,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return self.row_to_user(response.json()[0])
 
-    def delete(self, user: User | str):
+    def delete_user(self, user: User | str):
         id_ = user.id if isinstance(user, User) else user
         if not id_:
             raise ValueError("id must not be empty")
@@ -196,10 +176,10 @@ class UserRepository(BaseSupabaseClient):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
 
-    def delete_many(self, users: list[User]):
+    def delete_many_users(self, users: list[User]):
         ids = [user.id for user in users if user.id is not None]
         if not ids:
             return
@@ -210,5 +190,5 @@ class UserRepository(BaseSupabaseClient):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response

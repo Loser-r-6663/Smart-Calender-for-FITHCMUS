@@ -10,14 +10,6 @@ class User(BaseModel):
         default=None,
         description="Tên đăng nhập hệ thống"
     )
-    password: str | None = Field(
-        default=None,
-        description="Mật khẩu thô (plain text)"
-    )
-    password_hash: str | None = Field(
-        default=None,
-        description="Mã băm mật khẩu"
-    )
     portal_username: str | None = Field(
         default=None,
         description="Tên đăng nhập hoặc MSSV trên Portal"

@@ -3,7 +3,7 @@ import requests
 
 from Backend.Regulation.BaseTask import DayTime
 from Backend.Regulation.ExtractedTask import ExtractedTask
-from Database.base import BaseSupabaseClient
+from Database.Repository.base import BaseSupabaseClient
 
 
 class TaskRepository(BaseSupabaseClient):
@@ -11,11 +11,10 @@ class TaskRepository(BaseSupabaseClient):
         self,
         supabase_url: str | None = None,
         supabase_key: str | None = None,
-        table_name: str = "tasks",
+        access_token: str | None = None,
     ):
-        super().__init__(supabase_url, supabase_key)
-        self.table_name = table_name
-        self.table_url = f"{self.supabase_url}/rest/v1/{table_name}"
+        super().__init__(supabase_url, supabase_key, access_token)
+        self.table_url = f"{self.supabase_url}/rest/v1/tasks"
 
     @staticmethod
     def serialize_time(value: datetime | DayTime | None, prefix: str):
@@ -126,7 +125,7 @@ class TaskRepository(BaseSupabaseClient):
             "end_time": cls.deserialize_time(row, "end"),
         })
 
-    def save(self, tasks: list[ExtractedTask]):
+    def save_tasks(self, tasks: list[ExtractedTask]):
         rows = [self.task_to_row(task) for task in tasks]
         if not rows:
             return []
@@ -137,10 +136,10 @@ class TaskRepository(BaseSupabaseClient):
             json=rows,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
 
-    def delete(self, tasks: list[ExtractedTask]):
+    def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]
         if not ids:
             return
@@ -151,10 +150,10 @@ class TaskRepository(BaseSupabaseClient):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
 
-    def get(self, limit: int = 100) -> list[ExtractedTask]:
+    def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
         response = requests.get(
             self.table_url,
             params={
@@ -164,10 +163,10 @@ class TaskRepository(BaseSupabaseClient):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return [self.row_to_task(row) for row in response.json()]
 
-    def update(self, task_id: str, data: ExtractedTask | dict):
+    def update_task(self, task_id: str, data: ExtractedTask | dict):
         if isinstance(data, ExtractedTask):
             payload = self.task_to_row(data)
         elif isinstance(data, dict):
@@ -182,5 +181,5 @@ class TaskRepository(BaseSupabaseClient):
             json=payload,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
