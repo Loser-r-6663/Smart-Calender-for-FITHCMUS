@@ -80,7 +80,6 @@ def get_tasks():
     # tasks = Task(tasks) NOTE: New model of regulation, not implemented yet
     # retained_tasks = SQLite.get_tasks()
     # tasks = Validator().deduplicate_task(tasks, retained_tasks)
-    print(tasks)
 
     schedule_run = SchedulingService().run_for_tasks(
         tasks,

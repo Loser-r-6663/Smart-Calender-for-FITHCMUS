@@ -158,8 +158,11 @@ class BranchAndBoundScheduler:
             is_online = location == "ONLINE" or "online" in loc_text.lower()
             effective_end = dl or et
             window_delta_hours = (effective_end - st).total_seconds() / 3600.0
+            is_flexible_task = False
+            est_h = 0.5
 
             if window_delta_hours >= 3.5 and (task_type == "assignment" or is_online):
+                is_flexible_task = True
                 raw_est = task_dict.get("estimated_hours")
                 if raw_est and float(raw_est) > 0:
                     est_h = float(raw_est)
@@ -168,16 +171,15 @@ class BranchAndBoundScheduler:
                 else:
                     est_h = 0.5
 
-                flexible_workloads.append({
-                    "id": task_id,
-                    "title": title,
-                    "start_time": st,
-                    "end_time": effective_end,
-                    "estimated_hours": est_h,
-                })
-
-                # Task linh hoạt không có điểm ĐRL thì không đưa vào fixed_intervals (tránh chiếm khối bận lớn)
+                # Task linh hoạt không có điểm ĐRL (assignment/quiz bắt buộc) -> đưa vào flexible_workloads cố định
                 if t_points == 0:
+                    flexible_workloads.append({
+                        "id": task_id,
+                        "title": title,
+                        "start_time": st,
+                        "end_time": effective_end,
+                        "estimated_hours": est_h,
+                    })
                     continue
 
             # Phân loại
@@ -187,7 +189,16 @@ class BranchAndBoundScheduler:
                 if drl_cat not in self.drl_caps:
                     drl_cat = "dieu_3"
                 if is_pinned:
-                    fixed_intervals.append((st, et, location, title))
+                    if not is_flexible_task:
+                        fixed_intervals.append((st, et, location, title))
+                    else:
+                        flexible_workloads.append({
+                            "id": task_id,
+                            "title": title,
+                            "start_time": st,
+                            "end_time": effective_end,
+                            "estimated_hours": est_h,
+                        })
                     cat_gap = self.drl_caps[drl_cat] - curr_drl[drl_cat]
                     if self.global_cap is not None:
                         cat_gap = min(cat_gap, self.global_cap - sum(curr_drl.values()))
@@ -198,7 +209,7 @@ class BranchAndBoundScheduler:
                         task_id=task_id,
                         title=title,
                         start_time=st,
-                        end_time=et,
+                        end_time=effective_end if is_flexible_task else et,
                         location=location,
                         training_points=t_points,
                         drl_category=drl_cat,
@@ -209,25 +220,38 @@ class BranchAndBoundScheduler:
                         "id": task_id,
                         "title": title,
                         "start_time": st,
-                        "end_time": et,
+                        "end_time": effective_end if is_flexible_task else et,
                         "location": location,
                         "training_points": t_points,
                         "drl_category": drl_cat,
+                        "is_flexible": is_flexible_task,
+                        "estimated_hours": est_h if is_flexible_task else (et - st).total_seconds() / 3600.0,
                     })
 
-        # Hàm kiểm tra quỹ thời gian rảnh đủ để thực hiện các task linh hoạt
+        # Hàm kiểm tra quỹ thời gian rảnh đủ để thực hiện các task linh hoạt (cả assignment và event online linh hoạt được chọn)
         def is_workload_feasible(selected_events_list: List[Dict[str, Any]]) -> bool:
-            if not flexible_workloads:
+            active_flex = list(flexible_workloads) + [
+                {
+                    "id": ev["id"],
+                    "title": ev["title"],
+                    "start_time": ev["start_time"],
+                    "end_time": ev["end_time"],
+                    "estimated_hours": ev["estimated_hours"],
+                }
+                for ev in selected_events_list
+                if ev.get("is_flexible")
+            ]
+            if not active_flex:
                 return True
 
-            for wl in flexible_workloads:
+            for wl in active_flex:
                 w_st = wl["start_time"]
                 w_et = wl["end_time"]
 
                 total_window_hours = max(0.0, (w_et - w_st).total_seconds() / 3600.0)
 
                 needed_hours = 0.0
-                for o_wl in flexible_workloads:
+                for o_wl in active_flex:
                     if not (o_wl["end_time"] <= w_st or o_wl["start_time"] >= w_et):
                         needed_hours += o_wl["estimated_hours"]
 
@@ -243,6 +267,8 @@ class BranchAndBoundScheduler:
 
                 busy_drl = 0.0
                 for ev in selected_events_list:
+                    if ev.get("is_flexible"):
+                        continue
                     e_st = ev["start_time"]
                     e_et = ev["end_time"]
                     overlap_st = max(w_st, e_st)
@@ -250,7 +276,7 @@ class BranchAndBoundScheduler:
                     if overlap_et > overlap_st:
                         busy_drl += (overlap_et - overlap_st).total_seconds() / 3600.0
 
-                if busy_drl > slack:
+                if busy_drl > slack or base_free_hours < needed_hours:
                     return False
 
             return True
@@ -261,6 +287,11 @@ class BranchAndBoundScheduler:
         feasible_events: List[Dict[str, Any]] = []
 
         for cand in raw_candidates:
+            if cand.get("is_flexible"):
+                if is_workload_feasible([cand]):
+                    feasible_events.append(cand)
+                continue
+
             c_st, c_et, c_loc = cand["start_time"], cand["end_time"], cand["location"]
             is_conflict = False
 
@@ -287,7 +318,9 @@ class BranchAndBoundScheduler:
         # ---------------------------------------------------------------------
         # BÀI TOÁN CON 3: THUẬT TOÁN NHÁNH CẬN (BRANCH AND BOUND)
         # ---------------------------------------------------------------------
-        feasible_events.sort(key=lambda x: (x["start_time"], x["end_time"]))
+        feasible_events.sort(
+            key=lambda x: (not bool(x.get("is_flexible")), x["start_time"], x["end_time"])
+        )
         total_candidates = len(feasible_events)
 
         if total_candidates == 0:
@@ -311,6 +344,9 @@ class BranchAndBoundScheduler:
         precomputed_next: List[int] = [total_candidates] * total_candidates
         for i in range(total_candidates):
             ev_i = feasible_events[i]
+            if ev_i.get("is_flexible"):
+                precomputed_next[i] = i + 1
+                continue
             for j in range(i + 1, total_candidates):
                 ev_j = feasible_events[j]
                 tr = get_travel_buffer_minutes(ev_i["location"], ev_j["location"], self.campus_travel_minutes)
@@ -333,8 +369,13 @@ class BranchAndBoundScheduler:
         last_loc_greedy: str = "ONLINE"
 
         for ev in feasible_events:
-            tr = get_travel_buffer_minutes(last_loc_greedy, ev["location"], self.campus_travel_minutes) if last_end_greedy else 0
-            if last_end_greedy is None or ev["start_time"] >= last_end_greedy + timedelta(minutes=tr):
+            is_flex = bool(ev.get("is_flexible"))
+            tr = (
+                0
+                if is_flex or not last_end_greedy
+                else get_travel_buffer_minutes(last_loc_greedy, ev["location"], self.campus_travel_minutes)
+            )
+            if is_flex or last_end_greedy is None or ev["start_time"] >= last_end_greedy + timedelta(minutes=tr):
                 cand_selection = [e for e, _ in best_selection] + [ev]
                 if not is_workload_feasible(cand_selection):
                     continue
@@ -352,8 +393,9 @@ class BranchAndBoundScheduler:
                     greedy_pts[cat] += gain
                     best_score += gain
                     best_selection.append((ev, gain))
-                    last_end_greedy = ev["end_time"]
-                    last_loc_greedy = ev["location"]
+                    if not is_flex:
+                        last_end_greedy = ev["end_time"]
+                        last_loc_greedy = ev["location"]
                     if self.global_cap is not None and sum(greedy_pts.values()) >= self.global_cap:
                         break
 
