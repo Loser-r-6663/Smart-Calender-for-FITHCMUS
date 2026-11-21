@@ -2,7 +2,7 @@ from typing import Literal
 from datetime import datetime
 from pydantic import Field, model_validator
 
-from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DayTime
+from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DateDayTime
 from Backend.Regulation.RawTask import RawTask
 
 
@@ -44,11 +44,11 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Thời gian đóng cổng đăng ký"
     )
-    start_time: datetime | DayTime | None = Field(
+    start_time: DateDayTime | None = Field(
         default=None,
         description="Thời gian bắt đầu diễn ra sự kiện/buổi học, có thể là ngày giờ cụ thể hoặc là thứ và khung giờ (lặp lại hàng tuần)"
     )
-    end_time: datetime | DayTime | None = Field(
+    end_time: DateDayTime | None = Field(
         default=None,
         description="Thời gian kết thúc sự kiện/buổi học, có thể là ngày giờ cụ thể hoặc là thứ và khung giờ (lặp lại hàng tuần)"
     )
@@ -83,8 +83,11 @@ class ExtractedTask(BaseTask):
         if self.type == "event":
             if self.training_points is None or not (0 <= self.training_points <= 24):
                 raise ValueError("training_points phải nằm trong khoảng 0-24 cho sự kiện.")
-            if self.training_points > 0 and self.training_point_category is None:
-                raise ValueError("training_point_category bắt buộc phải có khi training_points > 0.")
+            if self.training_points > 0:
+                if self.training_point_category is None:
+                    raise ValueError("training_point_category bắt buộc phải có khi training_points > 0.")
+            elif self.training_point_category is not None:
+                raise ValueError("training_point_category phải là None khi training_points = 0.")
         return self
     
     @model_validator(mode="after")

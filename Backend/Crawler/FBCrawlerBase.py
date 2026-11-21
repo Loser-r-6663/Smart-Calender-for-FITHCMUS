@@ -137,6 +137,6 @@ class FBCrawler(PlaywrightCrawler):
                 # Add to result
                 raw_tasks.append(raw_task)
             except Exception as e:
-                print(f"Error when parsing post {post_crawled} on FIT homepage: {e}")
+                print(f"Error when parsing post {post_crawled} by {self.__class__.__name__}: {e}")
         
         return raw_tasks[::-1]

@@ -9,9 +9,9 @@ VN_TZ = timezone(timedelta(hours=7))
 class Validator:
     '''Class to deduplicate ExtractedTask instances based on specific criteria.'''
     def __init__(self):
-        self.TEXT_SIMILARITY_THRESHOLD = 0.75
+        self.TEXT_SIMILARITY_THRESHOLD = 0.6
         self.TASK_FIELDS = (
-            "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
+            "user_id", "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
 
     @staticmethod
@@ -39,7 +39,10 @@ class Validator:
         return SequenceMatcher(a=title, b=prior_title).ratio() >= self.TEXT_SIMILARITY_THRESHOLD
     
     def _is_duplicate(self, task: ExtractedTask, previous: ExtractedTask):
-        if all(getattr(task, field) == getattr(previous, field) for field in self.TASK_FIELDS):
+        if all(
+            getattr(task, field) == getattr(previous, field)
+            or None in (getattr(task, field), getattr(previous, field))
+        for field in self.TASK_FIELDS):
             return self._has_similar_title(task, previous)
         else:
             return False
@@ -61,6 +64,13 @@ class Validator:
                 expired.append(task)
             elif isinstance(task.registration_end, datetime) and self._to_vn_time(task.registration_end) < now:
                 expired.append(task)
-            elif isinstance(task.end_time, datetime) and self._to_vn_time(task.end_time) < now:
+            elif (
+                task.end_time is not None
+                and task.end_time.date is not None
+                and datetime.combine(
+                    task.end_time.date,
+                    task.end_time.time or datetime.min.time(),
+                ).replace(tzinfo=VN_TZ) < now
+            ):
                 expired.append(task)
         return expired

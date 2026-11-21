@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime, time
+from datetime import date as datetime_date, datetime, time as datetime_time
 from typing import Literal
 
 YEAR = datetime.now().year
@@ -39,15 +39,28 @@ class Location(BaseModel):
     )
 
 
-class DayTime(BaseModel):
+class DateDayTime(BaseModel):
+    date: datetime_date | None = Field(
+        default=None,
+        description="Ngày cụ thể (ví dụ: '2026-11-22')"
+    )
     day: Literal["T2", "T3", "T4", "T5", "T6", "T7", "CN"] | None = Field(
         default=None,
-        description="Thứ trong tuần (ví dụ: 'T2' cho Thứ Hai, 'T3' cho Thứ Ba, ..., 'CN' cho Chủ Nhật)"
+        description="Thứ trong tuần lặp lại hàng tuần"
     )
-    time_: time = Field(
+    time: datetime_time | None = Field(
         default=None,
-        description="Giờ trong ngày (không chứa ngày, ví dụ: '08:00:00')"
+        description="Giờ trong ngày không chứa ngày (ví dụ: '08:00:00')"
     )
+    
+    def __eq__(self, other):
+        if not isinstance(other, DateDayTime):
+            return NotImplemented
+        return (
+            (self.date == other.date or None in (self.date, other.date))
+            and (self.day == other.day or None in (self.day, other.day))
+            and (self.time == other.time or None in (self.time, other.time))
+        )
 
 
 class BaseTask(BaseModel):
@@ -61,10 +74,13 @@ class BaseTask(BaseModel):
         def format_value(v):
             if isinstance(v, datetime):
                 return f"'{v:%Y-%m-%d %H:%M:%S}'"
-            if isinstance(v, time):
+            if isinstance(v, datetime_time):
                 return f"'{v:%H:%M:%S}'"
-            if isinstance(v, DayTime):
-                return f"'{v.day} {v.time_:%H:%M:%S}'"
+            if isinstance(v, DateDayTime):
+                if v.date is not None:
+                    date_text = v.date.isoformat()
+                    return f"'{date_text} {v.time:%H:%M:%S}'" if v.time is not None else f"'{date_text}'"
+                return f"'{v.day} {v.time:%H:%M:%S}'" if v.time is not None else repr(v.model_dump(mode="json"))
             if isinstance(v, BaseModel):
                 return repr(v.model_dump(mode="json"))
             return repr(v)

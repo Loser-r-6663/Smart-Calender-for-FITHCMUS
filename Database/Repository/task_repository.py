@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 
-from Backend.Regulation.BaseTask import DayTime
+from Backend.Regulation.BaseTask import DateDayTime
 from Backend.Regulation.ExtractedTask import ExtractedTask
 from Database.Repository.base import BaseSupabaseClient
 
@@ -17,35 +17,42 @@ class TaskRepository(BaseSupabaseClient):
         self.table_url = f"{self.supabase_url}/rest/v1/tasks"
 
     @staticmethod
-    def serialize_time(value: datetime | DayTime | None, prefix: str):
-        if isinstance(value, datetime):
+    def serialize_time(value: DateDayTime | None, prefix: str):
+        if value is None:
             return {
-                f"{prefix}_at": value.isoformat(),
+                f"{prefix}_at": None,
                 f"{prefix}_weekly_day": None,
                 f"{prefix}_weekly_time": None,
             }
-        if isinstance(value, DayTime):
+        if value.date is not None:
+            timestamp = datetime.combine(
+                value.date,
+                value.time or datetime.min.time(),
+                tzinfo=timezone.utc,
+            )
             return {
-                f"{prefix}_at": None,
-                f"{prefix}_weekly_day": value.day,
-                f"{prefix}_weekly_time": value.time_.isoformat(),
+                f"{prefix}_at": timestamp.isoformat(),
+                f"{prefix}_weekly_day": None,
+                f"{prefix}_weekly_time": None,
             }
         return {
             f"{prefix}_at": None,
-            f"{prefix}_weekly_day": None,
-            f"{prefix}_weekly_time": None,
+            f"{prefix}_weekly_day": value.day,
+            f"{prefix}_weekly_time": value.time.isoformat() if value.time is not None else None,
         }
 
     @staticmethod
     def deserialize_time(row: dict, prefix: str):
-        timestamp = row.get(f"{prefix}_at")
+        timestamp: str = row.get(f"{prefix}_at")
         if timestamp is not None:
-            return timestamp
+            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            time_value = None if parsed.time() == datetime.min.time() else parsed.time()
+            return DateDayTime(date=parsed.date(), time=time_value)
 
         weekly_day = row.get(f"{prefix}_weekly_day")
         weekly_time = row.get(f"{prefix}_weekly_time")
         if weekly_day is not None or weekly_time is not None:
-            return DayTime(day=weekly_day, time_=weekly_time)
+            return DateDayTime(day=weekly_day, time=weekly_time)
         return None
 
     @classmethod

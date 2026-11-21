@@ -59,30 +59,27 @@ class TaskCreator():
                 traceback.print_exc()
         return raw_tasks
     
-    def _parse_one(self, task: RawTask):
-        if task.platform == "Portal":
-            tasks = [ExtractedTask.from_raw_task(task)]
-        else:
-            tasks = [
-                extracted_task.update(
-                    user_id=self.user.id if self.user else None,
-                    source_url=task.link,
-                    source_platform=task.platform,
-                    updated_at=task.updated_at
-                )
-                for extracted_task in Parser.parse(task) if extracted_task
-            ]
-        return task, tasks
-
-    def parse_tasks(self, raw_tasks: list[RawTask], max_workers: int = 4):
+    def parse_tasks(self, raw_tasks: list[RawTask]):
         """Parse the raw tasks and extract structured information"""
         extracted_tasks: list[ExtractedTask] = []
         total_raw = len(raw_tasks)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = executor.map(self._parse_one, raw_tasks)
-            for i, (task, tasks) in enumerate(results, start=1):
-                extracted_tasks.extend(tasks)
-                print(f"[{i}/{total_raw}] {task.platform}: +{len(tasks)} task (tổng: {len(extracted_tasks)})")
+        for i, task in enumerate(raw_tasks, start=1):
+            if task.platform == "Portal":
+                tasks = [ExtractedTask.from_raw_task(task)]
+            else:
+                tasks = [
+                    t.update(
+                        source_url=task.link,
+                        source_platform=task.platform,
+                        updated_at=task.updated_at
+                    )
+                    for t in Parser.parse(task)
+                ]
+            extracted_tasks.extend(tasks)
+            print(f"[{i}/{total_raw}] {task.platform}: +{len(tasks)} task (tổng: {len(extracted_tasks)})")
+        
+        if self.user:
+            for t in extracted_tasks: t.user_id = self.user.id
         return extracted_tasks
     
     def create_task(self):

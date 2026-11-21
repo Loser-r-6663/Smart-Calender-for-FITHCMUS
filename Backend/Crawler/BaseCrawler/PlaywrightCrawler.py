@@ -7,6 +7,12 @@ from playwright.sync_api import sync_playwright, Playwright, Page
 from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from Backend.utils.apify_storage import *
 
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
 
 class PlaywrightCrawler(BaseCrawler):
     def __init__(self):
@@ -60,9 +66,15 @@ class PlaywrightCrawler(BaseCrawler):
         
         browser = self.crawler.chromium.launch(
             headless = headless,
-            args=["--blink-settings=imagesEnabled=false"]
+            args=["--disable-blink-features=AutomationControlled"]
         )
-        context = browser.new_context(storage_state=storage_state)
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1366, "height": 768},
+            locale="vi-VN",
+            timezone_id="Asia/Ho_Chi_Minh",
+            storage_state=storage_state
+        )
         page = context.new_page()
         
         page.goto(url, wait_until='domcontentloaded')

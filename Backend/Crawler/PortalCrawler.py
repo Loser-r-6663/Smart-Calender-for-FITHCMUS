@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Regulation.ExtractedTask import Location, DayTime
+from Backend.Regulation.BaseTask import Location, DateDayTime
 from Backend.Regulation.User import User
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
@@ -17,7 +17,7 @@ def get_daytime(v: str):
     start_time = datetime.strptime(start_time, "%H:%M").time()
     end_time = datetime.strptime(end_time, "%H:%M").time()
     
-    return DayTime(day=day, time_=start_time), DayTime(day=day, time_=end_time)
+    return DateDayTime(day=day, time=start_time), DateDayTime(day=day, time=end_time)
 
 
 class PortalCrawler(PlaywrightCrawler):
