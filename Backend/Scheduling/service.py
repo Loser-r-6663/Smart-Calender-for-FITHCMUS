@@ -145,6 +145,8 @@ def _to_task_dict(task: ExtractedTask | BaseModel | Mapping[str, Any]) -> dict[s
     data["start_time"] = _coerce_datetime(raw_st)
     data["end_time"] = _coerce_datetime(raw_et)
     data["deadline"] = _coerce_datetime(data.get("deadline"))
+    data["registration_start"] = _coerce_datetime(data.get("registration_start"))
+    data["registration_end"] = _coerce_datetime(data.get("registration_end"))
     data["location"] = format_location_text(raw_loc) or raw_loc
 
     drl_cat = normalize_drl_category(
@@ -192,16 +194,25 @@ def _dated_span(
 def _effective_interval(data: Mapping[str, Any]) -> tuple[datetime, datetime] | None:
     st = data.get("start_time")
     et = data.get("end_time")
+    dl = data.get("deadline") or data.get("registration_end")
+    t_points = int(data.get("training_points") or 0)
+    task_type = str(data.get("type") or "").lower()
+
     if isinstance(st, datetime) and isinstance(et, datetime) and st < et:
         return st, et
 
     if isinstance(st, datetime) and et is None:
+        if isinstance(dl, datetime) and dl > st:
+            return st, dl
         duration_hours = float(data.get("estimated_hours") or 2.0)
         return st, st + timedelta(hours=duration_hours)
 
-    dl = data.get("deadline")
-    t_points = int(data.get("training_points") or 0)
-    task_type = str(data.get("type") or "").lower()
+    if st is None and isinstance(et, datetime):
+        if task_type == "assignment":
+            return et - timedelta(hours=24), et
+        duration_hours = float(data.get("estimated_hours") or 2.0)
+        return et - timedelta(hours=duration_hours), et
+
     if st is None and et is None and isinstance(dl, datetime):
         if t_points > 0:
             dur_h = float(data.get("estimated_hours") or 0.5)
