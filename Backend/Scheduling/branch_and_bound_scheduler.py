@@ -480,16 +480,79 @@ class BranchAndBoundScheduler:
 
         exec_duration = time.perf_counter() - start_exec_time
 
+        occupied_slots: List[Tuple[datetime, datetime]] = [
+            (f_st, f_et) for f_st, f_et, _, _ in fixed_intervals
+        ]
+        for ev_data, _ in best_selection:
+            if not ev_data.get("is_flexible"):
+                occupied_slots.append((ev_data["start_time"], ev_data["end_time"]))
+
+        def allocate_flexible_slot(
+            w_st: datetime, w_et: datetime, dur_hours: float
+        ) -> Tuple[datetime, datetime]:
+            dur = timedelta(hours=max(0.25, float(dur_hours or 0.5)))
+            if w_st + dur > w_et:
+                return w_st, w_et
+
+            def _find_in_bounds(b_st: datetime, b_et: datetime) -> Optional[Tuple[datetime, datetime]]:
+                if b_st + dur > b_et:
+                    return None
+                blockers = sorted(
+                    (max(b_st, o_st), min(b_et, o_et))
+                    for o_st, o_et in occupied_slots
+                    if o_et > b_st and o_st < b_et
+                )
+                cursor = b_st
+                for blk_st, blk_et in blockers:
+                    if cursor + dur <= blk_st:
+                        return cursor, cursor + dur
+                    if blk_et > cursor:
+                        cursor = blk_et
+                if cursor + dur <= b_et:
+                    return cursor, cursor + dur
+                return None
+
+            # Ưu tiên xếp vào khung giờ sinh hoạt ban ngày (08:00 -> 22:00) trong từng ngày của cửa sổ
+            day_cursor = w_st.date()
+            end_date = w_et.date()
+            tz = w_st.tzinfo
+            while day_cursor <= end_date:
+                day_8am = datetime(day_cursor.year, day_cursor.month, day_cursor.day, 8, 0, tzinfo=tz)
+                day_10pm = datetime(day_cursor.year, day_cursor.month, day_cursor.day, 22, 0, tzinfo=tz)
+                b_st = max(w_st, day_8am)
+                b_et = min(w_et, day_10pm)
+                found = _find_in_bounds(b_st, b_et)
+                if found is not None:
+                    occupied_slots.append(found)
+                    return found
+                day_cursor += timedelta(days=1)
+
+            # Fallback: tìm bất kỳ khe trống nào trong [w_st, w_et]
+            found_any = _find_in_bounds(w_st, w_et)
+            if found_any is not None:
+                occupied_slots.append(found_any)
+                return found_any
+            return w_st, w_st + dur
+
         final_events: List[ScheduledDRLEvent] = list(pinned_scheduled_events)
         final_drl: Dict[str, int] = dict(curr_drl)
 
         for ev_data, pts_gain in best_selection:
             final_drl[ev_data["drl_category"]] += pts_gain
+            if ev_data.get("is_flexible"):
+                slot_st, slot_et = allocate_flexible_slot(
+                    ev_data["start_time"],
+                    ev_data["end_time"],
+                    ev_data.get("estimated_hours", 0.5),
+                )
+            else:
+                slot_st, slot_et = ev_data["start_time"], ev_data["end_time"]
+
             final_events.append(ScheduledDRLEvent(
                 task_id=ev_data["id"],
                 title=ev_data["title"],
-                start_time=ev_data["start_time"],
-                end_time=ev_data["end_time"],
+                start_time=slot_st,
+                end_time=slot_et,
                 location=ev_data["location"],
                 training_points=ev_data["training_points"],
                 drl_category=ev_data["drl_category"],

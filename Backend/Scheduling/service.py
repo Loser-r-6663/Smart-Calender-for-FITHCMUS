@@ -390,11 +390,19 @@ def prepare_tasks_for_scheduler(
             eff_start, eff_end = interval
             if not (eff_end > win_start_dt and eff_start < win_end_dt):
                 continue
+            if (eff_end - eff_start) >= timedelta(hours=3.5):
+                clamped_start = max(eff_start, win_start_dt)
+                clamped_end = min(eff_end, win_end_dt - timedelta(seconds=1))
+                if clamped_start < clamped_end:
+                    interval = (clamped_start, clamped_end)
 
         task_entry = dict(data)
         eff_start, eff_end = interval
         task_entry["start_time"] = eff_start
         task_entry["end_time"] = eff_end
+        if restrict_to_window and isinstance(task_entry.get("deadline"), datetime):
+            if task_entry["deadline"] >= win_end_dt:
+                task_entry["deadline"] = eff_end
         task_entry["pin_status"] = pin_status
         task_entry["is_pinned"] = bool(data.get("is_pinned")) or pin_status == "pinned"
         _tag_cs1_for_class_exam(task_entry, task_type)
