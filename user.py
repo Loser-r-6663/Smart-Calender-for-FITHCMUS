@@ -1,4 +1,5 @@
 from Backend.Regulation.User import User
+from Backend.Scheduling.service import SchedulingService
 
 from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
@@ -45,6 +46,14 @@ def get_tasks():
     # retained_tasks = SQLite.get_tasks()
     # tasks = Validator().deduplicate_task(tasks, retained_tasks)
     print(tasks)
+
+    schedule_run = SchedulingService().run_for_tasks(
+        tasks,
+        user_id=user.id,
+        restrict_to_window=True,
+    )
+    schedule_run.schedule.print_summary()
+    return schedule_run
 
 
 if __name__ == "__main__":
