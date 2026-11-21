@@ -234,6 +234,9 @@ class BranchAndBoundResult:
             print("  (Không có sự kiện nào được chọn hoặc không có sự kiện khả thi).")
         for idx, event in enumerate(self.selected_events, 1):
             st_str = event.start_time.strftime("%a %d/%m %H:%M")
-            et_str = event.end_time.strftime("%H:%M")
+            if event.start_time.date() != event.end_time.date():
+                et_str = event.end_time.strftime("%a %d/%m %H:%M")
+            else:
+                et_str = event.end_time.strftime("%H:%M")
             print(f"  {idx}. [{st_str} -> {et_str}] (+{event.points_gained}đ {event.drl_category}) | {event.title} [{event.location}]")
         print("=" * 88)

@@ -282,11 +282,21 @@ class BranchAndBoundScheduler:
             return True
 
         # ---------------------------------------------------------------------
-        # BÀI TOÁN CON 2: LỌC SƠ BỘ KHẢ THI (FEASIBILITY FILTERING)
+        # BÀI TOÁN CON 2: LỌC SƠ BỘ KHẢ THI (FEASIBILITY FILTERING) & KHỬ TRÙNG LẶP
         # ---------------------------------------------------------------------
         feasible_events: List[Dict[str, Any]] = []
+        seen_candidate_keys: set[tuple[str, datetime, datetime]] = set()
 
         for cand in raw_candidates:
+            dedup_key = (
+                " ".join(str(cand["title"]).casefold().split()),
+                cand["start_time"],
+                cand["end_time"],
+            )
+            if dedup_key in seen_candidate_keys:
+                continue
+            seen_candidate_keys.add(dedup_key)
+
             if cand.get("is_flexible"):
                 if is_workload_feasible([cand]):
                     feasible_events.append(cand)
