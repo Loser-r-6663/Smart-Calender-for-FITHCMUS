@@ -42,36 +42,21 @@ class TaskCreator():
             "Facebook Khoa Công nghệ thông tin": FBCrawler_FIT()
         }
     
-    def _crawl_one(self, platform: str, crawler: BaseCrawler):
-        try:
-            tasks = [
-                task.update(platform=platform, updated_at=datetime.now())
-                for task in crawler.fetch_data()
-            ]
-            return platform, tasks, None
-        except AssertionError as exc:
-            return platform, [], exc
-        except Exception as exc:
-            return platform, [], exc
-
-    def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler], max_workers: int = 4):
+    def crawl_raw_tasks(self, crawlers: dict[str, BaseCrawler]):
         """Start the crawling process"""
         raw_tasks: list[RawTask] = []
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = executor.map(
-                self._crawl_one,
-                crawlers.keys(),
-                crawlers.values(),
-            )
-            for platform, tasks, error in results:
-                if error is not None:
-                    traceback.print_exception(error)
-                    if isinstance(error, AssertionError):
-                        if self.user and platform in ("Portal", "Moodle"):
-                            self.user[f"{platform.lower()}_status"] = False
-                    else:
-                        print(f"An error occurred while crawling {platform} data:")
-                raw_tasks.extend(tasks)
+        for platform, crawler in crawlers.items():
+            try:
+                # Fetch data from the crawler and update the platform and updated_at fields
+                for task in crawler.fetch_data():
+                    raw_tasks.append(task.update(platform=platform, updated_at=datetime.now()))
+            except AssertionError:
+                traceback.print_exc()
+                if self.user and platform in ("Portal", "Moodle"):
+                    self.user[f"{platform.lower()}_status"] = False
+            except:
+                print(f"An error occurred while crawling {platform} data:")
+                traceback.print_exc()
         return raw_tasks
     
     def _parse_one(self, task: RawTask):

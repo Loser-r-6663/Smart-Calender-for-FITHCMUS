@@ -1,7 +1,7 @@
 import requests
 
 from Backend.Regulation.ExtractedTask import ExtractedTask
-from Database.task_repository import TaskRepository
+from Database.Repository.task_repository import TaskRepository
 
 
 class UserTaskRepository(TaskRepository):
@@ -14,12 +14,12 @@ class UserTaskRepository(TaskRepository):
         self,
         supabase_url: str | None = None,
         supabase_key: str | None = None,
+        access_token: str | None = None,
+        user_id: str | None = None
     ):
-        super().__init__(
-            supabase_url=supabase_url,
-            supabase_key=supabase_key,
-            table_name="user_task",
-        )
+        super().__init__(supabase_url, supabase_key, access_token)
+        self.table_url = f"{self.supabase_url}/rest/v1/user_task"
+        self.user_id = user_id
 
     @classmethod
     def task_to_row(cls, task: ExtractedTask, user_id: str | None = None) -> dict:
@@ -30,8 +30,8 @@ class UserTaskRepository(TaskRepository):
         row["user_id"] = str(resolved_user_id)
         return row
 
-    def save(self, tasks: list[ExtractedTask], user_id: str | None = None):
-        rows = [self.task_to_row(task, user_id=user_id) for task in tasks]
+    def save_tasks(self, tasks: list[ExtractedTask]):
+        rows = [self.task_to_row(task, user_id=self.user_id) for task in tasks]
         if not rows:
             return []
 
@@ -41,16 +41,16 @@ class UserTaskRepository(TaskRepository):
             json=rows,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
 
-    def get(self, user_id: str | None = None, limit: int = 100) -> list[ExtractedTask]:
+    def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
         params = {
             "select": "*",
             "limit": limit,
         }
-        if user_id is not None:
-            params["user_id"] = f"eq.{user_id}"
+        if self.user_id is not None:
+            params["user_id"] = f"eq.{self.user_id}"
 
         response = requests.get(
             self.table_url,
@@ -58,17 +58,17 @@ class UserTaskRepository(TaskRepository):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return [self.row_to_task(row) for row in response.json()]
 
-    def delete(self, tasks: list[ExtractedTask], user_id: str | None = None):
+    def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]
         if not ids:
             return
 
         params = {"id": f"in.({','.join(ids)})"}
-        if user_id is not None:
-            params["user_id"] = f"eq.{user_id}"
+        if self.user_id is not None:
+            params["user_id"] = f"eq.{self.user_id}"
 
         response = requests.delete(
             self.table_url,
@@ -76,36 +76,23 @@ class UserTaskRepository(TaskRepository):
             headers=self.headers,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
 
-    def delete_by_user(self, user_id: str):
-        if not user_id:
-            raise ValueError("user_id must not be empty")
-
-        response = requests.delete(
-            self.table_url,
-            params={"user_id": f"eq.{user_id}"},
-            headers=self.headers,
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response
-
-    def update(self, task_id: str, data: ExtractedTask | dict, user_id: str | None = None):
+    def update_task(self, task_id: str, data: ExtractedTask | dict):
         if isinstance(data, ExtractedTask):
-            payload = self.task_to_row(data, user_id=user_id)
+            payload = self.task_to_row(data, user_id=self.user_id)
         elif isinstance(data, dict):
             payload = dict(data)
-            resolved_user_id = user_id or payload.get("user_id")
+            resolved_user_id = self.user_id or payload.get("user_id")
             if resolved_user_id is not None:
                 payload["user_id"] = str(resolved_user_id)
         else:
             raise TypeError("update needs an ExtractedTask or a dict as the second argument")
 
         params = {"id": f"eq.{task_id}"}
-        if user_id is not None:
-            params["user_id"] = f"eq.{user_id}"
+        if self.user_id is not None:
+            params["user_id"] = f"eq.{self.user_id}"
 
         response = requests.patch(
             self.table_url,
@@ -114,5 +101,5 @@ class UserTaskRepository(TaskRepository):
             json=payload,
             timeout=30,
         )
-        response.raise_for_status()
+        self._raise(response)
         return response
