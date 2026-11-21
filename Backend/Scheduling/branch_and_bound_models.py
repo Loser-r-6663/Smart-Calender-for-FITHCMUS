@@ -6,7 +6,7 @@ Tương thích trực tiếp với ExtractedTask (Location, DayTime, Articles 1.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
@@ -137,26 +137,65 @@ def format_location_text(location: Any) -> str:
     return ", ".join(str(p) for p in parts if p)
 
 
-def normalize_location(location: Any, default: str = "ONLINE") -> str:
-    """Chuẩn hóa vị trí địa lý: CS1, CS2 hoặc ONLINE (hỗ trợ cả str, dict và Location object)."""
+def normalize_location(
+    location: Any,
+    default: str = "ONLINE",
+    has_custom_travel_buffer: bool = False,
+) -> str:
+    """Chuẩn hóa vị trí địa lý: CS1, CS2, EXTERNAL hoặc ONLINE (hỗ trợ cả str, dict và Location object)."""
     loc_text = format_location_text(location)
     if not loc_text:
-        return default
+        return "EXTERNAL" if has_custom_travel_buffer and default == "ONLINE" else default
     loc_upper = loc_text.upper()
     if "CS2" in loc_upper or "CƠ SỞ 2" in loc_upper or "LINH TRUNG" in loc_upper or "THỦ ĐỨC" in loc_upper:
         return "CS2"
     if "CS1" in loc_upper or "CƠ SỞ 1" in loc_upper or "NGUYỄN VĂN CỪ" in loc_upper or "QUẬN 5" in loc_upper:
         return "CS1"
-    if "ONLINE" in loc_upper or "ZOOM" in loc_upper or "TEAMS" in loc_upper or "MEET" in loc_upper:
+    if (
+        "ONLINE" in loc_upper
+        or "ZOOM" in loc_upper
+        or "TEAMS" in loc_upper
+        or "MEET" in loc_upper
+        or "MYALOHA" in loc_upper
+        or "TRỰC TUYẾN" in loc_upper
+    ):
         return "ONLINE"
+    if has_custom_travel_buffer:
+        return f"EXTERNAL:{loc_upper}"
     return default
 
 
-def get_travel_buffer_minutes(loc1: Any, loc2: Any, campus_travel_minutes: int = 60) -> int:
-    """Thời gian di chuyển tối thiểu giữa 2 địa điểm (mặc định 60 phút giữa CS1 <-> CS2)."""
-    norm1, norm2 = normalize_location(loc1), normalize_location(loc2)
+def get_travel_buffer_minutes(
+    loc1: Any,
+    loc2: Any,
+    campus_travel_minutes: int = 60,
+    custom_buffer_1: Optional[int] = None,
+    custom_buffer_2: Optional[int] = None,
+) -> int:
+    """
+    Thời gian di chuyển tối thiểu giữa 2 địa điểm:
+    - Nếu 1 trong 2 hoạt động là ONLINE -> 0 phút.
+    - Nếu có task cá nhân do user nhập kèm thời gian di chuyển ước tính (custom_buffer_1 / custom_buffer_2)
+      và hai địa điểm khác nhau -> lấy max(custom_buffer_1, custom_buffer_2).
+    - Mặc định giữa CS1 <-> CS2 là campus_travel_minutes (60 phút), cùng cơ sở là 0 phút.
+    """
+    has_buf_1 = custom_buffer_1 is not None and int(custom_buffer_1) > 0
+    has_buf_2 = custom_buffer_2 is not None and int(custom_buffer_2) > 0
+    norm1 = normalize_location(loc1, has_custom_travel_buffer=has_buf_1)
+    norm2 = normalize_location(loc2, has_custom_travel_buffer=has_buf_2)
+
     if norm1 == "ONLINE" or norm2 == "ONLINE":
         return 0
+
+    if custom_buffer_1 is not None or custom_buffer_2 is not None:
+        if norm1 == norm2 and norm1 in {"CS1", "CS2"} and not (has_buf_1 or has_buf_2):
+            return 0
+        b1 = max(0, int(custom_buffer_1)) if custom_buffer_1 is not None else 0
+        b2 = max(0, int(custom_buffer_2)) if custom_buffer_2 is not None else 0
+        if norm1 != norm2 or has_buf_1 or has_buf_2:
+            return max(b1, b2)
+        return 0
+
     if norm1 != norm2:
         return campus_travel_minutes
     return 0
@@ -177,6 +216,12 @@ class ScheduledDRLEvent:
     training_points: int
     drl_category: str
     points_gained: int  # Điểm thực nhận sau khi tính trần của Điều đó
+    is_flexible: bool = False
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+    estimated_hours: float = 0.5
+    is_pinned: bool = False
+    travel_buffer_minutes: Optional[int] = None
 
 
 @dataclass
@@ -192,6 +237,9 @@ class BranchAndBoundResult:
     nodes_explored: int
     total_candidates_considered: int
     global_cap: Optional[int] = MAX_TOTAL_DRL
+    unselected_events: List[ScheduledDRLEvent] = field(default_factory=list)
+    fixed_tasks_summary: List[Dict[str, Any]] = field(default_factory=list)
+    flexible_tasks_summary: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def raw_total_drl(self) -> int:

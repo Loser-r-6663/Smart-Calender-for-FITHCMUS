@@ -431,6 +431,92 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertEqual(selected_map["ev-flex-online"].start_time, custom_st)
         self.assertEqual(run_res.schedule.total_drl_gained, 9)
 
+    def test_case_10_custom_task_with_travel_buffer_and_reschedule(self):
+        """Kiểm tra: Task cá nhân do user thêm có travel_buffer_minutes ước tính (VD: 30 phút) và điều chỉnh lịch."""
+        from datetime import date
+        from Backend.Scheduling.service import SchedulingService, create_custom_task
+
+        base_tasks = [
+            # Sự kiện A tại CS1 kết thúc lúc 17:45 (Chỉ cách giờ học IELTS 15p < 30p di chuyển -> Phải bị loại)
+            {
+                "id": "ev-cs1-too-close-to-ielts",
+                "title": "Workshop CS1 kết thúc 17:45 (Không kịp đi học IELTS lúc 18:00)",
+                "type": "event",
+                "location": "CS1",
+                "start_time": datetime(2026, 11, 10, 15, 45, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 10, 17, 45, tzinfo=TZ_HCM),
+                "training_points": 10,
+                "training_point_category": "Articles 1",
+            },
+            # Sự kiện B tại CS1 kết thúc lúc 17:30 (Cách giờ học IELTS đúng 30p >= 30p di chuyển -> Hợp lệ!)
+            {
+                "id": "ev-cs1-enough-travel-time",
+                "title": "Seminar CS1 kết thúc 17:30 (Kịp 30p chạy qua trung tâm IELTS)",
+                "type": "event",
+                "location": "CS1",
+                "start_time": datetime(2026, 11, 10, 15, 30, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 10, 17, 30, tzinfo=TZ_HCM),
+                "training_points": 6,
+                "training_point_category": "Articles 1",
+            },
+            # Sự kiện C là ONLINE kết thúc lúc 17:55 (Online không tốn thời gian di chuyển -> Hợp lệ!)
+            {
+                "id": "ev-online-no-travel-needed",
+                "title": "Quiz ĐRL Online (17:30 - 17:55)",
+                "type": "event",
+                "location": "ONLINE",
+                "start_time": datetime(2026, 11, 11, 17, 30, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 11, 17, 55, tzinfo=TZ_HCM),
+                "training_points": 4,
+                "training_point_category": "Articles 2",
+            },
+        ]
+
+        # User tự thêm 2 buổi học IELTS ở Trung tâm Quận 3 (18:00 -> 20:00) với thời gian di chuyển ước tính 30 phút
+        custom_ielts_tue = create_custom_task(
+            title="Học IELTS tại Trung tâm Q3 (Thứ 3)",
+            start_time=datetime(2026, 11, 10, 18, 0, tzinfo=TZ_HCM),
+            end_time=datetime(2026, 11, 10, 20, 0, tzinfo=TZ_HCM),
+            task_type="personal",
+            location="Trung tâm IELTS Quận 3",
+            travel_buffer_minutes=30,
+            user_id="user-1",
+        )
+        custom_ielts_wed = create_custom_task(
+            title="Học IELTS tại Trung tâm Q3 (Thứ 4)",
+            start_time=datetime(2026, 11, 11, 18, 0, tzinfo=TZ_HCM),
+            end_time=datetime(2026, 11, 11, 20, 0, tzinfo=TZ_HCM),
+            task_type="personal",
+            location="Trung tâm IELTS Quận 3",
+            travel_buffer_minutes=30,
+            user_id="user-1",
+        )
+
+        run_res = SchedulingService().run_for_tasks(
+            base_tasks,
+            custom_tasks=[custom_ielts_tue, custom_ielts_wed],
+            user_id="user-1",
+            week_start=date(2026, 11, 9),
+            restrict_to_window=True,
+        )
+        selected_ids = [ev.task_id for ev in run_res.schedule.selected_events]
+        self.assertNotIn(
+            "ev-cs1-too-close-to-ielts",
+            selected_ids,
+            "Sự kiện kết thúc 17:45 phải bị loại vì không đủ 30 phút di chuyển tới lớp IELTS 18:00!",
+        )
+        self.assertIn(
+            "ev-cs1-enough-travel-time",
+            selected_ids,
+            "Sự kiện kết thúc 17:30 đủ 30 phút di chuyển nên phải được chọn!",
+        )
+        self.assertIn(
+            "ev-online-no-travel-needed",
+            selected_ids,
+            "Sự kiện ONLINE không cần thời gian di chuyển nên vẫn hợp lệ!",
+        )
+        self.assertEqual(run_res.schedule.total_drl_gained, 10)
+
 
 if __name__ == "__main__":
     unittest.main()

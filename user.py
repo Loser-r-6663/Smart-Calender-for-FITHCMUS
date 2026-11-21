@@ -1,4 +1,5 @@
 import json
+import sys
 import traceback
 
 from Backend.Regulation.User import User
@@ -55,7 +56,7 @@ def update_local_session(access_token, user: User):
 
     UserRepository(access_token=access_token).update_user(user)
 
-def get_tasks():
+def get_tasks(interactive_adjust: bool = True):
     username = input("Username: ") # NOTE: your_email@gmail.com
     password = input("Password: ") # NOTE: at least 6 characters
     
@@ -81,12 +82,20 @@ def get_tasks():
     # retained_tasks = SQLite.get_tasks()
     # tasks = Validator().deduplicate_task(tasks, retained_tasks)
 
-    schedule_run = SchedulingService().run_for_tasks(
+    scheduling_service = SchedulingService()
+    schedule_run = scheduling_service.run_for_tasks(
         tasks,
         user_id=user.id,
         restrict_to_window=True,
     )
     schedule_run.schedule.print_summary()
+    if interactive_adjust and sys.stdin.isatty():
+        schedule_run = scheduling_service.interactive_adjust_schedule(
+            tasks,
+            schedule_run,
+            user_id=user.id,
+            restrict_to_window=True,
+        )
     return schedule_run
 
 
