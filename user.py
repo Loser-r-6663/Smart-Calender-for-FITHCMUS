@@ -1,4 +1,9 @@
+import json
+import traceback
+
 from Backend.Regulation.User import User
+from Backend.Crawler.PortalCrawler import PortalCrawler
+from Backend.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Scheduling.service import SchedulingService
 
 from Database.auth import sign_in, sign_up
@@ -11,12 +16,44 @@ from Backend.Validator import Validator
 
 def update_portal_account(access_token, user: User):
     """Update the user's portal account information if it's missing."""
-    user.portal_username = input("Portal username: ")
-    user.portal_password = input("Portal password: ")
-    UserRepository(access_token=access_token).update_user(user)
+    if not (user.portal_username and user.portal_password):
+        user.portal_username = input("Portal username: ")
+        user.portal_password = input("Portal password: ")
+        UserRepository(access_token=access_token).update_user(user)
 
-def update_local_session(access_token, user):
-    pass
+def update_local_session(access_token, user: User):
+    """Authenticate personal crawlers and persist their login sessions."""
+    if not user.portal_status and user.portal_username and user.portal_password:
+        try:
+            portal = PortalCrawler(user)
+            with portal.load_engine() as crawler:
+                portal.crawler = crawler
+                portal.authenticate()
+            
+            user.portal_status = True
+            if portal.state:
+                user.portal_session = json.dumps(portal.state)
+        except Exception:
+            user.portal_status = False
+            print(f"Portal login failed:")
+            traceback.print_exc()
+
+    if not user.moodle_status:
+        try:
+            moodle = MoodleCrawler(user)
+            with moodle.load_engine() as crawler:
+                moodle.crawler = crawler
+                moodle.authenticate()
+                
+            user.moodle_status = True
+            if moodle.state:
+                user.moodle_session = json.dumps(moodle.state)
+        except Exception:
+            user.moodle_status = False
+            print(f"Moodle login failed:")
+            traceback.print_exc()
+
+    UserRepository(access_token=access_token).update_user(user)
 
 def get_tasks():
     username = input("Username: ") # NOTE: your_email@gmail.com
@@ -27,10 +64,8 @@ def get_tasks():
     except:
         access_token, user = sign_in(username, password)
     
-    if not (user.portal_username and user.portal_password):
-        update_portal_account(access_token, user)
-    if not (user.portal_session and user.moodle_session):
-        update_local_session(access_token, user)
+    update_portal_account(access_token, user)
+    update_local_session(access_token, user)
     
     database = TaskRepository()
     public_tasks = database.get_tasks()
