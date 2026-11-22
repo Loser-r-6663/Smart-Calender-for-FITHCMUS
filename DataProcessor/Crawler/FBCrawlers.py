@@ -1,4 +1,4 @@
-from Backend.Crawler.FBCrawlerBase import FBCrawler
+from DataProcessor.Crawler.FBCrawlerBase import FBCrawler
 
 
 class FBCrawler_VNUHCMUS(FBCrawler):

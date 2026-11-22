@@ -5,10 +5,10 @@ from urllib.parse import urlparse, urljoin
 from apify import Actor
 from apify.storages import KeyValueStore
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import RawTask
+from DataProcessor.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
-LOGIN_NOTIFICATION = 'xpath=//div[contains(@aria-label,"Log in to Facebook")]'
+LOGIN_NOTIFICATION = 'xpath=//form[contains(@id,"login_popup_cta_form")]'
 POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[not(@class)]/div'
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
@@ -29,9 +29,7 @@ class FBCrawler(PlaywrightCrawler):
     
     def check_state(self):
         if not self.state:
-            if os.environ.get("APP_ROLE") == "SERVER":
-                print("The server account for scraping data from Facebook is currently unavailable")
-                assert os.environ.get("APP_ROLE") != "SERVER"
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state}
@@ -49,7 +47,7 @@ class FBCrawler(PlaywrightCrawler):
         
         # Initialize login checking variable
         try:
-            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
+            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=5000)
         except Exception:
             browser.close()
             return
@@ -59,9 +57,8 @@ class FBCrawler(PlaywrightCrawler):
         if login_notification.count() > 0:
             if os.environ.get("APP_ROLE") == "SERVER":
                 print("The server account for scraping data from Facebook is currently unavailable")
-                raise ConnectionError("please log in manually")
+                assert os.environ.get("APP_ROLE") != "SERVER"
             if settings["headless"]:
-                print("Please log in manually")
                 raise ConnectionError("please log in manually")
             
             # Semi-automatic login process for headed mode (headless=False)
@@ -70,19 +67,14 @@ class FBCrawler(PlaywrightCrawler):
             password = os.getenv("FB_PASSWORD")
             page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
             page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
-            page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
+            page.locator('xpath=//div[contains(@aria-label,"Facebook") and contains(@role,"button")]').nth(1).click()
             
             # 2-step verification, wait until the user enters the code sent via email
             page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
             
             # Store state file and close browser
-            if os.environ.get("APP_ROLE") == "SERVER":
-                self.state.update(context.storage_state())
-                store: KeyValueStore = Actor.open_key_value_store(name="State")
-                store.set_value(self.state_key, self.state)
-            else:
-                state_file = f"Backend/Crawler/State/{self.state_key}.json"
-                self.state.update(context.storage_state(path=state_file))
+            state_file = f"Backend/Crawler/State/{self.state_key}.json"
+            self.state.update(context.storage_state(path=state_file))
             browser.close()
     
     def browse_page(self, page):

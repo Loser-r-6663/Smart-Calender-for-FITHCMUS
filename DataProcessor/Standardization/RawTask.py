@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from Backend.Regulation.BaseTask import BaseTask, Location, DateDayTime
+from DataProcessor.Standardization.BaseTask import BaseTask, Location, DateDayTime
 
 
 class RawTask(BaseTask):

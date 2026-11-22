@@ -1,6 +1,7 @@
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler, RawTask
-from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import HTTPResponse, urlopen
 import json
+
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import BaseCrawler, RawTask
+from DataProcessor.Crawler.BaseCrawler.BeautifulSoupCrawler import HTTPResponse, urlopen
 
 
 class OSACrawler(BaseCrawler):

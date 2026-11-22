@@ -1,28 +1,27 @@
 import os
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from Backend.Regulation.RawTask import RawTask
-from Backend.Regulation.ExtractedTask import ExtractedTask
-from Backend.Regulation.User import User
+from DataProcessor.Standardization.RawTask import RawTask
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.User import User
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
-from Backend.Crawler.PortalCrawler import PortalCrawler
-from Backend.Crawler.MoodleCrawler import MoodleCrawler
-from Backend.Crawler.FITCrawler import FITCrawler
-from Backend.Crawler.HCMUSCrawler import HCMUSCrawler
-from Backend.Crawler.OSACrawler import OSACrawler
-from Backend.Crawler.FBCrawlers import *
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
+from DataProcessor.Crawler.PortalCrawler import PortalCrawler
+from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
+from DataProcessor.Crawler.FITCrawler import FITCrawler
+from DataProcessor.Crawler.HCMUSCrawler import HCMUSCrawler
+from DataProcessor.Crawler.OSACrawler import OSACrawler
+from DataProcessor.Crawler.FBCrawlers import *
 
-from Backend.Parser.Parser import Parser
+from DataProcessor.Parser.Parser import Parser
 
 
 class TaskCreator():
     def __init__(self, user: User | None = None):
         if os.environ.get("APP_ROLE") != "SERVER":
-            os.makedirs("Backend/Crawler/History", exist_ok=True)
-            os.makedirs("Backend/Crawler/State", exist_ok=True)
+            os.makedirs("DataProcessor/Crawler/History", exist_ok=True)
+            os.makedirs("DataProcessor/Crawler/State", exist_ok=True)
         
         self.user = user
         self.crawlers = lambda user: {

@@ -2,8 +2,8 @@ from typing import Literal
 from datetime import datetime
 from pydantic import Field, model_validator
 
-from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DateDayTime
-from Backend.Regulation.RawTask import RawTask
+from DataProcessor.Standardization.BaseTask import BaseTask, TargetAudience, Location, DateDayTime
+from DataProcessor.Standardization.RawTask import RawTask
 
 
 class ExtractedTask(BaseTask):

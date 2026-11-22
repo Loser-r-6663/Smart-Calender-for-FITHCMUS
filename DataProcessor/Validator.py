@@ -2,7 +2,7 @@ import unicodedata
 from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 
 VN_TZ = timezone(timedelta(hours=7))
 

@@ -3,5 +3,5 @@
 __pycache__
 *.pyc
 .git
-Backend/Crawler/History/*
-Backend/Crawler/State/*
+DataProcessor/Crawler/History/*
+DataProcessor/Crawler/State/*

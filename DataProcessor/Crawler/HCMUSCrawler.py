@@ -1,5 +1,5 @@
-from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawler
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import RawTask
+from DataProcessor.Crawler.BaseCrawler.BeautifulSoupCrawler import BeautifulSoupCrawler
 
 
 class HCMUSCrawler(BeautifulSoupCrawler):

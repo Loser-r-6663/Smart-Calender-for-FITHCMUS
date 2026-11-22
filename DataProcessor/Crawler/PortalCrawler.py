@@ -2,10 +2,10 @@ import os
 import json
 from datetime import datetime
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Regulation.BaseTask import Location, DateDayTime
-from Backend.Regulation.User import User
-from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
+from DataProcessor.Standardization.User import User
+from DataProcessor.Standardization.BaseTask import Location, DateDayTime
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import RawTask
+from DataProcessor.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
 APP_ROLE = os.environ.get("APP_ROLE")
 
@@ -66,7 +66,7 @@ class PortalCrawler(PlaywrightCrawler):
             if APP_ROLE == "SERVER":
                 self.state.update(context.storage_state())
             else:
-                state_file = f"Backend/Crawler/State/{self.state_key}.json"
+                state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
                 self.state.update(context.storage_state(path=state_file))
         browser.close()
     

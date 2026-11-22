@@ -4,8 +4,8 @@ from pathlib import Path
 from contextlib import contextmanager
 from playwright.sync_api import sync_playwright, Playwright, Page
 
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
-from Backend.utils.apify_storage import *
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
+from DataProcessor.utils.apify_storage import *
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -34,7 +34,7 @@ class PlaywrightCrawler(BaseCrawler):
             if os.environ.get("APP_ROLE") == "SERVER":
                 state = kv_get(store_name="State", key=self.state_key, default=None)
             
-            elif (path := Path(f"Backend/Crawler/State/{self.state_key}.json")).is_file():
+            elif (path := Path(f"DataProcessor/Crawler/State/{self.state_key}.json")).is_file():
                 state = json.loads(path.read_text(encoding="utf-8"))
             
         return state

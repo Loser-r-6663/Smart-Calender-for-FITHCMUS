@@ -1,6 +1,6 @@
 import requests
 
-from Backend.Regulation.User import User
+from DataProcessor.Standardization.User import User
 from Database.Repository.base import BaseSupabaseClient
 from Database import crypto
 
