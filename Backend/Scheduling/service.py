@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from Backend.Regulation.BaseTask import DayTime
+from Backend.Regulation.BaseTask import DateDayTime
 from Backend.Regulation.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_repository import UserRepository
@@ -64,7 +64,19 @@ def normalize_to_gmt7(value: datetime) -> datetime:
 
 
 def _coerce_datetime(value: Any) -> datetime | None:
-    if value is None or isinstance(value, DayTime):
+    if value is None:
+        return None
+    if isinstance(value, DateDayTime):
+        if value.date is not None:
+            return datetime.combine(value.date, value.time or time.min, tzinfo=GMT_PLUS_7)
+        return None
+    if isinstance(value, Mapping) and ("date" in value or "day" in value):
+        d_raw = value.get("date")
+        t_raw = value.get("time") or value.get("time_")
+        if d_raw is not None:
+            d_obj = date.fromisoformat(d_raw) if isinstance(d_raw, str) else d_raw
+            t_obj = time.fromisoformat(t_raw) if isinstance(t_raw, str) else (t_raw or time.min)
+            return datetime.combine(d_obj, t_obj, tzinfo=GMT_PLUS_7)
         return None
     if isinstance(value, datetime):
         return normalize_to_gmt7(value)
@@ -98,13 +110,17 @@ def parse_recurrence(
 def _extract_daytime_recurrence(
     start_val: Any, end_val: Any
 ) -> tuple[int, time, time] | None:
-    """Extract weekly (weekday_index, start_time, end_time) from DayTime objects or dicts."""
+    """Extract weekly (weekday_index, start_time, end_time) from DateDayTime objects or dicts."""
     def _to_day_time(val: Any) -> tuple[str | None, time | None]:
-        if isinstance(val, DayTime):
-            return val.day, val.time_
-        if isinstance(val, Mapping) and ("day" in val or "time_" in val):
+        if isinstance(val, DateDayTime):
+            if val.date is not None:
+                return None, None
+            return val.day, val.time
+        if isinstance(val, Mapping) and ("day" in val or "time" in val or "time_" in val):
+            if val.get("date") is not None:
+                return None, None
             day = val.get("day")
-            t_raw = val.get("time_")
+            t_raw = val.get("time") if "time" in val else val.get("time_")
             if isinstance(t_raw, str):
                 try:
                     t_raw = time.fromisoformat(t_raw)

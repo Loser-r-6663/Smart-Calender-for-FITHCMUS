@@ -105,11 +105,18 @@ def normalize_drl_category(category: Any) -> Optional[str]:
 
 
 def parse_timestamp(value: Any) -> Optional[datetime]:
-    """Chuyển đổi linh hoạt timestamp dạng str ISO 8601 hoặc datetime."""
+    """Chuyển đổi linh hoạt timestamp dạng str ISO 8601, datetime hoặc DateDayTime."""
     if value is None:
         return None
     if isinstance(value, datetime):
         return value
+    if hasattr(value, "date") and hasattr(value, "time") and not callable(getattr(value, "date")):
+        d_val = getattr(value, "date", None)
+        t_val = getattr(value, "time", None)
+        if d_val is not None:
+            from datetime import time as dt_time
+            return datetime.combine(d_val, t_val or dt_time.min)
+        return None
     if isinstance(value, str):
         normalized = value.replace("Z", "+00:00")
         try:

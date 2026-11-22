@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import requests
 
+from Backend.Regulation.BaseTask import DateDayTime
 from Backend.Regulation.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 
@@ -48,14 +49,20 @@ class UserTaskRepository(TaskRepository):
                 "location_detail": loc_detail,
                 "deadline": dl.isoformat() if isinstance(dl, datetime) else dl,
                 "training_points": task.get("training_points") or 0,
-                "training_point_category": task.get("training_point_category"),
+                "training_point_category": (
+                    task.get("training_point_category")
+                    if int(task.get("training_points") or 0) > 0
+                    else None
+                ),
                 "estimated_hours": task.get("estimated_hours"),
                 "source_url": task.get("source_url") or "manual://user",
                 "source_platform": task.get("source_platform") or "Portal",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
-            row.update(cls.serialize_time(st, "start"))
-            row.update(cls.serialize_time(et, "end"))
+            st_ddt = DateDayTime(date=st.date(), time=st.time()) if isinstance(st, datetime) else st
+            et_ddt = DateDayTime(date=et.date(), time=et.time()) if isinstance(et, datetime) else et
+            row.update(cls.serialize_time(st_ddt, "start"))
+            row.update(cls.serialize_time(et_ddt, "end"))
             if task.get("travel_buffer_minutes") is not None:
                 row["travel_buffer_minutes"] = int(task["travel_buffer_minutes"])
         else:

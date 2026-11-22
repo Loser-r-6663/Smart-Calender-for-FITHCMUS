@@ -284,9 +284,9 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertEqual(len(result.selected_events), 2, "Chỉ chọn 2 sự kiện vừa đủ đạt 100đ, không xếp thừa!")
 
     def test_case_8_extracted_task_daytime_location_and_articles(self):
-        """Kiểm tra tích hợp trực tiếp với ExtractedTask (DayTime, Location, Articles 1..5)."""
+        """Kiểm tra tích hợp trực tiếp với ExtractedTask (DateDayTime, Location, Articles 1..5)."""
         from datetime import date, time
-        from Backend.Regulation.BaseTask import DayTime, Location
+        from Backend.Regulation.BaseTask import DateDayTime, Location
         from Backend.Regulation.ExtractedTask import ExtractedTask
         from Backend.Scheduling.service import SchedulingService
 
@@ -298,8 +298,8 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             type="class",
             course="Cơ sở dữ liệu",
             location=Location(room="F.102"),  # Chỉ có tên phòng -> tự động gắn Cơ sở 1 (CS1)
-            start_time=DayTime(day="T2", time_=time(8, 0)),
-            end_time=DayTime(day="T2", time_=time(10, 0)),
+            start_time=DateDayTime(day="T2", time=time(8, 0)),
+            end_time=DateDayTime(day="T2", time=time(10, 0)),
             source_url="https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp",
             source_platform="Portal",
             updated_at=now,
@@ -309,8 +309,8 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             title="Hội thảo AI tại CS2 (Cách giờ học CS1 chỉ 30p < 60p di chuyển)",
             type="event",
             location=Location(room="Hội trường I", campus="Thủ Đức (cơ sở 2)"),
-            start_time=datetime(2026, 11, 9, 10, 30, tzinfo=TZ_HCM),
-            end_time=datetime(2026, 11, 9, 12, 30, tzinfo=TZ_HCM),
+            start_time=DateDayTime(date=date(2026, 11, 9), time=time(10, 30)),
+            end_time=DateDayTime(date=date(2026, 11, 9), time=time(12, 30)),
             training_points=10,
             training_point_category="Articles 1",
             estimated_hours=2.0,
@@ -323,8 +323,8 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             title="Hội thảo AI tại CS2 (Cách giờ học CS1 90p >= 60p di chuyển)",
             type="event",
             location=Location(room="Hội trường I", campus="Thủ Đức (cơ sở 2)"),
-            start_time=datetime(2026, 11, 9, 11, 30, tzinfo=TZ_HCM),
-            end_time=datetime(2026, 11, 9, 13, 30, tzinfo=TZ_HCM),
+            start_time=DateDayTime(date=date(2026, 11, 9), time=time(11, 30)),
+            end_time=DateDayTime(date=date(2026, 11, 9), time=time(13, 30)),
             training_points=8,
             training_point_category="Articles 1",
             estimated_hours=2.0,
