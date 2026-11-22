@@ -2,9 +2,6 @@ import os
 from dotenv import load_dotenv
 from urllib.parse import urlparse, urljoin
 
-from apify import Actor
-from apify.storages import KeyValueStore
-
 from DataProcessor.Crawler.BaseCrawler.BaseCrawler import RawTask
 from DataProcessor.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 

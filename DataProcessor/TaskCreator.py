@@ -38,6 +38,7 @@ class TaskCreator():
             "Đoàn khoa - Liên chi hội khoa Sinh học": FBCrawler_YUB(),
             "Đoàn khoa - Liên chi hội khoa Địa chất": FBCrawler_YUG(),
             "Đoàn khoa - Liên chi hội khoa Vật lý": FBCrawler_YUP(),
+            "Đoàn khoa - Liên chi hội khoa Toán Tin": FBCrawler_YUM(),
             "Facebook Khoa Công nghệ thông tin": FBCrawler_FIT()
         }
     

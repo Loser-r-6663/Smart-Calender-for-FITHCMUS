@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import date as datetime_date, datetime, time as datetime_time
 from typing import Literal
 
@@ -53,13 +53,26 @@ class DateDayTime(BaseModel):
         description="Giờ trong ngày không chứa ngày (ví dụ: '08:00:00')"
     )
     
+    @field_validator("time", mode="after")
+    @classmethod
+    def strip_time_tz(cls, v: datetime_time | None):
+        if v is not None and v.tzinfo is not None:
+            return v.replace(tzinfo=None)
+        return v
+    
     def __eq__(self, other):
         if not isinstance(other, DateDayTime):
             return NotImplemented
+        
+        def _is_time_equal(t1: datetime_time | None, t2: datetime_time | None):
+            if None in (t1, t2):
+                return True
+            return t1.replace(tzinfo=None) == t2.replace(tzinfo=None)
+
         return (
             (self.date == other.date or None in (self.date, other.date))
             and (self.day == other.day or None in (self.day, other.day))
-            and (self.time == other.time or None in (self.time, other.time))
+            and _is_time_equal(self.time, other.time)
         )
 
 
@@ -73,7 +86,8 @@ class BaseTask(BaseModel):
     def __repr__(self):
         def format_value(v):
             if isinstance(v, datetime):
-                return f"'{v:%Y-%m-%d %H:%M:%S}'"
+                tz = f" {v:%z}" if v.tzinfo else ""
+                return f"'{v:%Y-%m-%d %H:%M:%S}{tz}'"
             if isinstance(v, datetime_time):
                 return f"'{v:%H:%M:%S}'"
             if isinstance(v, DateDayTime):
