@@ -1,10 +1,9 @@
 import unicodedata
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from difflib import SequenceMatcher
 
-from DataProcessor.Standardization.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
 
-VN_TZ = timezone(timedelta(hours=7))
 
 class Validator:
     '''Class to deduplicate ExtractedTask instances based on specific criteria.'''
@@ -14,18 +13,6 @@ class Validator:
             "user_id", "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
 
-    @staticmethod
-    def _aware_timezone(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=VN_TZ) if dt.tzinfo is None else dt
-    
-    @staticmethod
-    def _to_vn_time(dt: datetime | None) -> datetime | None:
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=VN_TZ)
-        return dt.astimezone(VN_TZ)
-    
     @staticmethod
     def _clean_text(value: str):
         return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
@@ -60,9 +47,9 @@ class Validator:
         now = datetime.now(tz=VN_TZ)
         expired: list[ExtractedTask] = []
         for task in tasks:
-            if isinstance(task.deadline, datetime) and self._to_vn_time(task.deadline) < now:
+            if isinstance(task.deadline, datetime) and task._to_vn_time(task.deadline) < now:
                 expired.append(task)
-            elif isinstance(task.registration_end, datetime) and self._to_vn_time(task.registration_end) < now:
+            elif isinstance(task.registration_end, datetime) and task._to_vn_time(task.registration_end) < now:
                 expired.append(task)
             elif (
                 task.end_time is not None

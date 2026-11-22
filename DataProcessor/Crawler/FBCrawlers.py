@@ -50,6 +50,13 @@ class FBCrawler_YUP(FBCrawler):
             "https://www.facebook.com/doanhoikhoavatly"
         )
 
+class FBCrawler_YUM(FBCrawler):
+    def __init__(self):
+        super().__init__(
+            "YUMHistory",
+            "https://www.facebook.com/DK.LCH.ToanTinHoc.HCMUS"
+        )
+
 class FBCrawler_FIT(FBCrawler):
     def __init__(self):
         super().__init__(
