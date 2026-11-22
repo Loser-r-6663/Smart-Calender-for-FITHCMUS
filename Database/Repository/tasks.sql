@@ -139,7 +139,14 @@ create table public.tasks (
   ),
   constraint tasks_event_training_point_category_check check (
     type <> 'event'::text
-    or training_point_category is not null
+    or (
+      training_points = 0
+      and training_point_category is null
+    )
+    or (
+      training_points > 0
+      and training_point_category is not null
+    )
   ),
   constraint tasks_estimated_hours_check check (
     (

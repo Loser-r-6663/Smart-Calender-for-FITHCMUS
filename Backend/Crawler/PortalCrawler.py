@@ -3,10 +3,11 @@ import json
 from datetime import datetime
 
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
-from Backend.Regulation.ExtractedTask import Location, DayTime
+from Backend.Regulation.BaseTask import Location, DateDayTime
 from Backend.Regulation.User import User
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
+APP_ROLE = os.environ.get("APP_ROLE")
 
 get_location = lambda v: Location(room=v, campus="Nguyễn Văn Cừ (cơ sở 1)") if v else None
 def get_daytime(v: str):
@@ -17,7 +18,7 @@ def get_daytime(v: str):
     start_time = datetime.strptime(start_time, "%H:%M").time()
     end_time = datetime.strptime(end_time, "%H:%M").time()
     
-    return DayTime(day=day, time_=start_time), DayTime(day=day, time_=end_time)
+    return DateDayTime(day=day, time=start_time), DateDayTime(day=day, time=end_time)
 
 
 class PortalCrawler(PlaywrightCrawler):
@@ -25,27 +26,23 @@ class PortalCrawler(PlaywrightCrawler):
         self.history_key = None
         self.state_key = "PortalState"
         
-        self.state: dict[str, list[dict]] = {}
-        if user.portal_session:
-            self.state = json.loads(user.portal_session)
-        
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
         self.user = user
+    
+    def get_state(self):
+        if self.user.portal_session:
+            return json.loads(self.user.portal_session)
     
     def check_state(self):
         assert self.user.portal_username and self.user.portal_password
         
         if not self.state:
-            assert os.environ.get("APP_ROLE") != "SERVER"
+            assert APP_ROLE != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
-        expires = (c["expires"] for c in self.state["cookies"] if c["name"] == "TwoFaTrustedDevice")
-        if any(self.time_is_expired(t) for t in expires):
-            assert os.environ.get("APP_ROLE") != "SERVER"
-            return False, {"headless": False, "storage_state": None}
-        else:
-            return False, {"headless": True, "storage_state": self.state}
+        headless = APP_ROLE == "SERVER"
+        return False, {"headless": headless, "storage_state": self.state}
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
@@ -60,9 +57,13 @@ class PortalCrawler(PlaywrightCrawler):
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
             
             # Manually enter the code from the email
-            page.wait_for_url(self.home_url, timeout=120000) # 2 min
+            if APP_ROLE != "SERVER":
+                page.wait_for_url(self.home_url, timeout=120000) # 2 min
+            else:
+                try: page.wait_for_url(self.home_url)
+                except: raise AssertionError("Please log in to Portal manually.")
         
-            if os.environ.get("APP_ROLE") == "SERVER":
+            if APP_ROLE == "SERVER":
                 self.state.update(context.storage_state())
             else:
                 state_file = f"Backend/Crawler/State/{self.state_key}.json"

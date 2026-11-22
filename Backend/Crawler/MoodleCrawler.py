@@ -6,23 +6,25 @@ from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Regulation.User import User
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
+APP_ROLE = os.environ.get("APP_ROLE")
+
 
 class MoodleCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
         self.history_key = None
         self.state_key = "MoodleState"
         
-        self.state: dict[str, list[dict]] = {}
-        if user.moodle_session:
-            self.state = json.loads(user.moodle_session)
-        
         self.login_url = "https://courses.ctda.hcmus.edu.vn/login/index.php"
         self.home_url = "https://courses.ctda.hcmus.edu.vn/my/"
         self.user = user
     
+    def get_state(self):
+        if self.user.moodle_session:
+            return json.loads(self.user.moodle_session)
+    
     def check_state(self):
         if not self.state:
-            assert os.environ.get("APP_ROLE") != "SERVER"
+            assert APP_ROLE != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state}
@@ -30,7 +32,7 @@ class MoodleCrawler(PlaywrightCrawler):
             self.login(settings)
             return True, settings
         except ConnectionError:
-            assert os.environ.get("APP_ROLE") != "SERVER"
+            assert APP_ROLE != "SERVER"
             return False, {"headless": False, "storage_state": self.state}
     
     def login(self, settings):
@@ -46,7 +48,7 @@ class MoodleCrawler(PlaywrightCrawler):
         page.wait_for_url(self.home_url, timeout=0)
         page.wait_for_load_state("networkidle")
         
-        if os.environ.get("APP_ROLE") == "SERVER":
+        if APP_ROLE == "SERVER":
             self.state.update(context.storage_state())
         else:
             state_file = f"Backend/Crawler/State/{self.state_key}.json"
