@@ -8,7 +8,7 @@ from apify.storages import KeyValueStore
 from Backend.Crawler.BaseCrawler.BaseCrawler import RawTask
 from Backend.Crawler.BaseCrawler.PlaywrightCrawler import PlaywrightCrawler
 
-LOGIN_NOTIFICATION = 'xpath=//div[contains(@aria-label,"Log in to Facebook")]'
+LOGIN_NOTIFICATION = 'xpath=//form[contains(@id,"login_popup_cta_form")]'
 POST_SELECTOR = 'xpath=//div[contains(@role,"main")]/div[2]/div/div[2]/div/div[2]/div[not(@class)]/div'
 POST_CRAWL_ZONE_SELECTOR = 'xpath=/div/div/div/div/div/div/div/div/div/div/div/div/div[not(@aria-hidden) and contains(@class,"html-div")]/div/div'
 CONTENT_CONTAINER_SELECTOR = 'xpath=//div[3]/div/div/div/div/div/span/div'
@@ -67,7 +67,7 @@ class FBCrawler(PlaywrightCrawler):
             password = os.getenv("FB_PASSWORD")
             page.locator('xpath=//input[contains(@name,"email") and contains(@tabindex,"0")]').fill(username)
             page.locator('xpath=//input[contains(@name,"pass") and contains(@dir,"ltr") and not(@placeholder)]').fill(password)
-            page.locator('xpath=//div[contains(@aria-label,"Log in to Facebook")]').click()
+            page.locator('xpath=//div[contains(@aria-label,"Facebook") and contains(@role,"button")]').nth(1).click()
             
             # 2-step verification, wait until the user enters the code sent via email
             page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)

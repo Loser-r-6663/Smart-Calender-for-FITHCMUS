@@ -47,6 +47,7 @@ def run_pipeline(user: User | None = None):
     if user: user_repo.update_user(user)
 
 async def main(mode = None):  # NOTE: mode = "public" | "personal" | "all"
+    run_mode = mode
     if os.environ.get("APP_ROLE") == "SERVER":
         async with Actor:
             set_main_loop(asyncio.get_running_loop())
@@ -67,4 +68,4 @@ async def main(mode = None):  # NOTE: mode = "public" | "personal" | "all"
             await process_personal_tasks()
 
 if __name__ == "__main__":
-    asyncio.run(main(mode="personal"))
+    asyncio.run(main(mode="public"))
