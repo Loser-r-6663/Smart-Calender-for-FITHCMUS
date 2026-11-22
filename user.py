@@ -10,6 +10,7 @@ from Backend.Scheduling.service import SchedulingService
 from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
 from Database.Repository.task_repository import TaskRepository
+from Database.Repository.user_task_preference_repository import UserTaskPreferenceRepository
 from Database.Repository.user_task_repository import UserTaskRepository
 
 from Backend.Validator import Validator
@@ -82,11 +83,21 @@ def get_tasks(interactive_adjust: bool = True):
     # retained_tasks = SQLite.get_tasks()
     # tasks = Validator().deduplicate_task(tasks, retained_tasks)
 
+    user_prefs = {}
+    try:
+        user_prefs = UserTaskPreferenceRepository(
+            access_token=access_token, user_id=user.id
+        ).get_preferences()
+    except Exception:
+        user_prefs = {}
+
     scheduling_service = SchedulingService()
     schedule_run = scheduling_service.run_for_tasks(
         tasks,
         user_id=user.id,
+        initial_drl=user.drl_scores,
         restrict_to_window=True,
+        user_task_prefs=user_prefs,
     )
     schedule_run.schedule.print_summary()
     if interactive_adjust and sys.stdin.isatty():
@@ -94,6 +105,10 @@ def get_tasks(interactive_adjust: bool = True):
             tasks,
             schedule_run,
             user_id=user.id,
+            access_token=access_token,
+            persist_to_db=True,
+            initial_user_prefs=user_prefs,
+            initial_drl=user.drl_scores,
             restrict_to_window=True,
         )
     return schedule_run

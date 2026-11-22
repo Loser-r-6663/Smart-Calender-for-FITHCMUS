@@ -1,8 +1,18 @@
+from typing import Any
 import requests
 
 from Backend.Regulation.User import User
 from Database.Repository.base import BaseSupabaseClient
 from Database import crypto
+
+
+_DEFAULT_DRL_SCORES: dict[str, int] = {
+    "dieu_1": 0,
+    "dieu_2": 0,
+    "dieu_3": 0,
+    "dieu_4": 0,
+    "dieu_5": 0,
+}
 
 
 class UserRepository(BaseSupabaseClient):
@@ -14,6 +24,19 @@ class UserRepository(BaseSupabaseClient):
     ):
         super().__init__(supabase_url, supabase_key, access_token)
         self.table_url = f"{self.supabase_url}/rest/v1/users"
+
+    @staticmethod
+    def normalize_drl_scores(raw: Any) -> dict[str, int]:
+        scores = dict(_DEFAULT_DRL_SCORES)
+        if isinstance(raw, dict):
+            for key in scores:
+                val = raw.get(key)
+                if val is not None:
+                    try:
+                        scores[key] = max(0, int(val))
+                    except (ValueError, TypeError):
+                        pass
+        return scores
 
     @classmethod
     def user_to_row(cls, user: User) -> dict:
@@ -47,6 +70,7 @@ class UserRepository(BaseSupabaseClient):
             "moodle_status": bool(row.get("moodle_status", False)),
             "portal_session": crypto.decrypt(row.get("portal_session")),
             "portal_status": bool(row.get("portal_status", False)),
+            "drl_scores": cls.normalize_drl_scores(row.get("drl_scores")),
         }
         return User.model_validate(user_data)
 
@@ -67,11 +91,7 @@ class UserRepository(BaseSupabaseClient):
         response = requests.get(
             self.table_url,
             params={
-                "select": (
-                    "id,username,portal_username,portal_password,"
-                    "moodle_session,moodle_status,"
-                    "portal_session,portal_status"
-                ),
+                "select": "*",
                 "id": f"eq.{user_id}",
                 "limit": 1,
             },
@@ -81,6 +101,10 @@ class UserRepository(BaseSupabaseClient):
         self._raise(response)
         rows = response.json()
         return self.row_to_user(rows[0]) if rows else None
+
+    def update_drl_scores(self, user_id: str, drl_scores: dict[str, int]) -> User:
+        normalized = self.normalize_drl_scores(drl_scores)
+        return self.update_user(user_id, {"drl_scores": normalized})
 
     def get_all_users(self, page_size: int = 100) -> list[User]:
         if page_size <= 0:

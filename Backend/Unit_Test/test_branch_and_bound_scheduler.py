@@ -517,6 +517,50 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         )
         self.assertEqual(run_res.schedule.total_drl_gained, 10)
 
+    def test_case_11_database_serialization_for_custom_task_and_preferences(self):
+        """Kiểm tra serialize/deserialize UserTaskRepository, UserTaskPreferenceRepository và UserRepository.drl_scores."""
+        from Database.Repository.user_repository import UserRepository
+        from Database.Repository.user_task_preference_repository import UserTaskPreferenceRepository
+        from Database.Repository.user_task_repository import UserTaskRepository
+
+        custom_dict = {
+            "title": "Học IELTS tại Trung tâm Q3",
+            "type": "personal",
+            "start_time": datetime(2026, 11, 10, 18, 0, tzinfo=TZ_HCM),
+            "end_time": datetime(2026, 11, 10, 20, 0, tzinfo=TZ_HCM),
+            "location": "Trung tâm Q3",
+            "travel_buffer_minutes": 30,
+        }
+        row = UserTaskRepository.task_to_row(custom_dict, user_id="user-uuid-1")
+        self.assertEqual(row["user_id"], "user-uuid-1")
+        self.assertEqual(row["travel_buffer_minutes"], 30)
+        self.assertEqual(row["type"], "personal")
+
+        restored = UserTaskRepository.row_to_task({**row, "id": "row-1"})
+        self.assertEqual(restored.travel_buffer_minutes, 30)
+        self.assertEqual(restored.title, "Học IELTS tại Trung tâm Q3")
+
+        pref = UserTaskPreferenceRepository.row_to_pref({
+            "task_id": "ev-1",
+            "pin_status": "pinned",
+            "custom_start_at": "2026-11-12T19:00:00+07:00",
+            "custom_end_at": "2026-11-12T19:30:00+07:00",
+            "travel_buffer_minutes": 15,
+        })
+        self.assertEqual(pref["pin_status"], "pinned")
+        self.assertEqual(pref["travel_buffer_minutes"], 15)
+        self.assertEqual(pref["custom_start_time"], "2026-11-12T19:00:00+07:00")
+
+        user_obj = UserRepository.row_to_user({
+            "id": "user-uuid-1",
+            "username": "sv@student.hcmus.edu.vn",
+            "drl_scores": {"dieu_1": 15, "dieu_2": 10, "dieu_3": 20},
+        })
+        self.assertEqual(
+            user_obj.drl_scores,
+            {"dieu_1": 15, "dieu_2": 10, "dieu_3": 20, "dieu_4": 0, "dieu_5": 0},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

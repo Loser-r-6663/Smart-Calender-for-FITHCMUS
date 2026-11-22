@@ -68,6 +68,10 @@ class ExtractedTask(BaseTask):
         default=None,
         description="Ước tính số giờ cần thiết để tham gia hoặc hoàn thành (ví dụ: 2.0)"
     )
+    travel_buffer_minutes: int | None = Field(
+        default=None,
+        description="Thời gian di chuyển ước tính (phút) do người dùng khai báo cho task cá nhân"
+    )
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )

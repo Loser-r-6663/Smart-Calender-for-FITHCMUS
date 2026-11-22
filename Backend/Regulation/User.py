@@ -34,6 +34,16 @@ class User(BaseModel):
         default=False,
         description="Trạng thái hợp lệ của session Portal"
     )
+    drl_scores: dict[str, int] = Field(
+        default_factory=lambda: {
+            "dieu_1": 0,
+            "dieu_2": 0,
+            "dieu_3": 0,
+            "dieu_4": 0,
+            "dieu_5": 0,
+        },
+        description="Điểm rèn luyện hiện có theo 5 tiêu chí (dieu_1..dieu_5)"
+    )
 
     def update(self, **kwargs):
         """Cập nhật các thuộc tính của User với các keyword arguments được truyền vào."""

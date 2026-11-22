@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from Backend.Regulation.BaseTask import DayTime
 from Backend.Regulation.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
+from Database.Repository.user_repository import UserRepository
+from Database.Repository.user_task_preference_repository import UserTaskPreferenceRepository
 from Database.Repository.user_task_repository import UserTaskRepository
 
 from .branch_and_bound_models import (
@@ -524,10 +526,12 @@ class SchedulingService:
         self,
         task_repository: TaskRepository | None = None,
         user_task_repository: UserTaskRepository | None = None,
+        user_task_preference_repository: UserTaskPreferenceRepository | None = None,
         scheduler: BranchAndBoundScheduler | None = None,
     ) -> None:
         self.task_repository = task_repository
         self.user_task_repository = user_task_repository
+        self.user_task_preference_repository = user_task_preference_repository
         self.scheduler = scheduler or BranchAndBoundScheduler()
 
     def run_for_tasks(
@@ -592,11 +596,21 @@ class SchedulingService:
         public_tasks = task_repo.get_tasks()
 
         personal_tasks: list[ExtractedTask] = []
+        resolved_prefs = user_task_prefs
         if user_id is not None:
             user_task_repo = self.user_task_repository or UserTaskRepository(
                 access_token=access_token, user_id=user_id
             )
             personal_tasks = user_task_repo.get_tasks()
+
+            if resolved_prefs is None:
+                try:
+                    pref_repo = self.user_task_preference_repository or UserTaskPreferenceRepository(
+                        access_token=access_token, user_id=user_id
+                    )
+                    resolved_prefs = pref_repo.get_preferences()
+                except Exception:
+                    resolved_prefs = None
 
         assigned_ids = {t.id for t in personal_tasks if t.id}
         all_tasks = list(public_tasks) + list(personal_tasks)
@@ -609,7 +623,7 @@ class SchedulingService:
             week_end=week_end,
             restrict_to_window=restrict_to_window,
             assigned_task_ids=assigned_ids or None,
-            user_task_prefs=user_task_prefs,
+            user_task_prefs=resolved_prefs,
         )
 
     def print_full_weekly_timetable(self, run_result: ScheduleRunResult) -> None:
@@ -675,6 +689,9 @@ class SchedulingService:
         initial_run: ScheduleRunResult,
         *,
         user_id: str | int | None = None,
+        access_token: str | None = None,
+        persist_to_db: bool = False,
+        initial_user_prefs: Mapping[str, Any] | None = None,
         initial_drl: Mapping[str, int] | None = None,
         week_start: date | None = None,
         week_end: date | None = None,
@@ -690,7 +707,47 @@ class SchedulingService:
         """
         current_run = initial_run
         custom_tasks: list[dict[str, Any]] = []
-        user_prefs: dict[str, dict[str, Any]] = {}
+        user_prefs: dict[str, dict[str, Any]] = {
+            str(k): dict(v) for k, v in (initial_user_prefs or {}).items()
+        }
+        current_drl: dict[str, int] = dict(
+            initial_drl
+            or initial_run.schedule.initial_drl
+            or {"dieu_1": 0, "dieu_2": 0, "dieu_3": 0, "dieu_4": 0, "dieu_5": 0}
+        )
+
+        def _persist_custom_task(task_dict: dict[str, Any]) -> None:
+            if not persist_to_db or user_id is None:
+                return
+            try:
+                repo = self.user_task_repository or UserTaskRepository(
+                    access_token=access_token, user_id=str(user_id)
+                )
+                resp = repo.save_tasks([task_dict])
+                rows = resp.json() if hasattr(resp, "json") else []
+                if isinstance(rows, list) and rows and rows[0].get("id"):
+                    task_dict["id"] = str(rows[0]["id"])
+                print("  [DB] Đã lưu Task cá nhân vào bảng 'user_task' trên Supabase.")
+            except Exception as exc:
+                print(f"  [!] Chưa thể lưu Task vào DB (chỉ lưu trong phiên hiện tại): {exc}")
+
+        def _persist_preference(task_id: str, pref_entry: Mapping[str, Any]) -> None:
+            if not persist_to_db or user_id is None:
+                return
+            try:
+                pref_repo = self.user_task_preference_repository or UserTaskPreferenceRepository(
+                    access_token=access_token, user_id=str(user_id)
+                )
+                pref_repo.upsert_preference(
+                    task_id,
+                    pin_status=str(pref_entry.get("pin_status") or "default"),
+                    custom_start_time=pref_entry.get("custom_start_time"),
+                    custom_end_time=pref_entry.get("custom_end_time"),
+                    travel_buffer_minutes=pref_entry.get("travel_buffer_minutes"),
+                )
+                print("  [DB] Đã lưu tùy chỉnh lịch vào bảng 'user_task_preferences' trên Supabase.")
+            except Exception as exc:
+                print(f"  [!] Chưa thể lưu tùy chỉnh vào DB (chỉ lưu trong phiên hiện tại): {exc}")
 
         def _recompute() -> ScheduleRunResult:
             nonlocal current_run
@@ -698,7 +755,7 @@ class SchedulingService:
                 base_tasks,
                 custom_tasks=custom_tasks,
                 user_id=user_id,
-                initial_drl=initial_drl,
+                initial_drl=current_drl,
                 week_start=week_start or current_run.week_start,
                 week_end=week_end or current_run.week_end,
                 restrict_to_window=restrict_to_window,
@@ -716,11 +773,12 @@ class SchedulingService:
             print("  [3] Ghim (Pin - Bắt buộc tham gia) một hoạt động ĐRL khác trong tuần")
             print("  [4] Loại bỏ (Reject - Không tham gia) một hoạt động ĐRL đang có trên lịch")
             print("  [5] Xem Lịch biểu tổng hợp cả tuần (Lịch học + Task cá nhân + ĐRL)")
+            print("  [6] Cập nhật điểm ĐRL hiện có theo 5 Điều (dieu_1 -> dieu_5)")
             print("  [0] Hoàn tất & Kết thúc")
             print("-" * 88)
 
             try:
-                choice = input("Chọn thao tác (0-5): ").strip()
+                choice = input("Chọn thao tác (0-6): ").strip()
             except (EOFError, KeyboardInterrupt):
                 print("\nKết thúc điều chỉnh lịch.")
                 break
@@ -797,8 +855,10 @@ class SchedulingService:
                     user_id=user_id,
                 )
                 custom_tasks.append(new_task)
+                _persist_custom_task(new_task)
                 if t_points > 0:
                     user_prefs[new_task["id"]] = {"pin_status": "pinned"}
+                    _persist_preference(new_task["id"], user_prefs[new_task["id"]])
                 _recompute()
 
             elif choice == "2":
@@ -858,6 +918,7 @@ class SchedulingService:
                 pref_entry["custom_end_time"] = new_et
                 pref_entry["pin_status"] = "pinned"
                 user_prefs[target_ev.task_id] = pref_entry
+                _persist_preference(target_ev.task_id, pref_entry)
                 _recompute()
 
             elif choice == "3":
@@ -884,6 +945,7 @@ class SchedulingService:
                 pref_entry = dict(user_prefs.get(target_ev.task_id) or {})
                 pref_entry["pin_status"] = "pinned"
                 user_prefs[target_ev.task_id] = pref_entry
+                _persist_preference(target_ev.task_id, pref_entry)
                 _recompute()
 
             elif choice == "4":
@@ -903,14 +965,36 @@ class SchedulingService:
                     continue
                 target_ev = selected[int(idx_raw) - 1]
                 user_prefs[target_ev.task_id] = {"pin_status": "rejected"}
+                _persist_preference(target_ev.task_id, user_prefs[target_ev.task_id])
                 custom_tasks = [t for t in custom_tasks if str(t.get("id")) != target_ev.task_id]
                 _recompute()
 
             elif choice == "5":
                 self.print_full_weekly_timetable(current_run)
 
+            elif choice == "6":
+                print("\n--- [6] CẬP NHẬT ĐIỂM ĐRL HIỆN CÓ (5 ĐIỀU) ---")
+                print("  (Nhấn Enter để giữ nguyên điểm hiện tại của từng Điều)")
+                for dieu_key in ("dieu_1", "dieu_2", "dieu_3", "dieu_4", "dieu_5"):
+                    cur_val = current_drl.get(dieu_key, 0)
+                    raw_val = input(f"  • {dieu_key} (hiện tại {cur_val}đ): ").strip()
+                    if raw_val:
+                        try:
+                            current_drl[dieu_key] = max(0, int(raw_val))
+                        except ValueError:
+                            print(f"    [!] Giá trị '{raw_val}' không hợp lệ, giữ nguyên {cur_val}đ.")
+                if persist_to_db and user_id is not None:
+                    try:
+                        UserRepository(access_token=access_token).update_drl_scores(
+                            str(user_id), current_drl
+                        )
+                        print("  [DB] Đã lưu điểm ĐRL 5 Điều vào bảng 'users' trên Supabase.")
+                    except Exception as exc:
+                        print(f"  [!] Chưa thể lưu ĐRL vào DB (chỉ áp dụng trong phiên hiện tại): {exc}")
+                _recompute()
+
             else:
-                print("  [!] Vui lòng chọn từ 0 đến 5.")
+                print("  [!] Vui lòng chọn từ 0 đến 6.")
 
         return current_run
 
