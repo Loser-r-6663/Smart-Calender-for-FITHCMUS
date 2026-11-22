@@ -29,7 +29,9 @@ class FBCrawler(PlaywrightCrawler):
     
     def check_state(self):
         if not self.state:
-            assert os.environ.get("APP_ROLE") != "SERVER"
+            if os.environ.get("APP_ROLE") == "SERVER":
+                print("The server account for scraping data from Facebook is currently unavailable")
+                assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state}
@@ -55,7 +57,11 @@ class FBCrawler(PlaywrightCrawler):
         
         # Login required if the login notification is present
         if login_notification.count() > 0:
+            if os.environ.get("APP_ROLE") == "SERVER":
+                print("The server account for scraping data from Facebook is currently unavailable")
+                raise ConnectionError("please log in manually")
             if settings["headless"]:
+                print("Please log in manually")
                 raise ConnectionError("please log in manually")
             
             # Semi-automatic login process for headed mode (headless=False)
