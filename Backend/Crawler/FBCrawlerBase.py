@@ -29,9 +29,7 @@ class FBCrawler(PlaywrightCrawler):
     
     def check_state(self):
         if not self.state:
-            if os.environ.get("APP_ROLE") == "SERVER":
-                print("The server account for scraping data from Facebook is currently unavailable")
-                assert os.environ.get("APP_ROLE") != "SERVER"
+            assert os.environ.get("APP_ROLE") != "SERVER"
             return False, {"headless": False, "storage_state": None}
         
         settings = {"headless": True, "storage_state": self.state}
@@ -49,7 +47,7 @@ class FBCrawler(PlaywrightCrawler):
         
         # Initialize login checking variable
         try:
-            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=1000)
+            page.wait_for_selector(LOGIN_NOTIFICATION, state='visible', timeout=5000)
         except Exception:
             browser.close()
             return
@@ -59,9 +57,8 @@ class FBCrawler(PlaywrightCrawler):
         if login_notification.count() > 0:
             if os.environ.get("APP_ROLE") == "SERVER":
                 print("The server account for scraping data from Facebook is currently unavailable")
-                raise ConnectionError("please log in manually")
+                assert os.environ.get("APP_ROLE") != "SERVER"
             if settings["headless"]:
-                print("Please log in manually")
                 raise ConnectionError("please log in manually")
             
             # Semi-automatic login process for headed mode (headless=False)
@@ -76,13 +73,8 @@ class FBCrawler(PlaywrightCrawler):
             page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
             
             # Store state file and close browser
-            if os.environ.get("APP_ROLE") == "SERVER":
-                self.state.update(context.storage_state())
-                store: KeyValueStore = Actor.open_key_value_store(name="State")
-                store.set_value(self.state_key, self.state)
-            else:
-                state_file = f"Backend/Crawler/State/{self.state_key}.json"
-                self.state.update(context.storage_state(path=state_file))
+            state_file = f"Backend/Crawler/State/{self.state_key}.json"
+            self.state.update(context.storage_state(path=state_file))
             browser.close()
     
     def browse_page(self, page):
