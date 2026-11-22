@@ -51,19 +51,19 @@ async def main(mode = None):  # NOTE: mode = "public" | "personal" | "all"
         async with Actor:
             set_main_loop(asyncio.get_running_loop())
             actor_input: dict = await Actor.get_input() or {}
-            mode = mode or actor_input.get("mode", "all")
+            run_mode = actor_input.get("mode", mode)
 
-            if mode in ("public", "all"):
+            if run_mode in ("public", "all"):
                 Actor.log.info("Crawling public sources...")
                 await process_public_tasks()
 
-            if mode in ("personal", "all"):
+            if run_mode in ("personal", "all"):
                 Actor.log.info("Crawling personal user sources...")
                 await process_personal_tasks()
     else:
-        if mode in ("public", "all"):
+        if run_mode in ("public", "all"):
             await process_public_tasks()
-        if mode in ("personal", "all"):
+        if run_mode in ("personal", "all"):
             await process_personal_tasks()
 
 if __name__ == "__main__":
