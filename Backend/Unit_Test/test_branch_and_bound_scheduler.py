@@ -546,10 +546,57 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             "custom_start_at": "2026-11-12T19:00:00+07:00",
             "custom_end_at": "2026-11-12T19:30:00+07:00",
             "travel_buffer_minutes": 15,
+            "is_scheduled": True,
+            "scheduled_start_at": "2026-11-12T19:00:00+07:00",
+            "scheduled_end_at": "2026-11-12T19:30:00+07:00",
+            "points_gained": 5,
         })
         self.assertEqual(pref["pin_status"], "pinned")
         self.assertEqual(pref["travel_buffer_minutes"], 15)
         self.assertEqual(pref["custom_start_time"], "2026-11-12T19:00:00+07:00")
+        self.assertTrue(pref["is_scheduled"])
+        self.assertEqual(pref["points_gained"], 5)
+
+        from Backend.Scheduling.branch_and_bound_models import ScheduledDRLEvent
+        outcome_rows = UserTaskPreferenceRepository.build_schedule_outcome_rows(
+            [
+                ScheduledDRLEvent(
+                    task_id="ev-new",
+                    title="Workshop AI",
+                    start_time=datetime(2026, 11, 13, 14, 0, tzinfo=TZ_HCM),
+                    end_time=datetime(2026, 11, 13, 16, 0, tzinfo=TZ_HCM),
+                    location="CS1",
+                    training_points=5,
+                    drl_category="dieu_1",
+                    points_gained=5,
+                )
+            ],
+            user_id="user-uuid-1",
+            existing_prefs={
+                "ev-old": {"pin_status": "default", "is_scheduled": True},
+                "ev-new": {"pin_status": "pinned"},
+            },
+        )
+        rows_by_id = {r["task_id"]: r for r in outcome_rows}
+        self.assertTrue(rows_by_id["ev-new"]["is_scheduled"])
+        self.assertEqual(rows_by_id["ev-new"]["pin_status"], "pinned")
+        self.assertEqual(rows_by_id["ev-new"]["points_gained"], 5)
+        self.assertFalse(rows_by_id["ev-old"]["is_scheduled"])
+
+        pref_model = UserTaskPreferenceRepository.row_to_model({
+            "user_id": "user-uuid-1",
+            "task_id": "ev-1",
+            "pin_status": "pinned",
+            "custom_start_at": "2026-11-12T19:00:00+07:00",
+            "custom_end_at": "2026-11-12T19:30:00+07:00",
+            "is_scheduled": True,
+            "points_gained": 5,
+        })
+        self.assertEqual(pref_model.pin_status, "pinned")
+        self.assertTrue(pref_model.is_scheduled)
+        dumped_row = UserTaskPreferenceRepository.model_to_row(pref_model)
+        self.assertEqual(dumped_row["task_id"], "ev-1")
+        self.assertEqual(dumped_row["points_gained"], 5)
 
         user_obj = UserRepository.row_to_user({
             "id": "user-uuid-1",

@@ -724,7 +724,8 @@ class SchedulingService:
         current_run = initial_run
         custom_tasks: list[dict[str, Any]] = []
         user_prefs: dict[str, dict[str, Any]] = {
-            str(k): dict(v) for k, v in (initial_user_prefs or {}).items()
+            str(k): (v.model_dump() if hasattr(v, "model_dump") else dict(v))
+            for k, v in (initial_user_prefs or {}).items()
         }
         current_drl: dict[str, int] = dict(
             initial_drl
@@ -765,6 +766,21 @@ class SchedulingService:
             except Exception as exc:
                 print(f"  [!] Chưa thể lưu tùy chỉnh vào DB (chỉ lưu trong phiên hiện tại): {exc}")
 
+        def _persist_schedule_outcome(run_res: ScheduleRunResult) -> None:
+            if not persist_to_db or user_id is None:
+                return
+            try:
+                pref_repo = self.user_task_preference_repository or UserTaskPreferenceRepository(
+                    access_token=access_token, user_id=str(user_id)
+                )
+                pref_repo.save_schedule_outcome(
+                    run_res.schedule.selected_events,
+                    user_id=str(user_id),
+                    existing_prefs=user_prefs,
+                )
+            except Exception:
+                pass
+
         def _recompute() -> ScheduleRunResult:
             nonlocal current_run
             current_run = self.run_for_tasks(
@@ -777,6 +793,7 @@ class SchedulingService:
                 restrict_to_window=restrict_to_window,
                 user_task_prefs=user_prefs,
             )
+            _persist_schedule_outcome(current_run)
             print("\n>>> ĐÃ CẬP NHẬT & TỐI ƯU LẠI LỊCH BIỂU! <<<")
             current_run.schedule.print_summary()
             return current_run

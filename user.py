@@ -100,6 +100,16 @@ def get_tasks(interactive_adjust: bool = True):
         user_task_prefs=user_prefs,
     )
     schedule_run.schedule.print_summary()
+    try:
+        UserTaskPreferenceRepository(
+            access_token=access_token, user_id=user.id
+        ).save_schedule_outcome(
+            schedule_run.schedule.selected_events,
+            user_id=user.id,
+            existing_prefs=user_prefs,
+        )
+    except Exception:
+        pass
     if interactive_adjust and sys.stdin.isatty():
         schedule_run = scheduling_service.interactive_adjust_schedule(
             tasks,

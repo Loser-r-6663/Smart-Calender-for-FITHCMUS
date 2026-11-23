@@ -17,9 +17,20 @@ CREATE TABLE IF NOT EXISTS public.user_task_preferences (
     custom_start_at timestamptz NULL,
     custom_end_at timestamptz NULL,
     travel_buffer_minutes integer NULL CHECK (travel_buffer_minutes IS NULL OR travel_buffer_minutes >= 0),
+    is_scheduled boolean NOT NULL DEFAULT false,
+    scheduled_start_at timestamptz NULL,
+    scheduled_end_at timestamptz NULL,
+    points_gained integer NULL,
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, task_id)
 );
+
+-- Bổ sung 4 cột kết quả xếp lịch nếu bảng user_task_preferences đã tồn tại từ trước
+ALTER TABLE IF EXISTS public.user_task_preferences
+    ADD COLUMN IF NOT EXISTS is_scheduled boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS scheduled_start_at timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS scheduled_end_at timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS points_gained integer NULL;
 
 CREATE INDEX IF NOT EXISTS idx_user_task_preferences_user_id
     ON public.user_task_preferences (user_id);
