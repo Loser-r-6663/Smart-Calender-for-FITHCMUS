@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from Backend.Regulation.BaseTask import BaseTask, Location, DayTime
+from DataProcessor.Standardization.BaseTask import BaseTask, Location, DateDayTime
 
 
 class RawTask(BaseTask):
@@ -8,8 +8,8 @@ class RawTask(BaseTask):
     type: str | None = None                   # Type of the post (e.g., SHCD-SV đầu năm, HỌC BỔNG TÀI TRỢ)
     description: str | None = None            # Description or brief summary of the post
     create_date: str | None = None            # Creation date of the post
-    start_time: DayTime | None = None         # Start time of the event or task
-    end_time: DayTime | None = None           # End time of the event or task
+    start_time: DateDayTime | None = None     # Start time of the event or task
+    end_time: DateDayTime | None = None       # End time of the event or task
     deadline: datetime | None = None          # Assignment deadline
     course: str | None = None                 # Course associated with the post
     location: Location | None = None          # Location of the event or task

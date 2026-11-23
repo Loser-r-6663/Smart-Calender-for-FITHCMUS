@@ -7,15 +7,15 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
 
-from Backend.Regulation.RawTask import RawTask
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.RawTask import RawTask
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 
 
 class LLMParser:
     def __init__(self):
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        with open("Backend/Parser/prompt.txt", "r", encoding="utf-8") as f:
+        with open("DataProcessor/Parser/prompt.txt", "r", encoding="utf-8") as f:
             prompt = f.read()
         self.client = genai.Client(api_key=api_key)
         self.config = types.GenerateContentConfig(

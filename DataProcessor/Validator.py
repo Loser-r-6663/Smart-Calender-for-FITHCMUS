@@ -1,31 +1,18 @@
 import unicodedata
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from difflib import SequenceMatcher
 
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
 
-VN_TZ = timezone(timedelta(hours=7))
 
 class Validator:
     '''Class to deduplicate ExtractedTask instances based on specific criteria.'''
     def __init__(self):
-        self.TEXT_SIMILARITY_THRESHOLD = 0.75
+        self.TEXT_SIMILARITY_THRESHOLD = 0.6
         self.TASK_FIELDS = (
-            "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
+            "user_id", "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
 
-    @staticmethod
-    def _aware_timezone(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=VN_TZ) if dt.tzinfo is None else dt
-    
-    @staticmethod
-    def _to_vn_time(dt: datetime | None) -> datetime | None:
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=VN_TZ)
-        return dt.astimezone(VN_TZ)
-    
     @staticmethod
     def _clean_text(value: str):
         return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
@@ -39,7 +26,10 @@ class Validator:
         return SequenceMatcher(a=title, b=prior_title).ratio() >= self.TEXT_SIMILARITY_THRESHOLD
     
     def _is_duplicate(self, task: ExtractedTask, previous: ExtractedTask):
-        if all(getattr(task, field) == getattr(previous, field) for field in self.TASK_FIELDS):
+        if all(
+            getattr(task, field) == getattr(previous, field)
+            or None in (getattr(task, field), getattr(previous, field))
+        for field in self.TASK_FIELDS):
             return self._has_similar_title(task, previous)
         else:
             return False
@@ -57,10 +47,17 @@ class Validator:
         now = datetime.now(tz=VN_TZ)
         expired: list[ExtractedTask] = []
         for task in tasks:
-            if isinstance(task.deadline, datetime) and self._to_vn_time(task.deadline) < now:
+            if isinstance(task.deadline, datetime) and task._to_vn_time(task.deadline) < now:
                 expired.append(task)
-            elif isinstance(task.registration_end, datetime) and self._to_vn_time(task.registration_end) < now:
+            elif isinstance(task.registration_end, datetime) and task._to_vn_time(task.registration_end) < now:
                 expired.append(task)
-            elif isinstance(task.end_time, datetime) and self._to_vn_time(task.end_time) < now:
+            elif (
+                task.end_time is not None
+                and task.end_time.date is not None
+                and datetime.combine(
+                    task.end_time.date,
+                    task.end_time.time or datetime.min.time(),
+                ).replace(tzinfo=VN_TZ) < now
+            ):
                 expired.append(task)
         return expired

@@ -1,7 +1,8 @@
-from Backend.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 from bs4 import BeautifulSoup
 from http.client import HTTPResponse
 from urllib.request import Request, urlopen
+
+from DataProcessor.Crawler.BaseCrawler.BaseCrawler import BaseCrawler
 
 
 class BeautifulSoupCrawler(BaseCrawler):
