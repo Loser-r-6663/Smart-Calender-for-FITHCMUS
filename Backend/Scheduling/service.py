@@ -806,7 +806,7 @@ class SchedulingService:
             print("MENU ĐIỀU CHỈNH LỊCH & THÊM TASK CÁ NHÂN:")
             print("  [1] Thêm Task cá nhân mới (kèm thời gian di chuyển ước tính)")
             print("  [2] Đổi khung giờ của hoạt động ĐRL trên lịch (Reschedule)")
-            print("  [3] Ghim (Pin - Bắt buộc tham gia) một hoạt động ĐRL khác trong tuần")
+            print("  [3] Ghim (Pin - Bắt buộc tham gia) một hoạt động ĐRL đang có trên lịch")
             print("  [4] Loại bỏ (Reject - Không tham gia) một hoạt động ĐRL đang có trên lịch")
             print("  [5] Xem Lịch biểu tổng hợp cả tuần (Lịch học + Task cá nhân + ĐRL)")
             print("  [6] Cập nhật điểm ĐRL hiện có theo 5 Điều (dieu_1 -> dieu_5)")
@@ -964,12 +964,12 @@ class SchedulingService:
                 _recompute()
 
             elif choice == "3":
-                unselected = current_run.schedule.unselected_events
-                if not unselected:
-                    print("  [!] Không còn hoạt động ĐRL khả thi nào khác trong tuần chưa được chọn.")
+                pinnable = [ev for ev in current_run.schedule.selected_events if not ev.is_pinned]
+                if not pinnable:
+                    print("  [!] Không có hoạt động ĐRL nào trên lịch cần ghim (hoặc tất cả đã được ghim).")
                     continue
-                print("\n--- [3] GHIM (BẮT BUỘC THAM GIA) HOẠT ĐỘNG ĐRL KHÁC TRONG TUẦN ---")
-                for idx, ev in enumerate(unselected, 1):
+                print("\n--- [3] GHIM (GIỮ CỐ ĐỊNH) HOẠT ĐỘNG ĐRL ĐANG CÓ TRÊN LỊCH ---")
+                for idx, ev in enumerate(pinnable, 1):
                     st_str = ev.start_time.strftime("%a %d/%m %H:%M")
                     et_str = (
                         ev.end_time.strftime("%H:%M")
@@ -977,15 +977,19 @@ class SchedulingService:
                         else ev.end_time.strftime("%a %d/%m %H:%M")
                     )
                     print(
-                        f"  {idx}. [{st_str} -> {et_str}] (+{ev.training_points}đ {ev.drl_category}) | {ev.title} [{ev.location}]"
+                        f"  {idx}. [{st_str} -> {et_str}] (+{ev.points_gained}đ {ev.drl_category}) | {ev.title} [{ev.location}]"
                     )
-                idx_raw = input(f"  Chọn số thứ tự sự kiện muốn Ghim (1-{len(unselected)}): ").strip()
-                if not idx_raw.isdigit() or not (1 <= int(idx_raw) <= len(unselected)):
+                idx_raw = input(f"  Chọn số thứ tự sự kiện muốn Ghim (1-{len(pinnable)}): ").strip()
+                if not idx_raw.isdigit() or not (1 <= int(idx_raw) <= len(pinnable)):
                     print("  [!] Lựa chọn không hợp lệ.")
                     continue
-                target_ev = unselected[int(idx_raw) - 1]
+                target_ev = pinnable[int(idx_raw) - 1]
                 pref_entry = dict(user_prefs.get(target_ev.task_id) or {})
                 pref_entry["pin_status"] = "pinned"
+                # Nếu là sự kiện online linh hoạt đã được xếp vào khung giờ cụ thể -> giữ luôn khung giờ đó khi ghim
+                if target_ev.is_flexible and "custom_start_time" not in pref_entry:
+                    pref_entry["custom_start_time"] = target_ev.start_time
+                    pref_entry["custom_end_time"] = target_ev.end_time
                 user_prefs[target_ev.task_id] = pref_entry
                 _persist_preference(target_ev.task_id, pref_entry)
                 _recompute()
