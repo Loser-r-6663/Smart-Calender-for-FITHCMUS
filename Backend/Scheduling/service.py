@@ -55,6 +55,7 @@ class ScheduleRunResult:
     week_end: date
     total_tasks_loaded: int
     prepared_tasks_count: int
+    incomplete_time_tasks: tuple[dict[str, Any], ...] = ()
 
 
 def normalize_to_gmt7(value: datetime) -> datetime:
@@ -328,6 +329,7 @@ def prepare_tasks_for_scheduler(
     assigned_task_ids: set[str] | None = None,
     user_task_prefs: Mapping[str, Any] | None = None,
     target_user_id: str | int | None = None,
+    incomplete_collector: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Convert ExtractedTask / dicts into scheduler-ready dicts with GMT+7 datetimes
@@ -415,8 +417,34 @@ def prepare_tasks_for_scheduler(
                 day += timedelta(days=1)
             continue
 
+        raw_missing_reason: str | None = None
+        if st is None and et is None:
+            if data.get("deadline") is not None or data.get("registration_end") is not None:
+                raw_missing_reason = "Chỉ có deadline (tạm tính khung giờ)"
+            else:
+                raw_missing_reason = "Thiếu toàn bộ thời gian (start, end, deadline)"
+        elif st is not None and et is None:
+            raw_missing_reason = "Thiếu end_time (tạm tính)"
+        elif st is None and et is not None:
+            raw_missing_reason = "Thiếu start_time (tạm tính)"
+        elif st is not None and et is not None and st >= et:
+            raw_missing_reason = "start_time >= end_time (không hợp lệ)"
+
         interval = _effective_interval(data)
         if interval is None:
+            if incomplete_collector is not None and raw_missing_reason is not None:
+                incomplete_collector.append({
+                    "task_id": task_id,
+                    "title": str(data.get("title") or "Không tên"),
+                    "type": task_type or "event",
+                    "training_points": int(data.get("training_points") or 0),
+                    "drl_category": data.get("drl_category") or "",
+                    "missing_reason": raw_missing_reason,
+                    "inferred_start": None,
+                    "inferred_end": None,
+                    "source_url": str(data.get("source_url") or ""),
+                    "is_skipped": True,
+                })
             continue
 
         if restrict_to_window:
@@ -440,6 +468,20 @@ def prepare_tasks_for_scheduler(
         task_entry["is_pinned"] = bool(data.get("is_pinned")) or pin_status == "pinned"
         _tag_cs1_for_class_exam(task_entry, task_type)
         prepared.append(task_entry)
+
+        if incomplete_collector is not None and raw_missing_reason is not None and not data.get("_has_custom_time"):
+            incomplete_collector.append({
+                "task_id": task_id,
+                "title": str(data.get("title") or "Không tên"),
+                "type": task_type or "event",
+                "training_points": int(data.get("training_points") or 0),
+                "drl_category": data.get("drl_category") or "",
+                "missing_reason": raw_missing_reason,
+                "inferred_start": eff_start,
+                "inferred_end": eff_end,
+                "source_url": str(data.get("source_url") or ""),
+                "is_skipped": False,
+            })
 
     return prepared
 
@@ -475,17 +517,29 @@ def create_custom_task(
         raise ValueError("Thời gian kết thúc phải lớn hơn thời gian bắt đầu!")
 
     parsed_buf = parse_travel_buffer_value(travel_buffer_minutes)
+    norm_type = task_type.strip().lower() or "personal"
+    loc_clean = location.strip() or "EXTERNAL"
+    window_hours = (et_dt - st_dt).total_seconds() / 3600.0
+    is_flex_candidate = window_hours >= 3.5 and (
+        norm_type == "assignment" or "online" in loc_clean.lower()
+    )
+    if estimated_hours is not None:
+        resolved_est_hours = max(0.25, float(estimated_hours))
+    elif is_flex_candidate:
+        resolved_est_hours = 3.5 if norm_type == "assignment" else 0.5
+    else:
+        resolved_est_hours = window_hours
 
     return {
         "id": task_id or f"user-custom-{int(datetime.now(GMT_PLUS_7).timestamp() * 1000)}",
         "user_id": user_id,
         "title": title.strip() or "Công việc cá nhân",
-        "type": task_type.strip().lower() or "personal",
+        "type": norm_type,
         "start_time": st_dt,
         "end_time": et_dt,
-        "location": location.strip() or "EXTERNAL",
+        "location": loc_clean,
         "travel_buffer_minutes": parsed_buf,
-        "estimated_hours": float(estimated_hours) if estimated_hours is not None else (et_dt - st_dt).total_seconds() / 3600.0,
+        "estimated_hours": resolved_est_hours,
         "training_points": max(0, int(training_points or 0)),
         "drl_category": normalize_drl_category(drl_category) or "dieu_3",
         "is_manual": True,
@@ -570,6 +624,7 @@ class SchedulingService:
                 if c_id:
                     merged_assigned_ids.add(str(c_id))
 
+        incomplete_tasks: list[dict[str, Any]] = []
         prepared_tasks = prepare_tasks_for_scheduler(
             combined_tasks,
             week_start=resolved_start,
@@ -579,6 +634,7 @@ class SchedulingService:
             assigned_task_ids=merged_assigned_ids if (assigned_task_ids is not None or custom_tasks) else None,
             user_task_prefs=user_task_prefs,
             target_user_id=user_id,
+            incomplete_collector=incomplete_tasks,
         )
         schedule_result = self.scheduler.schedule(
             prepared_tasks,
@@ -590,6 +646,7 @@ class SchedulingService:
             week_end=resolved_end,
             total_tasks_loaded=len(combined_tasks),
             prepared_tasks_count=len(prepared_tasks),
+            incomplete_time_tasks=tuple(incomplete_tasks),
         )
 
     def run_from_supabase(
@@ -702,6 +759,32 @@ class SchedulingService:
                 )
         print("=" * 88)
 
+    def print_incomplete_time_tasks(self, run_result: ScheduleRunResult) -> None:
+        """Hiển thị các task thiếu start_time hoặc end_time để user xem xét điều chỉnh lịch."""
+        items = run_result.incomplete_time_tasks
+        if not items:
+            return
+        print("\n[III] CÁC TASK THIẾU THÔNG TIN THỜI GIAN (CẦN USER XEM XÉT / BỔ SUNG GIỜ):")
+        print("-" * 88)
+        for idx, item in enumerate(items, 1):
+            pts = int(item.get("training_points") or 0)
+            cat = item.get("drl_category") or ""
+            pts_tag = f" (+{pts}đ {cat})" if pts > 0 else f" [{str(item.get('type') or 'task').upper()}]"
+            if item.get("is_skipped"):
+                time_info = "CHƯA XẾP ĐƯỢC"
+            else:
+                st_str = item["inferred_start"].strftime("%a %d/%m %H:%M")
+                et_str = (
+                    item["inferred_end"].strftime("%H:%M")
+                    if item["inferred_start"].date() == item["inferred_end"].date()
+                    else item["inferred_end"].strftime("%a %d/%m %H:%M")
+                )
+                time_info = f"Tạm tính: {st_str} -> {et_str}"
+            print(f"  {idx:>2}. [{item['missing_reason']}] ({time_info}){pts_tag} | {item['title']}")
+            if item.get("source_url"):
+                print(f"      Link: {item['source_url']}")
+        print("=" * 88)
+
     def interactive_adjust_schedule(
         self,
         base_tasks: Sequence[ExtractedTask | BaseModel | Mapping[str, Any]],
@@ -730,6 +813,7 @@ class SchedulingService:
             str(k): (v.model_dump() if hasattr(v, "model_dump") else dict(v))
             for k, v in (initial_user_prefs or {}).items()
         }
+        estimated_hours_overrides: dict[str, float] = {}
         current_drl: dict[str, int] = dict(
             initial_drl
             or initial_run.schedule.initial_drl
@@ -784,11 +868,31 @@ class SchedulingService:
             except Exception:
                 pass
 
+        def _apply_est_overrides(items: Sequence[Any]) -> list[Any]:
+            if not estimated_hours_overrides:
+                return list(items)
+            patched: list[Any] = []
+            for item in items:
+                item_id = str(item.get("id") if isinstance(item, Mapping) else getattr(item, "id", "") or "")
+                if item_id and item_id in estimated_hours_overrides:
+                    new_est = estimated_hours_overrides[item_id]
+                    if isinstance(item, Mapping):
+                        d = dict(item)
+                        d["estimated_hours"] = new_est
+                        patched.append(d)
+                    elif hasattr(item, "model_copy"):
+                        patched.append(item.model_copy(update={"estimated_hours": new_est}))
+                    else:
+                        patched.append(item)
+                else:
+                    patched.append(item)
+            return patched
+
         def _recompute() -> ScheduleRunResult:
             nonlocal current_run
             current_run = self.run_for_tasks(
-                base_tasks,
-                custom_tasks=custom_tasks,
+                _apply_est_overrides(base_tasks),
+                custom_tasks=_apply_est_overrides(custom_tasks),
                 user_id=user_id,
                 initial_drl=current_drl,
                 week_start=week_start or current_run.week_start,
@@ -799,6 +903,7 @@ class SchedulingService:
             _persist_schedule_outcome(current_run)
             print("\n>>> ĐÃ CẬP NHẬT & TỐI ƯU LẠI LỊCH BIỂU! <<<")
             current_run.schedule.print_summary()
+            self.print_incomplete_time_tasks(current_run)
             return current_run
 
         while True:
@@ -860,18 +965,28 @@ class SchedulingService:
                     print("  [!] Thời gian kết thúc không hợp lệ (phải sau thời gian bắt đầu).")
                     continue
 
+                location = input("  • Địa điểm (VD: Trung tâm Q3 / CS1 / CS2 / ONLINE, mặc định EXTERNAL): ").strip() or "EXTERNAL"
+                is_online_loc = "online" in location.lower()
+                window_delta_h = (et_dt - st_dt).total_seconds() / 3600.0
+
                 est_h: float | None = None
                 if task_type == "assignment":
                     est_raw = input("  • Số giờ cần thiết để hoàn thành (mặc định 3.5h): ").strip()
                     if est_raw:
                         try:
-                            est_h = max(0.5, float(est_raw))
+                            est_h = max(0.25, float(est_raw))
                         except ValueError:
                             est_h = 3.5
+                elif task_type == "event" and is_online_loc and window_delta_h >= 3.5:
+                    est_raw = input("  • Sự kiện Online mở nhiều giờ — số giờ ước tính tham gia (mặc định 0.5h): ").strip()
+                    if est_raw:
+                        try:
+                            est_h = max(0.25, float(est_raw))
+                        except ValueError:
+                            est_h = 0.5
 
-                location = input("  • Địa điểm (VD: Trung tâm Q3 / CS1 / CS2 / ONLINE, mặc định EXTERNAL): ").strip() or "EXTERNAL"
                 travel_buf: int | dict[str, int] | None = None
-                if "online" not in location.lower() and task_type != "assignment":
+                if not is_online_loc and task_type != "assignment":
                     buf_raw = input(
                         "  • Thời gian di chuyển ước tính (phút) — nhập 'CS1, CS2' (VD: 15, 50) hoặc 1 số chung (VD: 30): "
                     ).strip()
@@ -906,63 +1021,173 @@ class SchedulingService:
 
             elif choice == "2":
                 selected = current_run.schedule.selected_events
-                if not selected:
-                    print("  [!] Hiện không có sự kiện ĐRL nào trên lịch để đổi giờ.")
-                    continue
-                print("\n--- [2] ĐỔI KHUNG GIỜ HOẠT ĐỘNG ĐRL TRÊN LỊCH ---")
-                for idx, ev in enumerate(selected, 1):
+                flex_summaries = [
+                    wl for wl in current_run.schedule.flexible_tasks_summary if wl.get("id")
+                ]
+                incomplete_list = [
+                    it for it in current_run.incomplete_time_tasks if it.get("task_id")
+                ]
+                listed_ids: set[str] = set()
+                reschedule_targets: list[dict[str, Any]] = []
+
+                print("\n--- [2] ĐỔI / BỔ SUNG KHUNG GIỜ & ESTIMATED HOURS ---")
+                for ev in selected:
+                    listed_ids.add(ev.task_id)
                     flex_note = (
-                        f" (Linh hoạt trong khoảng: {ev.window_start.strftime('%d/%m %H:%M')} -> {ev.window_end.strftime('%d/%m %H:%M')})"
+                        f" (Linh hoạt {ev.estimated_hours:.1f}h trong khoảng: "
+                        f"{ev.window_start.strftime('%d/%m %H:%M')} -> {ev.window_end.strftime('%d/%m %H:%M')})"
                         if ev.is_flexible and ev.window_start and ev.window_end
                         else " (Sự kiện cố định)"
                     )
+                    idx_num = len(reschedule_targets) + 1
                     print(
-                        f"  {idx}. [{ev.start_time.strftime('%a %d/%m %H:%M')} -> {ev.end_time.strftime('%H:%M')}] "
+                        f"  {idx_num}. [{ev.start_time.strftime('%a %d/%m %H:%M')} -> {ev.end_time.strftime('%H:%M')}] "
                         f"{ev.title}{flex_note}"
                     )
-                idx_raw = input(f"  Chọn số thứ tự hoạt động muốn đổi giờ (1-{len(selected)}): ").strip()
-                if not idx_raw.isdigit() or not (1 <= int(idx_raw) <= len(selected)):
+                    reschedule_targets.append({
+                        "task_id": ev.task_id,
+                        "default_date": ev.start_time.date(),
+                        "default_dur": ev.end_time - ev.start_time,
+                        "window_start": ev.window_start,
+                        "window_end": ev.window_end,
+                        "is_flexible": bool(ev.is_flexible),
+                        "estimated_hours": float(ev.estimated_hours or 0.5),
+                    })
+
+                for wl in flex_summaries:
+                    wl_id = str(wl["id"])
+                    if wl_id in listed_ids:
+                        continue
+                    listed_ids.add(wl_id)
+                    idx_num = len(reschedule_targets) + 1
+                    w_st = wl["start_time"]
+                    w_et = wl["end_time"]
+                    est_val = float(wl.get("estimated_hours") or 3.5)
+                    print(
+                        f"  {idx_num}. [Bài tập linh hoạt {est_val:.1f}h | Hạn: "
+                        f"{w_st.strftime('%d/%m %H:%M')} -> {w_et.strftime('%d/%m %H:%M')}] {wl['title']}"
+                    )
+                    reschedule_targets.append({
+                        "task_id": wl_id,
+                        "default_date": w_st.date(),
+                        "default_dur": timedelta(hours=est_val),
+                        "window_start": w_st,
+                        "window_end": w_et,
+                        "is_flexible": True,
+                        "estimated_hours": est_val,
+                    })
+
+                for it in incomplete_list:
+                    it_id = str(it["task_id"])
+                    if it_id in listed_ids:
+                        continue
+                    listed_ids.add(it_id)
+                    idx_num = len(reschedule_targets) + 1
+                    inf_st = it.get("inferred_start") or datetime.combine(
+                        current_run.week_start, time(8, 0), tzinfo=GMT_PLUS_7
+                    )
+                    inf_et = it.get("inferred_end")
+                    dur = (inf_et - inf_st) if (it.get("inferred_start") and inf_et) else timedelta(hours=1)
+                    print(f"  {idx_num}. [{it['missing_reason']}] {it['title']}")
+                    reschedule_targets.append({
+                        "task_id": it_id,
+                        "default_date": inf_st.date(),
+                        "default_dur": dur,
+                        "window_start": None,
+                        "window_end": None,
+                        "is_flexible": False,
+                        "estimated_hours": None,
+                    })
+
+                if not reschedule_targets:
+                    print("  [!] Hiện không có hoạt động ĐRL, bài tập linh hoạt hoặc task thiếu giờ nào.")
+                    continue
+
+                idx_raw = input(f"  Chọn số thứ tự hoạt động muốn điều chỉnh (1-{len(reschedule_targets)}): ").strip()
+                if not idx_raw.isdigit() or not (1 <= int(idx_raw) <= len(reschedule_targets)):
                     print("  [!] Lựa chọn không hợp lệ.")
                     continue
-                target_ev = selected[int(idx_raw) - 1]
-                new_st_raw = input(
-                    f"  • Nhập thời gian bắt đầu mới (VD: {target_ev.start_time.strftime('%d/%m')} 20:00): "
-                ).strip()
-                new_st = _parse_user_datetime_input(new_st_raw, target_ev.start_time.date())
-                if new_st is None:
+                target_info = reschedule_targets[int(idx_raw) - 1]
+                is_flex_target = bool(target_info.get("is_flexible"))
+
+                if is_flex_target:
+                    new_st_raw = input(
+                        f"  • Nhập thời gian bắt đầu mới (VD: {target_info['default_date'].strftime('%d/%m')} 20:00; Enter để giữ nguyên khung giờ): "
+                    ).strip()
+                else:
+                    new_st_raw = input(
+                        f"  • Nhập thời gian bắt đầu mới (VD: {target_info['default_date'].strftime('%d/%m')} 20:00): "
+                    ).strip()
+
+                changed_time = False
+                new_st: datetime | None = None
+                new_et: datetime | None = None
+                if new_st_raw:
+                    new_st = _parse_user_datetime_input(new_st_raw, target_info["default_date"])
+                    if new_st is None:
+                        print("  [!] Thời gian bắt đầu không hợp lệ.")
+                        continue
+
+                    default_dur = target_info["default_dur"]
+                    new_et_raw = input(
+                        f"  • Nhập thời gian kết thúc mới (Enter để giữ nguyên thời lượng {int(default_dur.total_seconds() // 60)} phút): "
+                    ).strip()
+                    if not new_et_raw:
+                        new_et = new_st + default_dur
+                    else:
+                        new_et = _parse_user_datetime_input(new_et_raw, new_st.date())
+
+                    if new_et is None or new_et <= new_st:
+                        print("  [!] Thời gian kết thúc không hợp lệ.")
+                        continue
+
+                    if target_info["window_start"] and target_info["window_end"]:
+                        if new_st < target_info["window_start"] or new_et > target_info["window_end"]:
+                            print(
+                                f"  [!] Cảnh báo: Khung giờ mới nằm ngoài thời hạn mở của sự kiện "
+                                f"({target_info['window_start'].strftime('%d/%m %H:%M')} -> {target_info['window_end'].strftime('%d/%m %H:%M')})."
+                            )
+                            confirm = input("  Bạn vẫn muốn áp dụng khung giờ này? (y/n): ").strip().lower()
+                            if confirm != "y":
+                                continue
+                    changed_time = True
+                elif not is_flex_target:
                     print("  [!] Thời gian bắt đầu không hợp lệ.")
                     continue
 
-                default_dur = (target_ev.end_time - target_ev.start_time)
-                new_et_raw = input(
-                    f"  • Nhập thời gian kết thúc mới (Enter để giữ nguyên thời lượng {int(default_dur.total_seconds() // 60)} phút): "
-                ).strip()
-                if not new_et_raw:
-                    new_et = new_st + default_dur
-                else:
-                    new_et = _parse_user_datetime_input(new_et_raw, new_st.date())
+                changed_est = False
+                if is_flex_target:
+                    cur_est = target_info.get("estimated_hours") or 1.0
+                    est_raw = input(
+                        f"  • Nhập estimated_hours mới (hiện tại {cur_est:.1f}h; Enter để giữ nguyên): "
+                    ).strip()
+                    if est_raw:
+                        try:
+                            new_est_h = max(0.25, float(est_raw))
+                            estimated_hours_overrides[target_info["task_id"]] = new_est_h
+                            changed_est = True
+                            if persist_to_db and user_id is not None:
+                                try:
+                                    repo = self.user_task_repository or UserTaskRepository(
+                                        access_token=access_token, user_id=str(user_id)
+                                    )
+                                    repo.update_task(target_info["task_id"], {"estimated_hours": new_est_h})
+                                    print("  [DB] Đã cập nhật estimated_hours vào bảng 'user_task' trên Supabase.")
+                                except Exception:
+                                    pass
+                        except ValueError:
+                            print("  [!] Giá trị estimated_hours không hợp lệ, giữ nguyên giá trị cũ.")
 
-                if new_et is None or new_et <= new_st:
-                    print("  [!] Thời gian kết thúc không hợp lệ.")
-                    continue
+                if changed_time and new_st is not None and new_et is not None:
+                    pref_entry = dict(user_prefs.get(target_info["task_id"]) or {})
+                    pref_entry["custom_start_time"] = new_st
+                    pref_entry["custom_end_time"] = new_et
+                    pref_entry.setdefault("pin_status", "default")
+                    user_prefs[target_info["task_id"]] = pref_entry
+                    _persist_preference(target_info["task_id"], pref_entry)
 
-                if target_ev.window_start and target_ev.window_end:
-                    if new_st < target_ev.window_start or new_et > target_ev.window_end:
-                        print(
-                            f"  [!] Cảnh báo: Khung giờ mới nằm ngoài thời hạn mở của sự kiện "
-                            f"({target_ev.window_start.strftime('%d/%m %H:%M')} -> {target_ev.window_end.strftime('%d/%m %H:%M')})."
-                        )
-                        confirm = input("  Bạn vẫn muốn áp dụng khung giờ này? (y/n): ").strip().lower()
-                        if confirm != "y":
-                            continue
-
-                pref_entry = dict(user_prefs.get(target_ev.task_id) or {})
-                pref_entry["custom_start_time"] = new_st
-                pref_entry["custom_end_time"] = new_et
-                pref_entry.setdefault("pin_status", "default")
-                user_prefs[target_ev.task_id] = pref_entry
-                _persist_preference(target_ev.task_id, pref_entry)
-                _recompute()
+                if changed_time or changed_est:
+                    _recompute()
 
             elif choice == "3":
                 pinnable = [ev for ev in current_run.schedule.selected_events if not ev.is_pinned]
@@ -1060,6 +1285,7 @@ class SchedulingService:
 
             elif choice == "7":
                 print("\n--- [7] CẬP NHẬT ĐIỂM ĐRL HIỆN CÓ (5 ĐIỀU) ---")
+                print("  Lưu ý: Điểm ĐRL hiện có chỉ nên cộng thêm sau khi sự kiện đã kết thúc/hoàn thành.")
                 print("  (Nhấn Enter để giữ nguyên điểm hiện tại của từng Điều)")
                 for dieu_key in ("dieu_1", "dieu_2", "dieu_3", "dieu_4", "dieu_5"):
                     cur_val = current_drl.get(dieu_key, 0)

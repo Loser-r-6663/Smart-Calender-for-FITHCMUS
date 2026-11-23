@@ -100,6 +100,7 @@ def get_tasks(interactive_adjust: bool = True):
         user_task_prefs=user_prefs,
     )
     schedule_run.schedule.print_summary()
+    scheduling_service.print_incomplete_time_tasks(schedule_run)
     try:
         UserTaskPreferenceRepository(
             access_token=access_token, user_id=user.id

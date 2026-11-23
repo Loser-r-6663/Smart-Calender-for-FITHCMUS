@@ -667,6 +667,41 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertNotIn("ev-cs2-30p-fail", selected_ids)
         self.assertEqual(run_res.schedule.total_drl_gained, 5)
 
+    def test_case_13_incomplete_time_tasks_review(self):
+        """Kiểm tra: Thu thập các task thiếu start_time/end_time để user review và điều chỉnh."""
+        from datetime import date
+        from Backend.Scheduling.service import SchedulingService
+
+        tasks = [
+            {
+                "id": "ev-no-end",
+                "title": "Hội thảo thiếu end_time",
+                "type": "event",
+                "start_time": datetime(2026, 11, 10, 14, 0, tzinfo=TZ_HCM),
+                "training_points": 5,
+                "training_point_category": "Articles 1",
+                "source_url": "https://hcmus.edu.vn/no-end",
+            },
+            {
+                "id": "ev-no-time",
+                "title": "Sự kiện chưa ghi ngày giờ",
+                "type": "event",
+                "training_points": 8,
+                "training_point_category": "Articles 3",
+                "source_url": "https://hcmus.edu.vn/no-time",
+            },
+        ]
+        run_res = SchedulingService().run_for_tasks(
+            tasks,
+            week_start=date(2026, 11, 9),
+            restrict_to_window=True,
+        )
+        incomplete_by_id = {it["task_id"]: it for it in run_res.incomplete_time_tasks}
+        self.assertIn("ev-no-end", incomplete_by_id)
+        self.assertFalse(incomplete_by_id["ev-no-end"]["is_skipped"])
+        self.assertIn("ev-no-time", incomplete_by_id)
+        self.assertTrue(incomplete_by_id["ev-no-time"]["is_skipped"])
+
 
 if __name__ == "__main__":
     unittest.main()
