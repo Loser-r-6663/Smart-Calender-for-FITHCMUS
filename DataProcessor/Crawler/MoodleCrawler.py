@@ -52,6 +52,7 @@ class MoodleCrawler(PlaywrightCrawler):
             self.state.update(context.storage_state())
         else:
             state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
+            os.makedirs(os.path.dirname(state_file), exist_ok=True)
             self.state.update(context.storage_state(path=state_file))
         browser.close()
     

@@ -108,7 +108,8 @@ class BranchAndBoundScheduler:
 
             loc_raw = task_dict.get("location")
             loc_text = format_location_text(loc_raw)
-            if task_type in {"class", "exam"}:
+            is_manual_task = bool(task_dict.get("is_manual")) or task_dict.get("source_url") == "manual://user"
+            if task_type in {"class", "exam"} and not is_manual_task:
                 if not loc_text:
                     loc_text = "Cơ sở 1"
                 elif (

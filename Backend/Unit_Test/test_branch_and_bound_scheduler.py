@@ -533,7 +533,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         }
         row = UserTaskRepository.task_to_row(custom_dict, user_id="user-uuid-1")
         self.assertEqual(row["user_id"], "user-uuid-1")
-        self.assertEqual(row["type"], "personal")
+        self.assertEqual(row["type"], "class")
         self.assertNotIn("travel_buffer_minutes", row)
 
         restored = UserTaskRepository.row_to_task({**row, "id": "row-1"})

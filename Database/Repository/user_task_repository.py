@@ -6,6 +6,15 @@ from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 
 
+_DIEU_TO_ARTICLE = {
+    "dieu_1": "Articles 1",
+    "dieu_2": "Articles 2",
+    "dieu_3": "Articles 3",
+    "dieu_4": "Articles 4",
+    "dieu_5": "Articles 5",
+}
+
+
 class UserTaskRepository(TaskRepository):
     """
     Repository for personal/user-specific tasks stored in the 'user_task' table.
@@ -37,22 +46,28 @@ class UserTaskRepository(TaskRepository):
             loc_room = loc_raw.get("room") if isinstance(loc_raw, dict) else (str(loc_raw) if loc_raw else None)
             loc_campus = loc_raw.get("campus") if isinstance(loc_raw, dict) else None
             loc_detail = loc_raw.get("detail") if isinstance(loc_raw, dict) else None
+            raw_type = str(task.get("type") or "personal").lower()
+            db_type = "class" if raw_type == "personal" else raw_type
+            t_pts = int(task.get("training_points") or 0)
+            raw_cat = task.get("training_point_category") or task.get("drl_category")
+            db_cat = None
+            if db_type == "event" and t_pts > 0:
+                db_cat = _DIEU_TO_ARTICLE.get(str(raw_cat or "").lower(), raw_cat or "Articles 3")
+            est_h = task.get("estimated_hours")
+            if db_type == "event" and (est_h is None or float(est_h) <= 0):
+                est_h = 1.0
             row = {
                 "title": task.get("title") or "Công việc cá nhân",
-                "type": task.get("type") or "personal",
+                "type": db_type,
                 "course": task.get("course"),
                 "description": task.get("description"),
                 "location_room": loc_room,
                 "location_campus": loc_campus,
                 "location_detail": loc_detail,
                 "deadline": dl.isoformat() if isinstance(dl, datetime) else dl,
-                "training_points": task.get("training_points") or 0,
-                "training_point_category": (
-                    task.get("training_point_category")
-                    if int(task.get("training_points") or 0) > 0
-                    else None
-                ),
-                "estimated_hours": task.get("estimated_hours"),
+                "training_points": t_pts if db_type == "event" else None,
+                "training_point_category": db_cat,
+                "estimated_hours": est_h,
                 "source_url": task.get("source_url") or "manual://user",
                 "source_platform": task.get("source_platform") or "Portal",
                 "updated_at": datetime.now(timezone.utc).isoformat(),

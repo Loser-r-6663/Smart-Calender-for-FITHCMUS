@@ -302,6 +302,8 @@ def _extract_user_task_pref(
 def _tag_cs1_for_class_exam(task_dict: dict[str, Any], task_type: str) -> None:
     if task_type not in {"class", "exam"}:
         return
+    if task_dict.get("is_manual") or task_dict.get("source_url") == "manual://user":
+        return
     loc = format_location_text(task_dict.get("location"))
     if not loc:
         task_dict["location"] = "Cơ sở 1"
