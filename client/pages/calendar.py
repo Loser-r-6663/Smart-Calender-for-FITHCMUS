@@ -6,7 +6,7 @@ from nicegui import app, ui
 
 from client.components.agenda import render_agenda
 from client.components.calendar import render_calendar
-from client.components.filters import render_filters
+from client.components.filters import SearchPanel
 from client.components.header import render_header
 from client.components.task_panel import render_task_panel
 from client.config import AppConfig
@@ -32,8 +32,12 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         user = ClientUser(**stored_user)
         controller = ClientController(backend, user)
+        refresh_body = None
 
         async def load_month(month=None) -> None:
+            controller.state.loading = True
+            if refresh_body is not None:
+                refresh_body()
             await controller.load_month(month)
             if controller.state.session_expired:
                 app.storage.user.clear()
@@ -94,6 +98,8 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
             controller.state.selected_date = today
             await load_month(today.replace(day=1))
             body.refresh()
+
+        search_panel = SearchPanel(controller)
 
         render_header(
             user,
@@ -161,18 +167,7 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                                 "flat no-caps"
                             ).classes("today-button")
 
-                    render_filters(
-                        controller.state,
-                        controller.state.items,
-                        on_filter=apply_filter,
-                        on_view=set_view,
-                        on_search_result=select_item,
-                    )
-
-                    if controller.state.error:
-                        with ui.element("div").classes("error-banner"):
-                            ui.icon("error_outline")
-                            ui.label(controller.state.error)
+                    search_panel.render(on_filter=apply_filter, on_view=set_view)
 
                     with ui.element("div").classes("calendar-layout"):
                         with ui.element("div").classes("calendar-content"):
@@ -186,4 +181,5 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                                 render_agenda(controller, on_select_item=select_item)
                         render_task_panel(controller, on_select_item=select_item)
 
+        refresh_body = body.refresh
         body()
