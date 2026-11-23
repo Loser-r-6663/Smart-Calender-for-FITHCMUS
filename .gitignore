@@ -54,6 +54,7 @@ coverage.xml
 *.lcov
 .hypothesis/
 .pytest_cache/
+.nicegui/
 cover/
 
 # Translations

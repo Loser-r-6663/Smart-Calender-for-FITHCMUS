@@ -71,7 +71,7 @@ def get_tasks():
 
     database = UserTaskRepository(access_token=access_token, user_id=user.id)
     personal_tasks = database.get_tasks()
-    
+
     tasks = public_tasks + personal_tasks
     expired_tasks = Validator().filter_expired_tasks(tasks)
     tasks = [task for task in tasks if task not in expired_tasks]
