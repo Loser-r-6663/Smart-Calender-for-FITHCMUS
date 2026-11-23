@@ -1,6 +1,10 @@
 -- Migration: Lưu ĐRL 5 tiêu chí & Tùy chỉnh lịch / Kết quả xếp lịch / Travel Buffer trong user_task_preferences
 -- Chạy script này trong Supabase SQL Editor.
 
+-- 0. Dọn cột travel_buffer_minutes cũ trên user_task (nếu trước đó từng thêm) vì đã chuyển toàn bộ sang user_task_preferences
+ALTER TABLE IF EXISTS public.user_task
+    DROP COLUMN IF EXISTS travel_buffer_minutes;
+
 -- 1. Thêm cột lưu điểm rèn luyện hiện có theo 5 tiêu chí (dieu_1..dieu_5) cho bảng users
 ALTER TABLE IF EXISTS public.users
     ADD COLUMN IF NOT EXISTS drl_scores jsonb NOT NULL DEFAULT '{"dieu_1": 0, "dieu_2": 0, "dieu_3": 0, "dieu_4": 0, "dieu_5": 0}'::jsonb;
