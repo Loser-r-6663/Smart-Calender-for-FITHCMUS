@@ -2,15 +2,20 @@ import json
 import traceback
 
 from DataProcessor.Standardization.User import User
+from DataProcessor.Standardization.Task import Task
+
 from DataProcessor.Crawler.PortalCrawler import PortalCrawler
 from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
+
+from DataProcessor.Validator import Validator
 
 from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_task_repository import UserTaskRepository
+from Database.Repository.local_task_repository import LocalTaskRepository
 
-from DataProcessor.Validator import Validator
+from Scheduler.scheduler import BranchAndBoundScheduler
 
 
 def update_portal_account(access_token, user: User):
@@ -70,17 +75,29 @@ def get_tasks():
     public_tasks = database.get_tasks()
 
     database = UserTaskRepository(access_token=access_token, user_id=user.id)
-    personal_tasks = database.get_tasks()
+    personal_tasks = database.pop_tasks()
     
     tasks = public_tasks + personal_tasks
     expired_tasks = Validator().filter_expired_tasks(tasks)
     tasks = [task for task in tasks if task not in expired_tasks]
     
-    # tasks = Task(tasks) NOTE: New model of regulation, not implemented yet
-    # retained_tasks = SQLite.get_tasks()
-    # tasks = Validator().deduplicate_task(tasks, retained_tasks)
-    print(tasks)
+    with LocalTaskRepository(user.id) as database:
+        tasks = [Task.from_extracted_task(task) for task in tasks]
+        retained_tasks = database.get_tasks()
+        tasks = Validator().deduplicate_task(tasks, retained_tasks)
+
+        new_tasks = [task for task in tasks if task not in retained_tasks]
+        database.save_tasks(new_tasks)
+    
+    return tasks
+
+def schedule_tasks():
+    tasks = get_tasks()
+    scheduler = BranchAndBoundScheduler()
+    result = scheduler.schedule(tasks)
+    result.print_timetable()
+    return result
 
 
 if __name__ == "__main__":
-    get_tasks()
+    schedule_tasks()
