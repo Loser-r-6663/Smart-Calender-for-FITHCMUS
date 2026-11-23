@@ -186,9 +186,11 @@ class UserTaskPreferenceRepository(BaseSupabaseClient):
                 "updated_at": now_iso,
             })
 
-        # Bỏ đánh dấu is_scheduled cho những sự kiện cũ không còn trong lịch mới
+        # Bỏ đánh dấu is_scheduled cho những sự kiện cũ không còn trong lịch mới (kể cả vừa bị Reject)
         for task_id, prev in existing.items():
-            if task_id not in selected_ids and prev.get("is_scheduled"):
+            if task_id not in selected_ids and (
+                prev.get("is_scheduled") or str(prev.get("pin_status") or "").lower() == "rejected"
+            ):
                 rows.append({
                     "user_id": str(user_id),
                     "task_id": str(task_id),
