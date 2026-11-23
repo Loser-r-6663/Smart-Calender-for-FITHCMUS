@@ -109,6 +109,81 @@ def test_mock_contract_stable_keys_source_filters_and_personal_visibility():
     asyncio.run(scenario())
 
 
+def test_scoped_selection_revalidates_current_facts_without_reading_or_changing_schedule():
+    async def scenario():
+        backend = MockBackend()
+        public = task(title="Public", deadline="2027-01-12T08:00:00+07:00",
+                      source_url="https://example.invalid/public")
+        personal = task(title="Personal", source_url="https://example.invalid/personal")
+        loaded = task_load((("public", [public]), ("personal", [personal])), set())
+        backend.load_tasks = AsyncMock(return_value=loaded)
+        controller = ClientController(backend, ClientUser(OWNER_A, "A"))
+        await controller.load_month(MONTH)
+        session = controller.selection_session
+        selected_date = controller.state.selected_date
+        controller.search("Public", filters={"course": "CSC10004"}, sort="title")
+        for scope, title in (("public", "Public"), ("personal", "Personal")):
+            assert controller.select_search_record((scope, TASK_ID), session=session)
+            assert controller.selected_search_record.title == title
+            assert controller.selected_search_record.source_url.endswith(scope)
+            assert controller.selected_item is None
+        assert controller.state.visible_month == MONTH
+        assert controller.state.selected_date == selected_date
+        assert backend.load_tasks.await_count == 1
+        assert controller.state.search_snapshot is loaded.snapshot
+        assert public.deadline.isoformat() == "2027-01-12T08:00:00+07:00"
+        assert controller.state.filters.query == "Public"
+        assert controller._search_filters == {"course": "CSC10004"}
+        assert controller._search_sort == "title"
+
+        revised = personal.model_copy(update={"title": "Current personal", "source_url": "https://example.invalid/current"})
+        backend.load_tasks.return_value = task_load((("personal", [revised]),), set())
+        await controller.load_month()
+        assert controller.selected_search_record.title == "Current personal"
+        assert controller.selected_search_record.source_url == "https://example.invalid/current"
+        backend.load_tasks.return_value = task_load((("personal", []),), set())
+        await controller.load_month()
+        assert controller.selected_search_record is None
+        assert controller.selected_item is None
+        assert controller.state.selected_search_key is None
+        assert not controller.select_search_record(("personal", TASK_ID), session=session)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("transition", ["account", "logout", "expiry"])
+def test_stale_selection_callback_cannot_reopen_private_details_after_session_change(transition):
+    async def scenario():
+        backend = MockBackend()
+        original = task_load((("personal", [task(title="Private A")]),), set())
+        backend.load_tasks = AsyncMock(return_value=original)
+        controller = ClientController(backend, ClientUser(OWNER_A, "A"))
+        await controller.load_month(MONTH)
+        old_session = controller.selection_session
+        key = ("personal", TASK_ID)
+        assert controller.select_search_record(key, session=old_session)
+        if transition == "account":
+            controller.set_user(ClientUser(OWNER_B, "B"))
+            backend.load_tasks.return_value = task_load((("personal", [task(title="Private B")]),), set())
+            await controller.load_month(MONTH)
+        elif transition == "logout":
+            controller.logout()
+        else:
+            backend.load_tasks.side_effect = SessionExpiredError("Expired")
+            await controller.load_month()
+        assert not controller.select_search_record(key, session=old_session)
+        assert controller.selected_search_record is None
+        assert controller.state.selected_search_key is None
+        if transition == "account":
+            assert controller.select_search_record(key, session=controller.selection_session)
+            assert controller.selected_search_record.title == "Private B"
+        else:
+            assert controller.state.items == []
+            assert controller.selected_item is None
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("outcome", ["success", "failure", "expiry"])
 def test_account_switch_discards_old_load_success_error_and_loading(outcome):
     async def scenario():

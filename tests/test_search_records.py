@@ -33,6 +33,8 @@ class SearchRecordTests(unittest.TestCase):
             training_points=0, estimated_hours=2,
             start_time={"date": "2026-11-25", "time": "08:30:15"},
             end_time={"date": "2026-11-25", "time": "10:30:15"},
+            registration_start="2026-11-20T01:00:00Z",
+            registration_end="2026-11-24T18:00:00+07:00",
         )
         result = map_task(original, scope="public")
         self.assertEqual(result.key, ("public", SHARED_ID))
@@ -43,6 +45,8 @@ class SearchRecordTests(unittest.TestCase):
         self.assertEqual(result.publisher, "Khoa Công nghệ thông tin")
         self.assertEqual(result.source_url, "https://example.invalid/notices/1")
         self.assertEqual(result.training_points, 0)
+        self.assertEqual(result.registration_start, original.registration_start)
+        self.assertEqual(result.registration_end, original.registration_end)
         self.assertIsNone(result.deadline)
         self.assertEqual(result.start_time.date, date(2026, 11, 25))
         self.assertEqual(result.start_time.time, time(8, 30, 15))
@@ -98,9 +102,21 @@ class SearchRecordTests(unittest.TestCase):
         self.assertEqual(result.title, "Sinh hoạt sinh viên")
         self.assertEqual(result.publisher, "Khoa Công nghệ thông tin")
         self.assertEqual(result.source_url, "https://example.invalid/notices/1")
-        for field in ("description", "course", "training_points", "deadline", "start_time", "end_time"):
+        for field in ("description", "course", "training_points", "deadline", "start_time", "end_time",
+                      "registration_start", "registration_end"):
             with self.subTest(field=field):
                 self.assertIsNone(getattr(result, field))
+
+    def test_registration_fields_default_for_existing_record_construction(self):
+        from dataclasses import asdict
+        from academic_search import SearchRecord
+
+        fields = asdict(map_task(task(), scope="public"))
+        fields.pop("registration_start")
+        fields.pop("registration_end")
+        result = SearchRecord(**fields)
+        self.assertIsNone(result.registration_start)
+        self.assertIsNone(result.registration_end)
 
     def test_same_uuid_in_two_repository_scopes_remains_addressable(self):
         public = map_task(task(title="Public notice", user_id="fictional-owner"), scope="public")

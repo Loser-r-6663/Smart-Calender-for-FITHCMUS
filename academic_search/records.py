@@ -34,6 +34,8 @@ class SearchRecord:
     deadline: datetime | None
     start_time: SearchTime | None
     end_time: SearchTime | None
+    registration_start: datetime | None = None
+    registration_end: datetime | None = None
 
     @property
     def key(self) -> tuple[Scope, str]:
@@ -71,4 +73,6 @@ def map_task(task: ExtractedTask, *, scope: Scope) -> SearchRecord:
         deadline=task.deadline,
         start_time=_map_time(task.start_time),
         end_time=_map_time(task.end_time),
+        registration_start=task.registration_start,
+        registration_end=task.registration_end,
     )

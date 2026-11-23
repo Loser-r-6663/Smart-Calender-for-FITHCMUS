@@ -23,13 +23,15 @@ FILTERS = (
 class SearchPanel:
     """Retain control drafts while the calendar page refreshes."""
 
-    def __init__(self, controller):
+    def __init__(self, controller, *, on_select=None):
         self.controller = controller
+        self.on_select = on_select
         self.query = controller.state.filters.query
         self.course = None
         self.deadline_start = ""
         self.deadline_end = ""
         self.sort = "auto"
+        self._result_buttons = {}
 
     def render(self, *, on_filter, on_view) -> None:
         with ui.element("section").classes("loaded-search"):
@@ -89,12 +91,20 @@ class SearchPanel:
     def submit(self) -> None:
         self.results.refresh()
 
-    def select(self, key) -> None:
-        self.controller.state.selected_search_key = key
-        self.results.refresh()
+    def select(self, key, session, opener) -> None:
+        accepted = self.controller.select_search_record(key, session=session)
+        if not accepted:
+            self.results.refresh()
+        for result_key, button in self._result_buttons.items():
+            selected = result_key == self.controller.state.selected_search_key
+            button.props(f'aria-pressed="{str(selected).lower()}"')
+            button.classes(add="selected" if selected else "", remove="" if selected else "selected")
+        if self.on_select is not None:
+            self.on_select(opener if accepted else None)
 
     @ui.refreshable
     def results(self) -> None:
+        self._result_buttons = {}
         state = self.controller.state
         if state.loading:
             ui.label("Loading tasks…").props('role=status')
@@ -129,10 +139,12 @@ class SearchPanel:
         with ui.column().classes("search-results w-full"):
             for record in result.hits:
                 selected = record.key == state.selected_search_key
-                with ui.button(on_click=lambda key=record.key: self.select(key), color="positive").props(
+                with ui.button(on_click=lambda event, key=record.key, session=self.controller.selection_session:
+                               self.select(key, session, event.sender), color="positive").props(
                     f'flat no-caps align=left data-search-key="{record.scope}:{record.id}" '
                     f'aria-pressed="{str(selected).lower()}"'
-                ).classes(f"search-result {'selected' if selected else ''}"):
+                ).classes(f"search-result {'selected' if selected else ''}") as button:
+                    self._result_buttons[record.key] = button
                     with ui.column().classes("gap-1 items-start"):
                         ui.label(record.title).classes("search-result-title")
                         ui.label(f"{record.scope.title()} · {record_date(record)}").classes("search-result-meta")

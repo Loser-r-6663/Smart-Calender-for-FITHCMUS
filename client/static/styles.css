@@ -247,6 +247,9 @@ body { margin: 0; }
 .search-result-title { color: var(--ink); font-weight: 600; line-height: 1.4; }
 .search-result-meta { color: var(--ink-soft); font-size: 0.8rem; }
 .search-error { color: var(--danger); margin-top: 12px; }
+.search-detail-dialog { width: min(620px, calc(100vw - 32px)); max-width: calc(100vw - 32px) !important; max-height: calc(100dvh - 32px) !important; flex-wrap: nowrap; }
+.search-detail-dialog > :not(.search-detail-content) { flex-shrink: 0; }
+.search-detail-content { min-height: 0; overflow-y: auto; overflow-wrap: anywhere; flex: 1 1 auto; }
 @media (max-width: 760px) {
   .loaded-search { padding: 12px; }
   .search-controls { grid-template-columns: 1fr; }

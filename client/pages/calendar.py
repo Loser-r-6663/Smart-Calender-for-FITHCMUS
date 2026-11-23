@@ -9,6 +9,7 @@ from client.components.calendar import render_calendar
 from client.components.filters import SearchPanel
 from client.components.header import render_header
 from client.components.task_panel import render_task_panel
+from client.components.search_details import SearchDetailsDialog
 from client.config import AppConfig
 from client.core.backend import ClientBackend
 from client.core.controller import ClientController
@@ -99,7 +100,17 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
             await load_month(today.replace(day=1))
             body.refresh()
 
-        search_panel = SearchPanel(controller)
+        search_details = SearchDetailsDialog(controller)
+
+        @ui.refreshable
+        def task_panel() -> None:
+            render_task_panel(controller, on_select_item=select_item)
+
+        def open_search_details(opener) -> None:
+            task_panel.refresh()
+            search_details.open(opener)
+
+        search_panel = SearchPanel(controller, on_select=open_search_details)
 
         render_header(
             user,
@@ -179,7 +190,7 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                                 )
                             else:
                                 render_agenda(controller, on_select_item=select_item)
-                        render_task_panel(controller, on_select_item=select_item)
+                        task_panel()
 
         refresh_body = body.refresh
         body()

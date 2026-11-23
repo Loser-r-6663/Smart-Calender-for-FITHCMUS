@@ -153,6 +153,7 @@ class ClientController:
         self.backend = backend
         self.state = ClientState(user=user)
         self._generation = 0
+        self._selection_session = 0
         self._search_filters = {}
         self._search_sort = None
         self.backend.watch(self)
@@ -165,6 +166,7 @@ class ClientController:
 
     def set_user(self, user: ClientUser | None) -> None:
         self._generation += 1
+        self._selection_session += 1
         self._clear_tasks()
         self.state.user = user
         self.state.filters.query = ""
@@ -208,6 +210,7 @@ class ClientController:
         user = self.state.user
         self.state.loading = True
         self.state.error = None
+        selected_search_key = self.state.selected_search_key
         self._clear_tasks()
         try:
             loaded = await self.backend.load_tasks(user)
@@ -223,6 +226,10 @@ class ClientController:
             self.state.items = items
             self.state.search_snapshot = loaded.snapshot
             self.select_date(self.state.selected_date)
+            if selected_search_key is not None:
+                self.state.selected_item_id = None
+                if loaded.snapshot.get_task(selected_search_key) is not None:
+                    self.state.selected_search_key = selected_search_key
         except SessionExpiredError:
             if generation == self._generation and self.state.user is user:
                 self.backend.logout(user)
@@ -255,12 +262,26 @@ class ClientController:
     def selected_search_record(self):
         return self.state.search_snapshot.get_task(self.state.selected_search_key)
 
+    @property
+    def selection_session(self) -> int:
+        return self._selection_session
+
+    def select_search_record(self, key, *, session: int) -> bool:
+        if (session != self._selection_session or self.state.user is None
+                or self.state.search_snapshot.get_task(key) is None):
+            return False
+        self.state.selected_search_key = key
+        self.state.selected_item_id = None
+        return True
+
     def select_date(self, selected: date) -> None:
+        self.state.selected_search_key = None
         self.state.selected_date = selected
         day_items = self.items_for_date(selected)
         self.state.selected_item_id = day_items[0].id if day_items else None
 
     def select_item(self, item_id: str) -> None:
+        self.state.selected_search_key = None
         self.state.selected_item_id = item_id
 
     @property
