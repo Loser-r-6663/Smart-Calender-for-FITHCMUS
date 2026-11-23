@@ -15,9 +15,11 @@ from .branch_and_bound_models import (
     ScheduledDRLEvent,
     format_location_text,
     get_travel_buffer_minutes,
+    max_travel_buffer_minutes,
     normalize_drl_category,
     normalize_location,
     parse_timestamp,
+    parse_travel_buffer_value,
 )
 
 
@@ -97,12 +99,7 @@ class BranchAndBoundScheduler:
             has_custom_time = bool(task_dict.get("_has_custom_time"))
 
             raw_travel_buf = task_dict.get("travel_buffer_minutes")
-            travel_buf: Optional[int] = None
-            if raw_travel_buf is not None and str(raw_travel_buf).strip() != "":
-                try:
-                    travel_buf = max(0, int(float(raw_travel_buf)))
-                except (ValueError, TypeError):
-                    travel_buf = None
+            travel_buf = parse_travel_buffer_value(raw_travel_buf)
 
             task_id = str(task_dict.get("id") or "")
             title = str(task_dict.get("title") or "Không tên")
@@ -127,7 +124,7 @@ class BranchAndBoundScheduler:
             location = normalize_location(
                 loc_text or loc_raw,
                 default="CS1" if task_type in {"class", "exam"} else "ONLINE",
-                has_custom_travel_buffer=(travel_buf is not None and travel_buf > 0),
+                has_custom_travel_buffer=(max_travel_buffer_minutes(travel_buf) > 0),
             )
 
             t_points = int(task_dict.get("training_points") or 0)
@@ -292,7 +289,8 @@ class BranchAndBoundScheduler:
 
                 busy_fixed = 0.0
                 for f_st, f_et, _, _, f_buf in fixed_intervals:
-                    buf_td = timedelta(minutes=int(f_buf)) if f_buf else timedelta(0)
+                    buf_mins = max_travel_buffer_minutes(f_buf)
+                    buf_td = timedelta(minutes=buf_mins) if buf_mins > 0 else timedelta(0)
                     eff_f_st = f_st - buf_td
                     eff_f_et = f_et + buf_td
                     overlap_st = max(w_st, eff_f_st)
@@ -307,8 +305,8 @@ class BranchAndBoundScheduler:
                 for ev in selected_events_list:
                     if ev.get("is_flexible"):
                         continue
-                    ev_buf = ev.get("travel_buffer_minutes")
-                    ev_buf_td = timedelta(minutes=int(ev_buf)) if ev_buf else timedelta(0)
+                    ev_buf_mins = max_travel_buffer_minutes(ev.get("travel_buffer_minutes"))
+                    ev_buf_td = timedelta(minutes=ev_buf_mins) if ev_buf_mins > 0 else timedelta(0)
                     e_st = ev["start_time"] - ev_buf_td
                     e_et = ev["end_time"] + ev_buf_td
                     overlap_st = max(w_st, e_st)
@@ -380,8 +378,8 @@ class BranchAndBoundScheduler:
 
         occupied_slots: List[Tuple[datetime, datetime]] = [
             (
-                f_st - (timedelta(minutes=int(f_buf)) if f_buf else timedelta(0)),
-                f_et + (timedelta(minutes=int(f_buf)) if f_buf else timedelta(0)),
+                f_st - timedelta(minutes=max_travel_buffer_minutes(f_buf)),
+                f_et + timedelta(minutes=max_travel_buffer_minutes(f_buf)),
             )
             for f_st, f_et, _, _, f_buf in fixed_intervals
         ]
@@ -625,8 +623,7 @@ class BranchAndBoundScheduler:
 
         for ev_data, _ in best_selection:
             if not ev_data.get("is_flexible"):
-                ev_buf = ev_data.get("travel_buffer_minutes")
-                buf_td = timedelta(minutes=int(ev_buf)) if ev_buf else timedelta(0)
+                buf_td = timedelta(minutes=max_travel_buffer_minutes(ev_data.get("travel_buffer_minutes")))
                 occupied_slots.append((ev_data["start_time"] - buf_td, ev_data["end_time"] + buf_td))
 
         final_events: List[ScheduledDRLEvent] = list(pinned_scheduled_events)

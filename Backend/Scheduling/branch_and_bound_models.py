@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Mapping, Optional, Set, Union
 
 
 # =============================================================================
@@ -172,36 +172,106 @@ def normalize_location(
     return default
 
 
+def parse_travel_buffer_value(raw: Any) -> Optional[Union[int, Dict[str, int]]]:
+    """
+    Chuẩn hóa travel_buffer_minutes về:
+    - int (VD: 30) nếu user nhập 1 giá trị chung
+    - dict {'cs1': int, 'cs2': int} nếu user nhập riêng thời gian từ CS1 và CS2
+    - None nếu không khai báo
+    """
+    if raw is None or str(raw).strip() == "":
+        return None
+    if isinstance(raw, Mapping):
+        parsed: Dict[str, int] = {}
+        for k, v in raw.items():
+            key_norm = str(k).strip().lower()
+            if key_norm in {"cs1", "cs2"} and v is not None and str(v).strip() != "":
+                try:
+                    parsed[key_norm] = max(0, int(float(v)))
+                except (ValueError, TypeError):
+                    pass
+        return parsed or None
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        try:
+            return {
+                "cs1": max(0, int(float(raw[0]))),
+                "cs2": max(0, int(float(raw[1]))),
+            }
+        except (ValueError, TypeError):
+            return None
+    if isinstance(raw, str) and ("," in raw or "/" in raw):
+        sep = "," if "," in raw else "/"
+        parts = [p.strip() for p in raw.split(sep) if p.strip()]
+        if len(parts) >= 2:
+            try:
+                return {
+                    "cs1": max(0, int(float(parts[0]))),
+                    "cs2": max(0, int(float(parts[1]))),
+                }
+            except (ValueError, TypeError):
+                return None
+    try:
+        return max(0, int(float(raw)))
+    except (ValueError, TypeError):
+        return None
+
+
+def max_travel_buffer_minutes(buf: Any) -> int:
+    """Lấy thời gian di chuyển tối đa (phút) từ giá trị int hoặc dict {'cs1': ..., 'cs2': ...}."""
+    parsed = parse_travel_buffer_value(buf)
+    if parsed is None:
+        return 0
+    if isinstance(parsed, dict):
+        return max(parsed.values()) if parsed else 0
+    return parsed
+
+
+def _resolve_buffer_against_location(
+    buf: Optional[Union[int, Dict[str, int]]],
+    other_norm_loc: str,
+) -> int:
+    if buf is None:
+        return 0
+    if isinstance(buf, int):
+        return buf
+    if other_norm_loc == "CS1" and "cs1" in buf:
+        return buf["cs1"]
+    if other_norm_loc == "CS2" and "cs2" in buf:
+        return buf["cs2"]
+    return max(buf.values()) if buf else 0
+
+
 def get_travel_buffer_minutes(
     loc1: Any,
     loc2: Any,
     campus_travel_minutes: int = 60,
-    custom_buffer_1: Optional[int] = None,
-    custom_buffer_2: Optional[int] = None,
+    custom_buffer_1: Optional[Union[int, Dict[str, int]]] = None,
+    custom_buffer_2: Optional[Union[int, Dict[str, int]]] = None,
 ) -> int:
     """
     Thời gian di chuyển tối thiểu giữa 2 địa điểm:
     - Nếu 1 trong 2 hoạt động là ONLINE -> 0 phút.
-    - Nếu có task cá nhân do user nhập kèm thời gian di chuyển ước tính (custom_buffer_1 / custom_buffer_2)
-      và hai địa điểm khác nhau -> lấy max(custom_buffer_1, custom_buffer_2).
+    - Nếu task có khai báo travel_buffer_minutes dạng dict {'cs1': x, 'cs2': y}:
+      tự động chọn x nếu đối tác ở CS1, chọn y nếu đối tác ở CS2 (hoặc max nếu khác nữa).
+    - Nếu khai báo dạng số int đơn -> dùng giá trị đó cho mọi đối tác Offline khác địa điểm.
     - Mặc định giữa CS1 <-> CS2 là campus_travel_minutes (60 phút), cùng cơ sở là 0 phút.
     """
-    has_buf_1 = custom_buffer_1 is not None and int(custom_buffer_1) > 0
-    has_buf_2 = custom_buffer_2 is not None and int(custom_buffer_2) > 0
+    parsed_1 = parse_travel_buffer_value(custom_buffer_1)
+    parsed_2 = parse_travel_buffer_value(custom_buffer_2)
+    has_buf_1 = max_travel_buffer_minutes(parsed_1) > 0
+    has_buf_2 = max_travel_buffer_minutes(parsed_2) > 0
     norm1 = normalize_location(loc1, has_custom_travel_buffer=has_buf_1)
     norm2 = normalize_location(loc2, has_custom_travel_buffer=has_buf_2)
 
     if norm1 == "ONLINE" or norm2 == "ONLINE":
         return 0
 
-    if custom_buffer_1 is not None or custom_buffer_2 is not None:
-        if norm1 == norm2 and norm1 in {"CS1", "CS2"} and not (has_buf_1 or has_buf_2):
+    if parsed_1 is not None or parsed_2 is not None:
+        if norm1 == norm2:
             return 0
-        b1 = max(0, int(custom_buffer_1)) if custom_buffer_1 is not None else 0
-        b2 = max(0, int(custom_buffer_2)) if custom_buffer_2 is not None else 0
-        if norm1 != norm2 or has_buf_1 or has_buf_2:
-            return max(b1, b2)
-        return 0
+        b1 = _resolve_buffer_against_location(parsed_1, norm2)
+        b2 = _resolve_buffer_against_location(parsed_2, norm1)
+        return max(b1, b2)
 
     if norm1 != norm2:
         return campus_travel_minutes
@@ -228,7 +298,7 @@ class ScheduledDRLEvent:
     window_end: Optional[datetime] = None
     estimated_hours: float = 0.5
     is_pinned: bool = False
-    travel_buffer_minutes: Optional[int] = None
+    travel_buffer_minutes: Optional[Union[int, Dict[str, int]]] = None
 
 
 @dataclass

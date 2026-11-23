@@ -115,7 +115,7 @@ class UserTaskPreferenceRepository(BaseSupabaseClient):
         pin_status: str = "default",
         custom_start_time: datetime | str | None = None,
         custom_end_time: datetime | str | None = None,
-        travel_buffer_minutes: int | None = None,
+        travel_buffer_minutes: int | dict[str, int] | None = None,
         user_id: str | None = None,
     ):
         resolved_user_id = str(user_id or self.user_id or "")

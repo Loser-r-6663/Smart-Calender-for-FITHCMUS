@@ -28,8 +28,6 @@ class UserTaskRepository(TaskRepository):
         if isinstance(task, ExtractedTask):
             row = super().task_to_row(task)
             resolved_user_id = user_id or getattr(task, "user_id", None)
-            if getattr(task, "travel_buffer_minutes", None) is not None:
-                row["travel_buffer_minutes"] = task.travel_buffer_minutes
         elif isinstance(task, dict):
             resolved_user_id = user_id or task.get("user_id")
             st = task.get("start_time")
@@ -63,8 +61,6 @@ class UserTaskRepository(TaskRepository):
             et_ddt = DateDayTime(date=et.date(), time=et.time()) if isinstance(et, datetime) else et
             row.update(cls.serialize_time(st_ddt, "start"))
             row.update(cls.serialize_time(et_ddt, "end"))
-            if task.get("travel_buffer_minutes") is not None:
-                row["travel_buffer_minutes"] = int(task["travel_buffer_minutes"])
         else:
             raise TypeError("task must be an ExtractedTask or dict")
 

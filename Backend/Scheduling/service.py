@@ -22,6 +22,7 @@ from .branch_and_bound_models import (
     FIXED_TASK_TYPES,
     format_location_text,
     normalize_drl_category,
+    parse_travel_buffer_value,
 )
 from .branch_and_bound_scheduler import BranchAndBoundScheduler
 
@@ -279,7 +280,7 @@ def _should_keep_task(
 
 def _extract_user_task_pref(
     pref: Any,
-) -> tuple[str, datetime | None, datetime | None, int | None]:
+) -> tuple[str, datetime | None, datetime | None, int | dict[str, int] | None]:
     if pref is None:
         return "default", None, None, None
     if isinstance(pref, Mapping):
@@ -294,12 +295,7 @@ def _extract_user_task_pref(
         t_buf = getattr(pref, "travel_buffer_minutes", None)
 
     pin_status = str(getattr(pin_raw, "value", pin_raw) or "default").lower()
-    parsed_buf: int | None = None
-    if t_buf is not None and str(t_buf).strip() != "":
-        try:
-            parsed_buf = max(0, int(float(t_buf)))
-        except (ValueError, TypeError):
-            parsed_buf = None
+    parsed_buf = parse_travel_buffer_value(t_buf)
     return pin_status, _coerce_datetime(c_st), _coerce_datetime(c_et), parsed_buf
 
 
@@ -454,7 +450,7 @@ def create_custom_task(
     task_id: str | None = None,
     task_type: str = "personal",
     location: str = "EXTERNAL",
-    travel_buffer_minutes: int | None = None,
+    travel_buffer_minutes: int | Mapping[str, int] | str | None = None,
     estimated_hours: float | None = None,
     training_points: int = 0,
     drl_category: str | None = None,
@@ -463,7 +459,7 @@ def create_custom_task(
     """
     Tạo một Task do user tự nhập (hỗ trợ cả lịch bận cố định 'personal'/'class',
     bài tập linh hoạt 'assignment', hoặc hoạt động ĐRL tự thêm 'event'),
-    kèm thời gian di chuyển ước tính (travel_buffer_minutes).
+    kèm thời gian di chuyển ước tính (travel_buffer_minutes: int hoặc {'cs1': x, 'cs2': y}).
     """
     st_dt = _coerce_datetime(start_time)
     if st_dt is None:
@@ -476,9 +472,7 @@ def create_custom_task(
     if st_dt >= et_dt:
         raise ValueError("Thời gian kết thúc phải lớn hơn thời gian bắt đầu!")
 
-    parsed_buf: int | None = None
-    if travel_buffer_minutes is not None and str(travel_buffer_minutes).strip() != "":
-        parsed_buf = max(0, int(float(travel_buffer_minutes)))
+    parsed_buf = parse_travel_buffer_value(travel_buffer_minutes)
 
     return {
         "id": task_id or f"user-custom-{int(datetime.now(GMT_PLUS_7).timestamp() * 1000)}",
@@ -652,11 +646,18 @@ class SchedulingService:
         )
         print("=" * 88)
 
+        def _fmt_travel_note(buf: Any) -> str:
+            if not buf:
+                return ""
+            if isinstance(buf, Mapping):
+                parts = [f"{k.upper()} ±{v}p" for k, v in sorted(buf.items())]
+                return f" | Di chuyển: {', '.join(parts)}"
+            return f" | Di chuyển: ±{buf}p"
+
         timeline: list[tuple[datetime, datetime, str, str, str]] = []
         for ft in res.fixed_tasks_summary:
             t_type = str(ft.get("type") or "personal").upper()
-            buf = ft.get("travel_buffer_minutes")
-            buf_note = f" | Di chuyển: ±{buf}p" if buf else ""
+            buf_note = _fmt_travel_note(ft.get("travel_buffer_minutes"))
             loc = ft.get("location") or "CS1"
             timeline.append((
                 ft["start_time"],
@@ -669,7 +670,7 @@ class SchedulingService:
         for ev in res.selected_events:
             flex_tag = " [Linh hoạt]" if ev.is_flexible else ""
             pin_tag = " [Đã ghim]" if ev.is_pinned else ""
-            buf_note = f" | Di chuyển: ±{ev.travel_buffer_minutes}p" if ev.travel_buffer_minutes else ""
+            buf_note = _fmt_travel_note(ev.travel_buffer_minutes)
             timeline.append((
                 ev.start_time,
                 ev.end_time,
@@ -866,14 +867,13 @@ class SchedulingService:
                             est_h = 3.5
 
                 location = input("  • Địa điểm (VD: Trung tâm Q3 / CS1 / CS2 / ONLINE, mặc định EXTERNAL): ").strip() or "EXTERNAL"
-                travel_buf: int | None = None
+                travel_buf: int | dict[str, int] | None = None
                 if "online" not in location.lower() and task_type != "assignment":
-                    buf_raw = input("  • Thời gian di chuyển ước tính (phút, VD: 30; bỏ trống nếu mặc định): ").strip()
+                    buf_raw = input(
+                        "  • Thời gian di chuyển ước tính (phút) — nhập 'CS1, CS2' (VD: 15, 50) hoặc 1 số chung (VD: 30): "
+                    ).strip()
                     if buf_raw:
-                        try:
-                            travel_buf = max(0, int(float(buf_raw)))
-                        except ValueError:
-                            travel_buf = None
+                        travel_buf = parse_travel_buffer_value(buf_raw)
 
                 new_task = create_custom_task(
                     title=title,
@@ -889,9 +889,16 @@ class SchedulingService:
                 )
                 custom_tasks.append(new_task)
                 _persist_custom_task(new_task)
-                if t_points > 0:
-                    user_prefs[new_task["id"]] = {"pin_status": "pinned"}
-                    _persist_preference(new_task["id"], user_prefs[new_task["id"]])
+                if t_points > 0 or travel_buf is not None:
+                    pref_entry = dict(user_prefs.get(new_task["id"]) or {})
+                    if t_points > 0:
+                        pref_entry["pin_status"] = "pinned"
+                    else:
+                        pref_entry.setdefault("pin_status", "default")
+                    if travel_buf is not None:
+                        pref_entry["travel_buffer_minutes"] = travel_buf
+                    user_prefs[new_task["id"]] = pref_entry
+                    _persist_preference(new_task["id"], pref_entry)
                 _recompute()
 
             elif choice == "2":

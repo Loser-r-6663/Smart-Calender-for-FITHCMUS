@@ -29,10 +29,9 @@ class UserTaskPreference(BaseModel):
         alias="custom_end_at",
         description="Thời gian kết thúc tùy chỉnh khi user Reschedule"
     )
-    travel_buffer_minutes: int | None = Field(
+    travel_buffer_minutes: int | dict[str, int] | None = Field(
         default=None,
-        ge=0,
-        description="Thời gian di chuyển ước tính (phút) cho task này"
+        description="Thời gian di chuyển ước tính (phút): 1 số chung hoặc {'cs1': x, 'cs2': y}"
     )
     is_scheduled: bool = Field(
         default=False,

@@ -1,11 +1,7 @@
--- Migration: Hỗ trợ User Input Task (travel_buffer_minutes) & Lưu chỉnh sửa lịch (Pin / Reject / Reschedule)
+-- Migration: Lưu ĐRL 5 tiêu chí & Tùy chỉnh lịch / Kết quả xếp lịch / Travel Buffer trong user_task_preferences
 -- Chạy script này trong Supabase SQL Editor.
 
--- 1. Thêm cột thời gian di chuyển ước tính (phút) cho bảng user_task
-ALTER TABLE IF EXISTS public.user_task
-    ADD COLUMN IF NOT EXISTS travel_buffer_minutes integer CHECK (travel_buffer_minutes IS NULL OR travel_buffer_minutes >= 0);
-
--- 1b. Thêm cột lưu điểm rèn luyện hiện có theo 5 tiêu chí (dieu_1..dieu_5) cho bảng users
+-- 1. Thêm cột lưu điểm rèn luyện hiện có theo 5 tiêu chí (dieu_1..dieu_5) cho bảng users
 ALTER TABLE IF EXISTS public.users
     ADD COLUMN IF NOT EXISTS drl_scores jsonb NOT NULL DEFAULT '{"dieu_1": 0, "dieu_2": 0, "dieu_3": 0, "dieu_4": 0, "dieu_5": 0}'::jsonb;
 
@@ -16,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.user_task_preferences (
     pin_status text NOT NULL DEFAULT 'default' CHECK (pin_status IN ('default', 'pinned', 'rejected')),
     custom_start_at timestamptz NULL,
     custom_end_at timestamptz NULL,
-    travel_buffer_minutes integer NULL CHECK (travel_buffer_minutes IS NULL OR travel_buffer_minutes >= 0),
+    travel_buffer_minutes jsonb NULL,
     is_scheduled boolean NOT NULL DEFAULT false,
     scheduled_start_at timestamptz NULL,
     scheduled_end_at timestamptz NULL,
@@ -25,7 +21,13 @@ CREATE TABLE IF NOT EXISTS public.user_task_preferences (
     PRIMARY KEY (user_id, task_id)
 );
 
--- Bổ sung 4 cột kết quả xếp lịch nếu bảng user_task_preferences đã tồn tại từ trước
+-- Bổ sung / nâng cấp cột nếu bảng user_task_preferences đã tồn tại từ trước
+ALTER TABLE IF EXISTS public.user_task_preferences
+    DROP CONSTRAINT IF EXISTS user_task_preferences_travel_buffer_minutes_check;
+
+ALTER TABLE IF EXISTS public.user_task_preferences
+    ALTER COLUMN travel_buffer_minutes TYPE jsonb USING to_jsonb(travel_buffer_minutes);
+
 ALTER TABLE IF EXISTS public.user_task_preferences
     ADD COLUMN IF NOT EXISTS is_scheduled boolean NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS scheduled_start_at timestamptz NULL,

@@ -533,11 +533,10 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         }
         row = UserTaskRepository.task_to_row(custom_dict, user_id="user-uuid-1")
         self.assertEqual(row["user_id"], "user-uuid-1")
-        self.assertEqual(row["travel_buffer_minutes"], 30)
         self.assertEqual(row["type"], "personal")
+        self.assertNotIn("travel_buffer_minutes", row)
 
         restored = UserTaskRepository.row_to_task({**row, "id": "row-1"})
-        self.assertEqual(restored.travel_buffer_minutes, 30)
         self.assertEqual(restored.title, "Học IELTS tại Trung tâm Q3")
 
         pref = UserTaskPreferenceRepository.row_to_pref({
@@ -545,14 +544,14 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             "pin_status": "pinned",
             "custom_start_at": "2026-11-12T19:00:00+07:00",
             "custom_end_at": "2026-11-12T19:30:00+07:00",
-            "travel_buffer_minutes": 15,
+            "travel_buffer_minutes": {"cs1": 15, "cs2": 50},
             "is_scheduled": True,
             "scheduled_start_at": "2026-11-12T19:00:00+07:00",
             "scheduled_end_at": "2026-11-12T19:30:00+07:00",
             "points_gained": 5,
         })
         self.assertEqual(pref["pin_status"], "pinned")
-        self.assertEqual(pref["travel_buffer_minutes"], 15)
+        self.assertEqual(pref["travel_buffer_minutes"], {"cs1": 15, "cs2": 50})
         self.assertEqual(pref["custom_start_time"], "2026-11-12T19:00:00+07:00")
         self.assertTrue(pref["is_scheduled"])
         self.assertEqual(pref["points_gained"], 5)
@@ -607,6 +606,66 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
             user_obj.drl_scores,
             {"dieu_1": 15, "dieu_2": 10, "dieu_3": 20, "dieu_4": 0, "dieu_5": 0},
         )
+
+    def test_case_12_dual_cs1_cs2_travel_buffer(self):
+        """Kiểm tra: 1 field travel_buffer_minutes lưu cả thời gian từ CS1 và CS2 (VD: {'cs1': 15, 'cs2': 50})."""
+        from datetime import date
+        from Backend.Scheduling.service import SchedulingService, create_custom_task
+
+        # Task cá nhân tại Q3 từ 18:00 -> 20:00: từ CS1 qua hết 15p, từ CS2 qua hết 50p
+        custom_ielts = create_custom_task(
+            title="Học IELTS Q3",
+            start_time=datetime(2026, 11, 10, 18, 0, tzinfo=TZ_HCM),
+            end_time=datetime(2026, 11, 10, 20, 0, tzinfo=TZ_HCM),
+            location="Trung tâm Q3",
+            travel_buffer_minutes={"cs1": 15, "cs2": 50},
+            user_id="user-1",
+        )
+        tasks = [
+            # Sự kiện CS1 kết thúc lúc 17:40 (cách 20p >= 15p từ CS1 -> Hợp lệ!)
+            {
+                "id": "ev-cs1-20p-ok",
+                "title": "Seminar CS1 kết thúc 17:40",
+                "type": "event",
+                "location": "CS1",
+                "start_time": datetime(2026, 11, 10, 15, 30, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 10, 17, 40, tzinfo=TZ_HCM),
+                "training_points": 5,
+                "training_point_category": "Articles 1",
+            },
+            # Sự kiện CS2 kết thúc lúc 17:30 (cách 30p < 50p từ CS2 -> Không kịp, bị loại!)
+            {
+                "id": "ev-cs2-30p-fail",
+                "title": "Workshop CS2 kết thúc 17:30",
+                "type": "event",
+                "location": "CS2",
+                "start_time": datetime(2026, 11, 11, 15, 30, tzinfo=TZ_HCM),
+                "end_time": datetime(2026, 11, 11, 17, 30, tzinfo=TZ_HCM),
+                "training_points": 10,
+                "training_point_category": "Articles 1",
+            },
+        ]
+        # Thêm 1 buổi IELTS thứ 4 cho sự kiện CS2 thứ 4
+        custom_ielts_wed = create_custom_task(
+            title="Học IELTS Q3 (T4)",
+            start_time=datetime(2026, 11, 11, 18, 0, tzinfo=TZ_HCM),
+            end_time=datetime(2026, 11, 11, 20, 0, tzinfo=TZ_HCM),
+            location="Trung tâm Q3",
+            travel_buffer_minutes="15, 50",
+            user_id="user-1",
+        )
+
+        run_res = SchedulingService().run_for_tasks(
+            tasks,
+            custom_tasks=[custom_ielts, custom_ielts_wed],
+            user_id="user-1",
+            week_start=date(2026, 11, 9),
+            restrict_to_window=True,
+        )
+        selected_ids = [ev.task_id for ev in run_res.schedule.selected_events]
+        self.assertIn("ev-cs1-20p-ok", selected_ids)
+        self.assertNotIn("ev-cs2-30p-fail", selected_ids)
+        self.assertEqual(run_res.schedule.total_drl_gained, 5)
 
 
 if __name__ == "__main__":
