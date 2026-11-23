@@ -1,0 +1,175 @@
+"""Deterministic keyword matching over an authorized Search record collection."""
+
+import re
+import unicodedata
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from datetime import date, timedelta, timezone
+from types import MappingProxyType
+
+from .records import SearchRecord
+
+VN_TZ = timezone(timedelta(hours=7))
+TASK_TYPES = ("class", "assignment", "event", "announcement")
+SORTS = ("best_match", "soonest_deadline", "latest_deadline", "title")
+POINTS = re.compile(
+    r"(?<!\w)(?:(?P<minimum>từ)\s+)?(?P<number>[0-9]+)\s+(?:điểm rèn luyện|đrl|điểm)(?!\w)", re.I
+)
+EVENT = re.compile(r"(?<!\w)sự kiện(?!\w)", re.I)
+NEGATION = re.compile(r"(?<!\w)(?:không|chẳng|chưa)(?!\w)", re.I)
+UNSUPPORTED_PREFIX = re.compile(
+    r"(?:không(?: phải)?|chẳng(?: phải)?|chưa|tối đa|tối thiểu|ít nhất|nhiều nhất|"
+    r"hơn|trên|dưới|nhỏ hơn|lớn hơn|bằng|đến)\s*$", re.I
+)
+UNSUPPORTED_SUFFIX = re.compile(r"^\s*(?:trở lên|trở xuống|đến\s+[0-9]|[-–—]\s*[0-9])", re.I)
+
+
+class SearchFilterError(ValueError):
+    """The query, filters, or sort cannot be applied."""
+
+
+@dataclass(frozen=True)
+class SearchResults:
+    hits: tuple[SearchRecord, ...]
+    eligible_records: tuple[SearchRecord, ...]
+    effective_filters: Mapping
+    topic: str
+    sort: str
+
+
+def _require(condition, message):
+    if not condition:
+        raise SearchFilterError(message)
+
+
+def _calendar_date(value):
+    if type(value) is date:
+        return value
+    _require(isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value),
+             "Deadline bounds must be dates or YYYY-MM-DD strings")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise SearchFilterError("Invalid deadline date") from error
+
+
+def _filters(selected):
+    _require(isinstance(selected, Mapping), "filters must be a mapping")
+    _require(set(selected) <= {"types", "course", "min_training_points", "max_training_points",
+                               "deadline_start", "deadline_end"}, "Unknown filter")
+    result = dict(selected)
+    types = result.get("types", TASK_TYPES)
+    _require(isinstance(types, (list, tuple)) and bool(types)
+             and all(isinstance(value, str) and value in TASK_TYPES for value in types),
+             "types must contain supported task types")
+    _require(len(types) == len(set(types)), "Duplicate task types")
+    result["types"] = tuple(types)
+    if "course" in result:
+        _require(isinstance(result["course"], str) and bool(result["course"].strip()), "Invalid course")
+    for key in ("min_training_points", "max_training_points"):
+        if key in result:
+            _require(type(result[key]) is int and 0 <= result[key] <= 100,
+                     "Training points must be integers from 0 through 100")
+    for key in ("deadline_start", "deadline_end"):
+        if key in result:
+            result[key] = _calendar_date(result[key])
+    _require(result.get("deadline_start", date.min) <= result.get("deadline_end", date.max),
+             "Reversed deadline range")
+    _require(result.get("min_training_points", 0) <= result.get("max_training_points", 100),
+             "Conflicting training-point constraints")
+    return result
+
+
+def _interpret(query, filters):
+    text = " ".join(unicodedata.normalize("NFC", query).split())
+    matches = list(POINTS.finditer(text))
+    _require(len(matches) <= 1, "Ambiguous query: multiple training-point expressions")
+    if not matches:
+        return text
+    match = matches[0]
+    before, after = text[:match.start()], text[match.end():]
+    _require(not (NEGATION.search(text) or re.search(r"[0-9.,+\-–—<>=≤≥]\s*$", before)
+                  or UNSUPPORTED_PREFIX.search(before) or UNSUPPORTED_SUFFIX.search(after)),
+             "Unsupported training-point expression; use N điểm or từ N điểm")
+    digits = match["number"].lstrip("0") or "0"
+    _require(len(digits) <= 3 and int(digits) <= 100, "Training points exceed 100")
+    number = int(digits)
+    filters["min_training_points"] = max(filters.get("min_training_points", 0), number)
+    if not match["minimum"]:
+        filters["max_training_points"] = min(filters.get("max_training_points", 100), number)
+    _require(filters["min_training_points"] <= filters.get("max_training_points", 100),
+             "Conflicting training-point constraints")
+    spans = [(match.start(), match.end())]
+    event_matches = list(EVENT.finditer(text))
+    if event_matches:
+        _require("event" in filters["types"], "Conflicting task types")
+        filters["types"] = ("event",)
+        spans.extend((item.start(), item.end()) for item in event_matches)
+    for start, end in sorted(spans, reverse=True):
+        text = text[:start] + " " + text[end:]
+    return " ".join(text.split())
+
+
+def _eligible(record, filters):
+    if record.type not in filters["types"]:
+        return False
+    if "course" in filters and (record.course or "").casefold() != filters["course"].casefold():
+        return False
+    for key, below in (("min_training_points", True), ("max_training_points", False)):
+        if key in filters:
+            points = record.training_points
+            if points is None or (points < filters[key] if below else points > filters[key]):
+                return False
+    if "deadline_start" in filters or "deadline_end" in filters:
+        if record.deadline is None:
+            return False
+        local_date = record.deadline.astimezone(VN_TZ).date()
+        if not filters.get("deadline_start", date.min) <= local_date <= filters.get("deadline_end", date.max):
+            return False
+    return True
+
+
+def _match_rank(record, topic, terms):
+    if not topic:
+        return 0
+    title = record.title.casefold()
+    if topic == title or topic == (record.course or "").casefold():
+        return 0
+    if all(term in title for term in terms):
+        return 1
+    description = (record.description or "").casefold()
+    if all(term in title or term in description for term in terms):
+        return 2
+    return 3
+
+
+def search_records(
+    records: Iterable[SearchRecord], query: str = "", *, filters: Mapping | None = None,
+    sort: str | None = None,
+) -> SearchResults:
+    """Match snapshot.records without fetching or mutation.
+
+    Filters accept types, course, min/max_training_points, and inclusive
+    deadline_start/deadline_end dates. Sorts are best_match, soonest_deadline,
+    latest_deadline, and title. Eligible records retain input order.
+    """
+    _require(isinstance(query, str) and "\x00" not in query, "query must be text without NUL")
+    effective = _filters({} if filters is None else filters)
+    topic = _interpret(query, effective)
+    order = sort if sort is not None else ("best_match" if topic else "soonest_deadline")
+    _require(isinstance(order, str) and order in SORTS, "Unknown sort order")
+    eligible = tuple(record for record in records if _eligible(record, effective))
+    folded = topic.casefold()
+    terms = folded.split()
+    hits = [record for record in eligible if not topic or _match_rank(record, folded, terms) < 3]
+    hits.sort(key=lambda record: record.key)
+    if order == "best_match":
+        hits.sort(key=lambda record: _match_rank(record, folded, terms))
+    elif order == "title":
+        hits.sort(key=lambda record: record.title.casefold())
+    else:
+        dated = [record for record in hits if record.deadline is not None]
+        undated = [record for record in hits if record.deadline is None]
+        dated.sort(key=lambda record: record.deadline, reverse=order == "latest_deadline")
+        hits = dated + undated
+    return SearchResults(tuple(hits), eligible, MappingProxyType(effective), topic, order)
