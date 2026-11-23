@@ -808,13 +808,14 @@ class SchedulingService:
             print("  [2] Đổi khung giờ của hoạt động ĐRL trên lịch (Reschedule)")
             print("  [3] Ghim (Pin - Bắt buộc tham gia) một hoạt động ĐRL đang có trên lịch")
             print("  [4] Loại bỏ (Reject - Không tham gia) một hoạt động ĐRL đang có trên lịch")
-            print("  [5] Xem Lịch biểu tổng hợp cả tuần (Lịch học + Task cá nhân + ĐRL)")
-            print("  [6] Cập nhật điểm ĐRL hiện có theo 5 Điều (dieu_1 -> dieu_5)")
+            print("  [5] Khôi phục hoạt động ĐRL đã loại bỏ (Unreject)")
+            print("  [6] Xem Lịch biểu tổng hợp cả tuần (Lịch học + Task cá nhân + ĐRL)")
+            print("  [7] Cập nhật điểm ĐRL hiện có theo 5 Điều (dieu_1 -> dieu_5)")
             print("  [0] Hoàn tất & Kết thúc")
             print("-" * 88)
 
             try:
-                choice = input("Chọn thao tác (0-6): ").strip()
+                choice = input("Chọn thao tác (0-7): ").strip()
             except (EOFError, KeyboardInterrupt):
                 print("\nKết thúc điều chỉnh lịch.")
                 break
@@ -958,7 +959,7 @@ class SchedulingService:
                 pref_entry = dict(user_prefs.get(target_ev.task_id) or {})
                 pref_entry["custom_start_time"] = new_st
                 pref_entry["custom_end_time"] = new_et
-                pref_entry["pin_status"] = "pinned"
+                pref_entry.setdefault("pin_status", "default")
                 user_prefs[target_ev.task_id] = pref_entry
                 _persist_preference(target_ev.task_id, pref_entry)
                 _recompute()
@@ -1010,16 +1011,55 @@ class SchedulingService:
                     print("  [!] Lựa chọn không hợp lệ.")
                     continue
                 target_ev = selected[int(idx_raw) - 1]
-                user_prefs[target_ev.task_id] = {"pin_status": "rejected"}
-                _persist_preference(target_ev.task_id, user_prefs[target_ev.task_id])
+                pref_entry = dict(user_prefs.get(target_ev.task_id) or {})
+                pref_entry["pin_status"] = "rejected"
+                user_prefs[target_ev.task_id] = pref_entry
+                _persist_preference(target_ev.task_id, pref_entry)
                 custom_tasks = [t for t in custom_tasks if str(t.get("id")) != target_ev.task_id]
                 _recompute()
 
             elif choice == "5":
-                self.print_full_weekly_timetable(current_run)
+                rejected_ids = [
+                    tid
+                    for tid, p in user_prefs.items()
+                    if str(p.get("pin_status") or "").lower() == "rejected"
+                ]
+                if not rejected_ids:
+                    print("  [!] Hiện không có hoạt động ĐRL nào đang bị loại bỏ (rejected).")
+                    continue
+
+                task_lookup: dict[str, dict[str, Any]] = {}
+                for t in list(base_tasks) + list(custom_tasks):
+                    t_dict = _to_task_dict(t) if not isinstance(t, Mapping) else dict(t)
+                    t_id = str(t_dict.get("id") or "")
+                    if t_id:
+                        task_lookup[t_id] = t_dict
+
+                print("\n--- [5] KHÔI PHỤC HOẠT ĐỘNG ĐRL ĐÃ LOẠI BỎ (UNREJECT) ---")
+                for idx, tid in enumerate(rejected_ids, 1):
+                    info = task_lookup.get(tid, {})
+                    title = info.get("title") or f"Task {tid}"
+                    pts = int(info.get("training_points") or 0)
+                    cat = info.get("drl_category") or info.get("training_point_category") or ""
+                    pts_note = f" (+{pts}đ {cat})" if pts > 0 else ""
+                    print(f"  {idx}. {title}{pts_note}")
+
+                idx_raw = input(f"  Chọn số thứ tự hoạt động muốn khôi phục (1-{len(rejected_ids)}): ").strip()
+                if not idx_raw.isdigit() or not (1 <= int(idx_raw) <= len(rejected_ids)):
+                    print("  [!] Lựa chọn không hợp lệ.")
+                    continue
+                target_id = rejected_ids[int(idx_raw) - 1]
+                pref_entry = dict(user_prefs.get(target_id) or {})
+                pref_entry["pin_status"] = "default"
+                user_prefs[target_id] = pref_entry
+                _persist_preference(target_id, pref_entry)
+                _recompute()
 
             elif choice == "6":
-                print("\n--- [6] CẬP NHẬT ĐIỂM ĐRL HIỆN CÓ (5 ĐIỀU) ---")
+                self.print_full_weekly_timetable(current_run)
+
+            elif choice == "7":
+                print("\n--- [7] CẬP NHẬT ĐIỂM ĐRL HIỆN CÓ (5 ĐIỀU) ---")
                 print("  (Nhấn Enter để giữ nguyên điểm hiện tại của từng Điều)")
                 for dieu_key in ("dieu_1", "dieu_2", "dieu_3", "dieu_4", "dieu_5"):
                     cur_val = current_drl.get(dieu_key, 0)
@@ -1040,7 +1080,7 @@ class SchedulingService:
                 _recompute()
 
             else:
-                print("  [!] Vui lòng chọn từ 0 đến 6.")
+                print("  [!] Vui lòng chọn từ 0 đến 7.")
 
         return current_run
 
