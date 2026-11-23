@@ -3,9 +3,11 @@ from __future__ import annotations
 import calendar as month_calendar
 from datetime import date, datetime, time, timedelta
 from typing import Any
+from dataclasses import replace
+from academic_search import SearchSnapshot, search_records
 from zoneinfo import ZoneInfo
 
-from client.core.backend import ClientBackend
+from client.core.backend import ClientBackend, SessionExpiredError
 from client.core.models import CalendarItem, ClientState, ClientUser
 
 
@@ -150,10 +152,42 @@ class ClientController:
     def __init__(self, backend: ClientBackend, user: ClientUser | None = None) -> None:
         self.backend = backend
         self.state = ClientState(user=user)
+        self._generation = 0
+        self._search_filters = {}
+        self._search_sort = None
+        self.backend.watch(self)
+
+    def _clear_tasks(self) -> None:
+        self.state.items = []
+        self.state.search_snapshot = SearchSnapshot((), (), 1000)
+        self.state.selected_item_id = None
+        self.state.selected_search_key = None
+
+    def set_user(self, user: ClientUser | None) -> None:
+        self._generation += 1
+        self._clear_tasks()
+        self.state.user = user
+        self.state.filters.query = ""
+        self.state.filters.kind = "all"
+        self._search_filters = {}
+        self._search_sort = None
+        self.state.error = None
+        self.state.session_expired = False
+        self.state.loading = False
+
+    def logout(self) -> None:
+        if self.state.user is not None:
+            self.backend.logout(self.state.user)
+        else:
+            self.set_user(None)
 
     async def login(self, username: str, password: str) -> ClientUser:
+        self.logout()
+        generation = self._generation
         user = await self.backend.login(username, password)
-        self.state.user = user
+        if generation != self._generation:
+            raise SessionExpiredError("Session changed during sign in.")
+        self.set_user(user)
         return user
 
     @staticmethod
@@ -169,20 +203,57 @@ class ClientController:
         if month is not None:
             self.state.visible_month = month.replace(day=1)
         start, end = self.month_bounds(self.state.visible_month)
+        self._generation += 1
+        generation = self._generation
+        user = self.state.user
         self.state.loading = True
         self.state.error = None
+        self._clear_tasks()
         try:
-            tasks = await self.backend.get_tasks(self.state.user)
-            self.state.items = [
-                item
-                for task in tasks
+            loaded = await self.backend.load_tasks(user)
+            if generation != self._generation or self.state.user is not user:
+                return
+            items = [
+                replace(item, id=f"{record.scope}:{item.id}",
+                        task_id=f"{record.scope}:{item.task_id}", is_personal=record.scope == "personal")
+                for task, record in zip(loaded.tasks, loaded.snapshot.records)
                 for item in TaskMapper.map_range(task, start, end)
+                if item.day is not None and start <= item.day <= end
             ]
+            self.state.items = items
+            self.state.search_snapshot = loaded.snapshot
             self.select_date(self.state.selected_date)
+        except SessionExpiredError:
+            if generation == self._generation and self.state.user is user:
+                self.backend.logout(user)
+                self.state.session_expired = True
+                self.state.error = "Session expired. Sign in again."
         except Exception as exc:
-            self.state.error = str(exc)
+            if generation == self._generation and self.state.user is user:
+                self.state.error = str(exc)
         finally:
-            self.state.loading = False
+            if generation == self._generation:
+                self.state.loading = False
+
+    def search(self, query: str, *, filters=None, sort=None):
+        self.state.filters.query = query
+        self._search_filters = {} if filters is None else dict(filters)
+        self._search_sort = sort
+        return self.search_results
+
+    @property
+    def search_results(self):
+        filters = dict(self._search_filters)
+        if self.state.filters.kind != "all":
+            kind = self.state.filters.kind
+            selected = filters.get("types", (kind,))
+            filters["types"] = [kind] if kind in selected else []
+        return search_records(self.state.search_snapshot.records, self.state.filters.query,
+                              filters=filters, sort=self._search_sort)
+
+    @property
+    def selected_search_record(self):
+        return self.state.search_snapshot.get_task(self.state.selected_search_key)
 
     def select_date(self, selected: date) -> None:
         self.state.selected_date = selected
@@ -234,7 +305,8 @@ class ClientController:
         This is an aggregate of loaded event records, not an optimized or
         expected score. Replace it with the scheduler response when available.
         """
-        return sum(item.points or 0 for item in self._unique_point_events())
+        return sum(record.training_points or 0 for record in self.state.search_snapshot.records
+                   if record.type == "event")
 
     def _unique_point_events(self) -> list[CalendarItem]:
         unique: dict[str, CalendarItem] = {}

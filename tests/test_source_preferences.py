@@ -24,6 +24,9 @@ def test_source_preferences_are_per_user_and_filter_backend_results() -> None:
         backend = MockBackend()
         first = ClientUser(id="first", username="first")
         second = ClientUser(id="second", username="second")
+        for user in (first, second):
+            await backend.save_portal_credentials(user, "fictional-student", "fictional-password")
+            assert (await backend.sync(user)).ok
 
         await backend.set_source_enabled(first, "Moodle", False)
         assert await backend.get_disabled_sources(first) == {"Moodle"}

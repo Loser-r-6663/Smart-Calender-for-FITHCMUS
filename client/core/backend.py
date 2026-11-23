@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from dataclasses import dataclass
+from weakref import WeakSet
+
+from academic_search import SearchSnapshot, map_task
 
 from client.core.models import ClientUser, ConnectionStatus, SyncResult
 
@@ -12,6 +16,26 @@ class AuthenticationError(ValueError):
 
 class RegistrationError(ValueError):
     pass
+
+
+class SessionExpiredError(AuthenticationError):
+    pass
+
+
+@dataclass(frozen=True)
+class TaskLoad:
+    tasks: tuple[Any, ...]
+    snapshot: SearchSnapshot
+
+
+def task_load(groups, disabled, limit=1000):
+    tasks, records = [], []
+    for scope, group in groups:
+        for task in group[:limit]:
+            if task.source_platform not in disabled:
+                tasks.append(task)
+                records.append(map_task(task, scope=scope))
+    return TaskLoad(tuple(tasks), SearchSnapshot(tuple(records), tuple(scope for scope, _ in groups), limit))
 
 
 class ClientBackend(ABC):
@@ -36,6 +60,21 @@ class ClientBackend(ABC):
     @abstractmethod
     async def get_tasks(self, user: ClientUser) -> list[Any]:
         raise NotImplementedError
+
+    @abstractmethod
+    async def load_tasks(self, user: ClientUser) -> TaskLoad:
+        """Read once and retain scope before calendar occurrence expansion."""
+        raise NotImplementedError
+
+    def watch(self, controller) -> None:
+        if not hasattr(self, "_controllers"):
+            self._controllers = WeakSet()
+        self._controllers.add(controller)
+
+    def logout(self, user: ClientUser) -> None:
+        for controller in tuple(getattr(self, "_controllers", ())):
+            if controller.state.user is not None and controller.state.user.id == user.id:
+                controller.set_user(None)
 
     @abstractmethod
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:

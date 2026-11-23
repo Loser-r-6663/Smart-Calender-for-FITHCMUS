@@ -30,6 +30,7 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
             return f"Last updated {status.last_sync.astimezone():%d %b %Y, %H:%M}"
 
         def logout() -> None:
+            backend.logout(user)
             app.storage.user.clear()
             ui.navigate.to("/login")
 
@@ -101,8 +102,7 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
                     new_password.value = ""
                     confirm_password.value = ""
                     password_dialog.close()
-                    app.storage.user.clear()
-                    ui.navigate.to("/login")
+                    logout()
                 finally:
                     save_password_button.props(remove="loading disable")
 

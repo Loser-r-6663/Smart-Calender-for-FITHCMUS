@@ -4,6 +4,7 @@ import asyncio
 
 from DataProcessor.Standardization.User import User
 from client.core.live_backend import LiveBackend
+from test_search_records import task
 
 
 def test_live_backend_uses_supabase_auth_and_personal_task_repository(
@@ -21,11 +22,11 @@ def test_live_backend_uses_supabase_auth_and_personal_task_repository(
     )
     monkeypatch.setattr(
         "Database.Repository.task_repository.TaskRepository.get_tasks",
-        lambda self, limit=100: [{"title": "Public", "source_platform": "VNUHCMUS"}],
+        lambda self, limit=100: [task(title="Public", source_platform="VNUHCMUS")],
     )
     monkeypatch.setattr(
         "Database.Repository.user_task_repository.UserTaskRepository.get_tasks",
-        lambda self, limit=100: [{"title": "Personal", "source_platform": "Portal"}],
+        lambda self, limit=100: [task(title="Personal", source_platform="Portal")],
     )
 
     async def scenario() -> None:
@@ -34,7 +35,7 @@ def test_live_backend_uses_supabase_auth_and_personal_task_repository(
         tasks = await backend.get_tasks(user)
 
         assert user.id == "user-123"
-        assert [task["title"] for task in tasks] == ["Public", "Personal"]
+        assert [task.title for task in tasks] == ["Public", "Personal"]
 
     asyncio.run(scenario())
 

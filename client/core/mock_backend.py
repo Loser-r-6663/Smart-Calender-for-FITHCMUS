@@ -5,8 +5,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
+
+from client.core.backend import AuthenticationError, ClientBackend, RegistrationError, task_load
 from client.core.models import ClientUser, ConnectionStatus, SyncResult
 from client.core.source_preferences import ALL_SOURCE_NAMES
 
@@ -72,6 +75,27 @@ class MockBackend(ClientBackend):
             ]
         disabled = await self.get_disabled_sources(user)
         return [task for task in tasks if task.get("source_platform") not in disabled]
+
+    async def load_tasks(self, user: ClientUser):
+        tasks = await self.get_tasks(user)
+        groups = {"public": [], "personal": []}
+        for raw in tasks:
+            scope = "personal" if raw.get("user_id") else "public"
+            payload = dict(raw)
+            try:
+                UUID(payload["id"])
+            except ValueError:
+                payload["id"] = str(uuid5(NAMESPACE_URL, "smart-calendar-mock/" + payload["id"]))
+            for field in ("start_time", "end_time"):
+                value = payload.get(field)
+                if isinstance(value, str):
+                    instant = ExtractedTask._to_vn_time(value)
+                    payload[field] = {"date": instant.date(), "time": instant.time()}
+                elif isinstance(value, dict):
+                    payload[field] = {**value, "time": value.get("time", value.get("time_"))}
+            groups[scope].append(ExtractedTask.model_validate(payload))
+        scopes = ("public", "personal") if user.id in self._personal_crawled else ("public",)
+        return task_load(tuple((scope, groups[scope]) for scope in scopes), set())
 
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         return ConnectionStatus(

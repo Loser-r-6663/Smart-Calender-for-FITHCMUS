@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from academic_search import SearchSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,3 +80,6 @@ class ClientState:
     filters: CalendarFilters = field(default_factory=CalendarFilters)
     loading: bool = False
     error: str | None = None
+    session_expired: bool = False
+    search_snapshot: SearchSnapshot = field(default_factory=lambda: SearchSnapshot((), (), 1000))
+    selected_search_key: tuple[str, str] | None = None

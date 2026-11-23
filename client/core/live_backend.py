@@ -5,15 +5,9 @@ from typing import Any
 
 from requests import HTTPError
 
-from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
+from client.core.backend import AuthenticationError, ClientBackend, RegistrationError, SessionExpiredError, task_load
 from client.core.models import ClientUser, ConnectionStatus, SyncResult
 from client.core.source_preferences import ALL_SOURCE_NAMES
-
-
-def _source_platform(task: Any) -> str | None:
-    if isinstance(task, dict):
-        return task.get("source_platform")
-    return getattr(task, "source_platform", None)
 
 
 class LiveBackend(ClientBackend):
@@ -100,14 +94,22 @@ class LiveBackend(ClientBackend):
         return SyncResult(ok=True, message="Password changed")
 
     async def get_tasks(self, user: ClientUser) -> list[Any]:
+        return list((await self.load_tasks(user)).tasks)
+
+    def logout(self, user: ClientUser) -> None:
+        super().logout(user)
+        self._access_tokens.pop(user.id, None)
+        self._users.pop(user.id, None)
+
+    async def load_tasks(self, user: ClientUser):
         from Database.Repository.task_repository import TaskRepository
         from Database.Repository.user_task_repository import UserTaskRepository
 
-        public_tasks = await asyncio.to_thread(TaskRepository().get_tasks, 1000)
         access_token = self._access_tokens.get(user.id)
-        if access_token is None:
-            tasks = public_tasks
-        else:
+        if not access_token or not user.id:
+            raise SessionExpiredError("Session expired. Sign in again.")
+        try:
+            public_tasks = await asyncio.to_thread(TaskRepository().get_tasks, 1000)
             personal_tasks = await asyncio.to_thread(
                 UserTaskRepository(
                     access_token=access_token,
@@ -115,9 +117,14 @@ class LiveBackend(ClientBackend):
                 ).get_tasks,
                 1000,
             )
-            tasks = [*public_tasks, *personal_tasks]
+        except HTTPError as error:
+            if error.response is not None and error.response.status_code in (401, 403):
+                raise SessionExpiredError("Session expired. Sign in again.") from error
+            raise
+        if self._access_tokens.get(user.id) != access_token:
+            raise SessionExpiredError("Session changed. Sign in again.")
         disabled = await self.get_disabled_sources(user)
-        return [task for task in tasks if _source_platform(task) not in disabled]
+        return task_load((("public", public_tasks), ("personal", personal_tasks)), disabled)
 
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         backend_user = self._users.get(user.id)

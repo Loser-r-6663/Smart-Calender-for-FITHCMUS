@@ -1,6 +1,7 @@
 [
   {
     "id": "class-ct",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "user_id": "demo-user",
     "title": "CSC10001 · Computational Thinking",
     "type": "class",
@@ -14,6 +15,7 @@
   },
   {
     "id": "class-lab",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "user_id": "demo-user",
     "title": "CSC10001 · Practical session",
     "type": "class",
@@ -27,6 +29,7 @@
   },
   {
     "id": "assignment-report",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "user_id": "demo-user",
     "title": "Submit project progress report",
     "type": "assignment",
@@ -39,6 +42,7 @@
   },
   {
     "id": "event-workshop",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "title": "Career preparation workshop",
     "type": "event",
     "description": "CV review and interview preparation for science students.",
@@ -47,11 +51,14 @@
     "start_time": "2026-11-23T14:00:00+07:00",
     "end_time": "2026-11-23T16:00:00+07:00",
     "training_points": 5,
+    "training_point_category": "Articles 3",
+    "estimated_hours": 2,
     "source_platform": "Phòng Công tác sinh viên",
     "source_url": "https://ctsv.hcmus.edu.vn/"
   },
   {
     "id": "event-volunteer",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "title": "Green Sunday volunteer activity",
     "type": "event",
     "description": "Community clean-up activity hosted by the Youth Union.",
@@ -59,11 +66,14 @@
     "start_time": "2026-11-29T07:00:00+07:00",
     "end_time": "2026-11-29T11:00:00+07:00",
     "training_points": 8,
+    "training_point_category": "Articles 3",
+    "estimated_hours": 4,
     "source_platform": "Đoàn trường Khoa học tự nhiên",
     "source_url": "https://www.facebook.com/DoanTruongKHTN/"
   },
   {
     "id": "announcement-scholarship",
+    "updated_at": "2026-11-23T09:00:00+07:00",
     "title": "Scholarship application announcement",
     "type": "announcement",
     "description": "Review the eligibility requirements on the official page.",

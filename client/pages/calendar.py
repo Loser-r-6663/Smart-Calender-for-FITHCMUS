@@ -32,16 +32,26 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         user = ClientUser(**stored_user)
         controller = ClientController(backend, user)
-        await controller.load_month()
+
+        async def load_month(month=None) -> None:
+            await controller.load_month(month)
+            if controller.state.session_expired:
+                app.storage.user.clear()
+                ui.navigate.to("/login")
+
+        await load_month()
+        if controller.state.session_expired:
+            return
         ui.page_title("Calendar · Smart Calendar")
 
         def logout() -> None:
+            controller.logout()
             app.storage.user.clear()
             ui.navigate.to("/login")
 
         async def sync() -> None:
             result = await backend.sync(user)
-            await controller.load_month()
+            await load_month()
             body.refresh()
             ui.notify(
                 result.message,
@@ -76,13 +86,13 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
         async def change_month(offset: int) -> None:
             month = _shift_month(controller.state.visible_month, offset)
             controller.state.selected_date = month
-            await controller.load_month(month)
+            await load_month(month)
             body.refresh()
 
         async def go_today() -> None:
             today = date.today()
             controller.state.selected_date = today
-            await controller.load_month(today.replace(day=1))
+            await load_month(today.replace(day=1))
             body.refresh()
 
         render_header(
