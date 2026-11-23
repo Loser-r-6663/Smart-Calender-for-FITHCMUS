@@ -1,7 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import requests
 
 from DataProcessor.Standardization.BaseTask import DateDayTime
+
+_VN_TZ = timezone(timedelta(hours=7))
 from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 
@@ -70,7 +72,7 @@ class UserTaskRepository(TaskRepository):
                 "estimated_hours": est_h,
                 "source_url": task.get("source_url") or "manual://user",
                 "source_platform": task.get("source_platform") or "Portal",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(_VN_TZ).replace(tzinfo=None).isoformat(),
             }
             st_ddt = DateDayTime(date=st.date(), time=st.time()) if isinstance(st, datetime) else st
             et_ddt = DateDayTime(date=et.date(), time=et.time()) if isinstance(et, datetime) else et
@@ -94,7 +96,7 @@ class UserTaskRepository(TaskRepository):
         if not normalized_row.get("source_platform"):
             normalized_row["source_platform"] = "Portal"
         if not normalized_row.get("updated_at"):
-            normalized_row["updated_at"] = datetime.now(timezone.utc).isoformat()
+            normalized_row["updated_at"] = datetime.now(_VN_TZ).replace(tzinfo=None).isoformat()
         return super().row_to_task(normalized_row)
 
     def save_tasks(self, tasks: list[ExtractedTask | dict]):

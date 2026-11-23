@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import requests
 
 from DataProcessor.Standardization.UserTaskPreference import UserTaskPreference
+
+_VN_TZ = timezone(timedelta(hours=7))
 from Database.Repository.base import BaseSupabaseClient
 
 
@@ -53,7 +55,7 @@ class UserTaskPreferenceRepository(BaseSupabaseClient):
             "scheduled_start_at": cls._serialize_dt(pref.scheduled_start_time),
             "scheduled_end_at": cls._serialize_dt(pref.scheduled_end_time),
             "points_gained": pref.points_gained,
-            "updated_at": cls._serialize_dt(pref.updated_at) or datetime.now(timezone.utc).isoformat(),
+            "updated_at": cls._serialize_dt(pref.updated_at) or datetime.now(_VN_TZ).replace(tzinfo=None).isoformat(),
         }
 
     def get_preference_models(self, limit: int = 500) -> list[UserTaskPreference]:
@@ -129,7 +131,7 @@ class UserTaskPreferenceRepository(BaseSupabaseClient):
             "custom_start_at": self._serialize_dt(custom_start_time),
             "custom_end_at": self._serialize_dt(custom_end_time),
             "travel_buffer_minutes": travel_buffer_minutes,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(_VN_TZ).replace(tzinfo=None).isoformat(),
         }
         headers = dict(self.headers)
         headers["Prefer"] = "resolution=merge-duplicates,return=representation"
@@ -156,7 +158,7 @@ class UserTaskPreferenceRepository(BaseSupabaseClient):
         Tạo danh sách payload để lưu kết quả các sự kiện được Scheduler chọn vào
         bảng 'user_task_preferences' mà vẫn giữ nguyên ý định của user (pin_status, custom_start/end).
         """
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(_VN_TZ).replace(tzinfo=None).isoformat()
         existing = existing_prefs or {}
         selected_ids: set[str] = set()
         rows: list[dict[str, Any]] = []
