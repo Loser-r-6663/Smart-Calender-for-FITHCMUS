@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 import requests
 
-from Backend.Regulation.BaseTask import DateDayTime
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.BaseTask import DateDayTime
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
 from Database.Repository.base import BaseSupabaseClient
 
 
@@ -28,7 +28,7 @@ class TaskRepository(BaseSupabaseClient):
             timestamp = datetime.combine(
                 value.date,
                 value.time or datetime.min.time(),
-                tzinfo=timezone.utc,
+                tzinfo=VN_TZ,
             )
             return {
                 f"{prefix}_at": timestamp.isoformat(),
@@ -45,7 +45,7 @@ class TaskRepository(BaseSupabaseClient):
     def deserialize_time(row: dict, prefix: str):
         timestamp: str = row.get(f"{prefix}_at")
         if timestamp is not None:
-            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(VN_TZ)
             time_value = None if parsed.time() == datetime.min.time() else parsed.time()
             return DateDayTime(date=parsed.date(), time=time_value)
 
@@ -128,6 +128,9 @@ class TaskRepository(BaseSupabaseClient):
                 if any(value is not None for value in location.values())
                 else None
             ),
+            "registration_start": ExtractedTask._to_vn_time(row.get("registration_start")),
+            "registration_end": ExtractedTask._to_vn_time(row.get("registration_end")),
+            "deadline": ExtractedTask._to_vn_time(row.get("deadline")),
             "start_time": cls.deserialize_time(row, "start"),
             "end_time": cls.deserialize_time(row, "end"),
         })

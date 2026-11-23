@@ -1,9 +1,11 @@
 from typing import Literal
-from datetime import datetime
-from pydantic import Field, model_validator
+from datetime import datetime, timezone, timedelta
+from pydantic import Field, model_validator, field_validator
 
-from Backend.Regulation.BaseTask import BaseTask, TargetAudience, Location, DateDayTime
-from Backend.Regulation.RawTask import RawTask
+from DataProcessor.Standardization.BaseTask import BaseTask, TargetAudience, Location, DateDayTime
+from DataProcessor.Standardization.RawTask import RawTask
+
+VN_TZ = timezone(timedelta(hours=7))
 
 
 class ExtractedTask(BaseTask):
@@ -105,6 +107,21 @@ class ExtractedTask(BaseTask):
         if self.type == "assignment" and self.estimated_hours is not None and self.estimated_hours <= 0:
             raise ValueError("Khi type là 'assignment'. Nếu thiếu thông tin để tính estimated_hours, chia thành 2 trường hợp, ngắn hạn thì estimated_hours = 1-4, dài hạn thì estimated_hours = None")
         return self
+    
+    @field_validator("deadline", "registration_start", "registration_end", mode="after")
+    @classmethod
+    def ensure_vn_tz(cls, v: datetime | None):
+        return cls._to_vn_time(v)
+    
+    @staticmethod
+    def _to_vn_time(val: str | datetime | None) -> datetime | None:
+        if not val:
+            return None
+        if isinstance(val, str):
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+        else:
+            dt = val
+        return dt.astimezone(VN_TZ)
     
     @classmethod
     def from_raw_task(cls, raw_task: RawTask) -> "ExtractedTask":

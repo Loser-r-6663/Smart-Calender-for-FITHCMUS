@@ -6,10 +6,10 @@ from Database.Repository.user_repository import UserRepository
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_task_repository import UserTaskRepository
 
-from Backend.Regulation.User import User
-from Backend.TaskCreator import TaskCreator
-from Backend.Validator import Validator
-from Backend.utils.apify_storage import *
+from DataProcessor.Standardization.User import User
+from DataProcessor.TaskCreator import TaskCreator
+from DataProcessor.Validator import Validator
+from DataProcessor.utils.apify_storage import *
 
 APP_ROLE = os.environ.get("APP_ROLE")
 SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY")
@@ -46,12 +46,12 @@ def run_pipeline(user: User | None = None):
 
     if user: user_repo.update_user(user)
 
-async def main(mode = None):  # NOTE: mode = "public" | "personal" | "all"
+async def main(mode = "all"):  # NOTE: mode = "public" | "personal" | "all"
     if os.environ.get("APP_ROLE") == "SERVER":
         async with Actor:
             set_main_loop(asyncio.get_running_loop())
             actor_input: dict = await Actor.get_input() or {}
-            mode = mode or actor_input.get("mode", "all")
+            mode = actor_input.get("mode", mode)
 
             if mode in ("public", "all"):
                 Actor.log.info("Crawling public sources...")
@@ -67,4 +67,4 @@ async def main(mode = None):  # NOTE: mode = "public" | "personal" | "all"
             await process_personal_tasks()
 
 if __name__ == "__main__":
-    asyncio.run(main(mode="personal"))
+    asyncio.run(main(mode="public"))

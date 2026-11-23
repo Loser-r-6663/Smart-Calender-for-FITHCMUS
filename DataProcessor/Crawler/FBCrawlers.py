@@ -1,4 +1,4 @@
-from Backend.Crawler.FBCrawlerBase import FBCrawler
+from DataProcessor.Crawler.FBCrawlerBase import FBCrawler
 
 
 class FBCrawler_VNUHCMUS(FBCrawler):
@@ -48,6 +48,13 @@ class FBCrawler_YUP(FBCrawler):
         super().__init__(
             "YUPHistory",
             "https://www.facebook.com/doanhoikhoavatly"
+        )
+
+class FBCrawler_YUM(FBCrawler):
+    def __init__(self):
+        super().__init__(
+            "YUMHistory",
+            "https://www.facebook.com/DK.LCH.ToanTinHoc.HCMUS"
         )
 
 class FBCrawler_FIT(FBCrawler):

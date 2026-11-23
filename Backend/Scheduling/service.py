@@ -10,8 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from Backend.Regulation.BaseTask import DateDayTime
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.BaseTask import DateDayTime
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_repository import UserRepository
 from Database.Repository.user_task_preference_repository import UserTaskPreferenceRepository

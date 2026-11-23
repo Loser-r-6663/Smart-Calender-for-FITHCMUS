@@ -286,8 +286,8 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
     def test_case_8_extracted_task_daytime_location_and_articles(self):
         """Kiểm tra tích hợp trực tiếp với ExtractedTask (DateDayTime, Location, Articles 1..5)."""
         from datetime import date, time
-        from Backend.Regulation.BaseTask import DateDayTime, Location
-        from Backend.Regulation.ExtractedTask import ExtractedTask
+        from DataProcessor.Standardization.BaseTask import DateDayTime, Location
+        from DataProcessor.Standardization.ExtractedTask import ExtractedTask
         from Backend.Scheduling.service import SchedulingService
 
         now = datetime(2026, 11, 9, 8, 0, tzinfo=TZ_HCM)

@@ -2,9 +2,9 @@ import json
 import sys
 import traceback
 
-from Backend.Regulation.User import User
-from Backend.Crawler.PortalCrawler import PortalCrawler
-from Backend.Crawler.MoodleCrawler import MoodleCrawler
+from DataProcessor.Standardization.User import User
+from DataProcessor.Crawler.PortalCrawler import PortalCrawler
+from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
 from Backend.Scheduling.service import SchedulingService
 
 from Database.auth import sign_in, sign_up
@@ -13,7 +13,7 @@ from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_task_preference_repository import UserTaskPreferenceRepository
 from Database.Repository.user_task_repository import UserTaskRepository
 
-from Backend.Validator import Validator
+from DataProcessor.Validator import Validator
 
 
 def update_portal_account(access_token, user: User):

@@ -4,10 +4,10 @@ import html2text
 from pathlib import Path
 from contextlib import contextmanager
 
-from Backend.Regulation.RawTask import RawTask
+from DataProcessor.Standardization.RawTask import RawTask
 from playwright.sync_api import Page, BrowserContext, Browser
 from bs4 import BeautifulSoup
-from Backend.utils.apify_storage import *
+from DataProcessor.utils.apify_storage import *
 
 
 # HTML2Text configuration
@@ -38,7 +38,7 @@ class BaseCrawler():
             if os.environ.get("APP_ROLE") == "SERVER":
                 return kv_get(store_name="History", key=self.history_key, default=None)
             
-            elif (path := Path(f"Backend/Crawler/History/{self.history_key}.txt")).is_file():
+            elif (path := Path(f"DataProcessor/Crawler/History/{self.history_key}.txt")).is_file():
                 return path.read_text(encoding="utf-8").strip()
         
     def set_last_post(self, raw_tasks: list[RawTask]):
@@ -48,7 +48,7 @@ class BaseCrawler():
                 kv_set(store_name="History", key=self.history_key, value=lastlink)
 
             else:
-                history_file = f"Backend/Crawler/History/{self.history_key}.txt"
+                history_file = f"DataProcessor/Crawler/History/{self.history_key}.txt"
                 Path(history_file).write_text(lastlink, encoding="utf-8")
     
     @contextmanager

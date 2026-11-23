@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 import requests
 
-from Backend.Regulation.BaseTask import DateDayTime
-from Backend.Regulation.ExtractedTask import ExtractedTask
+from DataProcessor.Standardization.BaseTask import DateDayTime
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 from Database.Repository.task_repository import TaskRepository
 
 
