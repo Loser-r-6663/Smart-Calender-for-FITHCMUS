@@ -44,22 +44,13 @@ class UserTaskRepository(TaskRepository):
         self._raise(response)
         return response
 
-    def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
-        params = {
-            "select": "*",
-            "limit": limit,
-        }
+    def get_tasks(self, limit: int | None = 100) -> list[ExtractedTask]:
+        params = {"select": "*", "order": "id.asc"}
         if self.user_id is not None:
             params["user_id"] = f"eq.{self.user_id}"
 
-        response = requests.get(
-            self.table_url,
-            params=params,
-            headers=self.headers,
-            timeout=30,
-        )
-        self._raise(response)
-        return [self.row_to_task(row) for row in response.json()]
+        rows = self._get_task_rows(params, limit)
+        return [self.row_to_task(row) for row in rows]
 
     def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]
@@ -78,6 +69,43 @@ class UserTaskRepository(TaskRepository):
         )
         self._raise(response)
         return response
+
+    def update_custom_task(self, task_id: str, task: ExtractedTask) -> bool:
+        if not self.user_id:
+            raise ValueError("user_id is required to update a custom task")
+        if task.source_platform != "Custom":
+            raise ValueError("Only custom tasks can be updated with this method")
+
+        response = requests.patch(
+            self.table_url,
+            params={
+                "id": f"eq.{task_id}",
+                "user_id": f"eq.{self.user_id}",
+                "source_platform": "eq.Custom",
+            },
+            headers=self.headers,
+            json=self.task_to_row(task, user_id=self.user_id),
+            timeout=30,
+        )
+        self._raise(response)
+        return bool(response.json())
+
+    def delete_custom_task(self, task_id: str) -> bool:
+        if not self.user_id:
+            raise ValueError("user_id is required to delete a custom task")
+
+        response = requests.delete(
+            self.table_url,
+            params={
+                "id": f"eq.{task_id}",
+                "user_id": f"eq.{self.user_id}",
+                "source_platform": "eq.Custom",
+            },
+            headers=self.headers,
+            timeout=30,
+        )
+        self._raise(response)
+        return bool(response.json())
 
     def update_task(self, task_id: str, data: ExtractedTask | dict):
         if isinstance(data, ExtractedTask):

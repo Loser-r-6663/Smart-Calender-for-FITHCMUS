@@ -7,7 +7,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements-web.txt
 RUN playwright install --with-deps chromium
 
-COPY Backend ./Backend
+COPY DataProcessor ./DataProcessor
 COPY Database ./Database
 COPY client ./client
 

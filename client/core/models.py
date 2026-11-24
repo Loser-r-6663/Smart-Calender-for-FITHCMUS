@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
+from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,20 @@ class ConnectionStatus:
 class SyncResult:
     ok: bool
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class TaskDraft:
+    title: str
+    kind: Literal["class", "assignment", "event", "announcement"]
+    scheduled_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    deadline: datetime | None = None
+    course: str | None = None
+    location: str | None = None
+    description: str | None = None
+    source_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +69,14 @@ class CalendarItem:
     @property
     def time_label(self) -> str:
         if self.start:
+            if self.start.time() == time.min and self.end is None:
+                return "All day"
             if self.end:
                 return f"{self.start:%H:%M}–{self.end:%H:%M}"
             return f"{self.start:%H:%M}"
         if self.deadline:
+            if self.deadline.time() == time.min:
+                return "Due date"
             return f"Due {self.deadline:%H:%M}"
         return "No date"
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from client.core.models import ClientUser, ConnectionStatus, SyncResult
+from client.core.models import ClientUser, ConnectionStatus, SyncResult, TaskDraft
 
 
 class AuthenticationError(ValueError):
@@ -38,6 +38,20 @@ class ClientBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_task(
+        self, user: ClientUser, task_id: str, task: TaskDraft
+    ) -> SyncResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_task(self, user: ClientUser, task_id: str) -> SyncResult:
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         raise NotImplementedError
 
@@ -48,9 +62,10 @@ class ClientBackend(ABC):
         """Store encrypted Portal credentials for later crawler verification."""
         raise NotImplementedError
 
-    # Moodle connection is intentionally unsupported for now. Its crawler
-    # requires an interactive Google authorization session that cannot be
-    # completed through the current remotely deployed backend.
+    @abstractmethod
+    async def connect_moodle(self, user: ClientUser) -> SyncResult:
+        """Open a local browser for Moodle's Google sign-in and save its session."""
+        raise NotImplementedError
 
     @abstractmethod
     async def get_disabled_sources(self, user: ClientUser) -> set[str]:

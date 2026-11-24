@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
+
+
+logger = logging.getLogger(__name__)
 
 
 def run_personal_crawl(
@@ -12,12 +16,12 @@ def run_personal_crawl(
 ) -> tuple[int, int]:
     """Run Portal/Moodle for one user and persist only that user's tasks.
 
-    The crawler implementation remains imported unchanged from crawler-branch.
+    The crawler implementation remains imported unchanged from DataProcessor.
     This client-owned orchestration supplies the signed-in user's repository and
     access token, keeping personal rows separate from the public task table.
     """
-    from Backend.TaskCreator import TaskCreator
-    from Backend.Validator import Validator
+    from DataProcessor.TaskCreator import TaskCreator
+    from DataProcessor.Validator import Validator
     from Database.Repository.user_repository import UserRepository
     from Database.Repository.user_task_repository import UserTaskRepository
 
@@ -40,7 +44,6 @@ def run_personal_crawl(
         if platform == "Portal" and not (
             backend_user.portal_username
             and backend_user.portal_password
-            and backend_user.portal_session
         ):
             backend_user.portal_status = False
             continue
@@ -48,14 +51,11 @@ def run_personal_crawl(
             backend_user.moodle_status = False
             continue
 
-        # The imported crawler uses an actor-wide state key in server mode.
-        # Override only this instance's state loader so each signed-in user
-        # crawls with the session stored on their own user record.
-        crawler.get_state = lambda current=crawler: current.state
         try:
             fetched = crawler.fetch_data()
         except Exception:
             setattr(backend_user, f"{platform.lower()}_status", False)
+            logger.exception("Personal crawler failed for %s", platform)
             continue
 
         setattr(backend_user, f"{platform.lower()}_status", True)
@@ -73,7 +73,7 @@ def run_personal_crawl(
         raise RuntimeError("No configured personal crawler has a valid session")
 
     extracted_tasks = creator.parse_tasks(raw_tasks)
-    retained_tasks = repository.get_tasks(limit=1000)
+    retained_tasks = repository.get_tasks(limit=None)
     combined_tasks = validator.deduplicate_task(extracted_tasks, retained_tasks)
 
     expired_tasks = validator.filter_expired_tasks(combined_tasks)
@@ -91,3 +91,17 @@ def run_personal_crawl(
     # Persist refreshed sessions and connection status on the same user row.
     UserRepository(access_token=access_token).update_user(backend_user)
     return len(new_tasks), len(combined_tasks) - len(expired_tasks)
+
+
+def capture_moodle_session(backend_user: Any) -> str:
+    """Run Moodle's interactive sign-in in a local browser and return its state."""
+    from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
+
+    crawler = MoodleCrawler(backend_user)
+    with crawler.load_engine() as playwright:
+        crawler.crawler = playwright
+        crawler.authenticate()
+
+    if not crawler.state:
+        raise RuntimeError("Moodle did not return an authenticated browser session")
+    return json.dumps(crawler.state)

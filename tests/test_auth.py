@@ -45,6 +45,21 @@ def test_portal_credentials_are_configured_but_not_verified() -> None:
     asyncio.run(scenario())
 
 
+def test_mock_moodle_connection_is_available() -> None:
+    async def scenario() -> None:
+        backend = MockBackend()
+        user = await backend.register("newstudent", "password123")
+
+        result = await backend.connect_moodle(user)
+        status = await backend.get_connection_status(user)
+
+        assert result.ok is True
+        assert status.moodle_configured is True
+        assert status.moodle is True
+
+    asyncio.run(scenario())
+
+
 def test_mock_password_change_requires_current_password() -> None:
     async def scenario() -> None:
         backend = MockBackend()

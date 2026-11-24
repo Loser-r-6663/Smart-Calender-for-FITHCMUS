@@ -47,7 +47,7 @@ class PortalCrawler(PlaywrightCrawler):
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
         
-        if page.url == self.login_url:
+        if page.url.startswith(self.login_url):
             # Fill in the login form and submit
             username = self.user.portal_username
             password = self.user.portal_password
@@ -57,17 +57,9 @@ class PortalCrawler(PlaywrightCrawler):
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
             
             # Manually enter the code from the email
-            if APP_ROLE != "SERVER":
-                page.wait_for_url(self.home_url, timeout=120000) # 2 min
-            else:
-                try: page.wait_for_url(self.home_url)
-                except: raise AssertionError("Please log in to Portal manually.")
+            page.wait_for_url(self.home_url, timeout=120_000)
         
-            if APP_ROLE == "SERVER":
-                self.state.update(context.storage_state())
-            else:
-                state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
-                self.state.update(context.storage_state(path=state_file))
+            self.state = context.storage_state()
         browser.close()
     
     def browse_page(self, page):

@@ -28,22 +28,48 @@ def _parse_datetime(value: Any) -> datetime | None:
         except ValueError:
             return None
     else:
-        return None
+        exact_date = _parse_date(_value(value, "date")) if value is not None else None
+        if exact_date is None:
+            return None
+        exact_time = _parse_time(_value(value, "time"))
+        return datetime.combine(exact_date, exact_time or time.min, tzinfo=VN_TZ)
     return result.replace(tzinfo=VN_TZ) if result.tzinfo is None else result.astimezone(VN_TZ)
+
+
+def _parse_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_time(value: Any) -> time | None:
+    if isinstance(value, time):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str):
+        try:
+            return time.fromisoformat(value).replace(tzinfo=None)
+        except ValueError:
+            return None
+    return None
 
 
 def _weekly_time(value: Any) -> tuple[int, time] | None:
     day = _value(value, "day") if value is not None else None
-    raw_time = _value(value, "time_") if value is not None else None
+    raw_time = _value(value, "time") if value is not None else None
+    if raw_time is None and value is not None:
+        raw_time = _value(value, "time_")
     if day not in WEEKDAYS or raw_time is None:
         return None
-    if isinstance(raw_time, time):
-        parsed_time = raw_time
-    else:
-        try:
-            parsed_time = time.fromisoformat(str(raw_time))
-        except ValueError:
-            return None
+    parsed_time = _parse_time(raw_time)
+    if parsed_time is None:
+        return None
     return WEEKDAYS[day], parsed_time
 
 

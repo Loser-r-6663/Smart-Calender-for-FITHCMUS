@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from nicegui import ui
@@ -28,6 +29,11 @@ def create_app() -> AppConfig:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
     config = create_app()
     ui.run(
         host=config.host,

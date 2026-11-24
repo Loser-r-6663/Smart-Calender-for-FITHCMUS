@@ -11,6 +11,8 @@ def render_task_panel(
     controller: ClientController,
     *,
     on_select_item: Callable[[str], None],
+    on_edit_task: Callable[[str], None],
+    on_delete_task: Callable[[str], None],
 ) -> None:
     selected_date = controller.state.selected_date
     items = controller.items_for_date(selected_date)
@@ -73,4 +75,16 @@ def render_task_panel(
                         selected.source_url,
                         new_tab=True,
                     ).classes("source-link")
+                if selected.source == "Custom" and selected.is_personal:
+                    with ui.row().classes("gap-2"):
+                        ui.button(
+                            "Edit",
+                            icon="edit",
+                            on_click=lambda: on_edit_task(selected.task_id),
+                        ).props("outline no-caps")
+                        ui.button(
+                            "Delete",
+                            icon="delete",
+                            on_click=lambda: on_delete_task(selected.task_id),
+                        ).props("outline no-caps color=negative")
 

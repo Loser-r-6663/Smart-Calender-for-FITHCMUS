@@ -5,9 +5,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
-from client.core.models import ClientUser, ConnectionStatus, SyncResult
+from client.core.models import ClientUser, ConnectionStatus, SyncResult, TaskDraft
 from client.core.source_preferences import ALL_SOURCE_NAMES
 
 
@@ -20,6 +21,7 @@ class MockBackend(ClientBackend):
         )
         self._last_sync: datetime | None = None
         self._disabled_sources: dict[str, set[str]] = {}
+        self._manual_tasks: dict[str, list[dict[str, Any]]] = {}
         demo_user = ClientUser(
             id="demo-user",
             username="student",
@@ -31,6 +33,8 @@ class MockBackend(ClientBackend):
         }
         self._portal_configured: set[str] = {demo_user.id}
         self._portal_connected: set[str] = {demo_user.id}
+        self._moodle_configured: set[str] = {demo_user.id}
+        self._moodle_connected: set[str] = {demo_user.id}
         self._personal_crawled: set[str] = {demo_user.id}
 
     async def login(self, username: str, password: str) -> ClientUser:
@@ -70,17 +74,78 @@ class MockBackend(ClientBackend):
                 for task in tasks
                 if task.get("source_platform") not in {"Portal", "Moodle"}
             ]
+        tasks.extend(self._manual_tasks.get(user.id, []))
         disabled = await self.get_disabled_sources(user)
         return [task for task in tasks if task.get("source_platform") not in disabled]
+
+    async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
+        await asyncio.sleep(0.1)
+        self._manual_tasks.setdefault(user.id, []).append(
+            self._task_to_record(user, task)
+        )
+        return SyncResult(ok=True, message="Task created")
+
+    @staticmethod
+    def _task_to_record(user: ClientUser, task: TaskDraft, task_id: str | None = None) -> dict[str, Any]:
+        return {
+            "id": task_id or str(uuid4()),
+            "user_id": user.id,
+            "title": task.title,
+            "type": task.kind,
+            "start_time": (
+                {
+                    "date": task.scheduled_date.isoformat(),
+                    "time": task.start_time.isoformat() if task.start_time else None,
+                }
+                if task.scheduled_date
+                else None
+            ),
+            "end_time": (
+                {
+                    "date": task.scheduled_date.isoformat(),
+                    "time": task.end_time.isoformat() if task.end_time else None,
+                }
+                if task.scheduled_date and task.end_time
+                else None
+            ),
+            "deadline": task.deadline.isoformat() if task.deadline else None,
+            "course": task.course,
+            "location": task.location,
+            "description": task.description,
+            "source_url": task.source_url or "",
+            "source_platform": "Custom",
+        }
+
+    async def update_task(
+        self, user: ClientUser, task_id: str, task: TaskDraft
+    ) -> SyncResult:
+        await asyncio.sleep(0.1)
+        records = self._manual_tasks.get(user.id, [])
+        for index, record in enumerate(records):
+            if record["id"] == task_id:
+                records[index] = self._task_to_record(user, task, task_id)
+                return SyncResult(ok=True, message="Task updated")
+        return SyncResult(ok=False, message="Custom task was not found")
+
+    async def delete_task(self, user: ClientUser, task_id: str) -> SyncResult:
+        await asyncio.sleep(0.1)
+        records = self._manual_tasks.get(user.id, [])
+        for index, record in enumerate(records):
+            if record["id"] == task_id:
+                del records[index]
+                return SyncResult(ok=True, message="Task deleted")
+        return SyncResult(ok=False, message="Custom task was not found")
 
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         return ConnectionStatus(
             portal=user.portal_status or user.id in self._portal_connected,
-            moodle=user.moodle_status,
+            moodle=user.moodle_status or user.id in self._moodle_connected,
             portal_configured=(
                 user.portal_status or user.id in self._portal_configured
             ),
-            moodle_configured=user.moodle_status,
+            moodle_configured=(
+                user.moodle_status or user.id in self._moodle_configured
+            ),
             last_sync=self._last_sync,
         )
 
@@ -91,6 +156,12 @@ class MockBackend(ClientBackend):
             return SyncResult(ok=False, message="Enter your Portal ID and password")
         self._portal_configured.add(user.id)
         return SyncResult(ok=True, message="Portal credentials saved")
+
+    async def connect_moodle(self, user: ClientUser) -> SyncResult:
+        await asyncio.sleep(0.2)
+        self._moodle_configured.add(user.id)
+        self._moodle_connected.add(user.id)
+        return SyncResult(ok=True, message="Mock Moodle connection complete")
 
     async def get_disabled_sources(self, user: ClientUser) -> set[str]:
         return set(self._disabled_sources.get(user.id, set()))
