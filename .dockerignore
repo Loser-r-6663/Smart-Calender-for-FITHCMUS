@@ -5,3 +5,4 @@ __pycache__
 .git
 DataProcessor/Crawler/History/*
 DataProcessor/Crawler/State/*
+Database/data/*

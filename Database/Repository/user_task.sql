@@ -62,7 +62,7 @@ create table public.user_task (
         'Đoàn khoa - Liên chi hội khoa Địa chất'::text,
         'Đoàn khoa - Liên chi hội khoa Vật lý'::text,
         'Facebook Khoa Công nghệ thông tin'::text,
-        'Custom'::text
+        'Facebook Khoa Công nghệ thông tin'::text
       ]
     )
   ),
@@ -136,7 +136,6 @@ create table public.user_task (
   ),
   constraint user_task_training_points_check check (
     type <> 'event'::text
-    or source_platform = 'Custom'::text
     or (
       training_points is not null
       and training_points >= 0
@@ -145,7 +144,6 @@ create table public.user_task (
   ),
   constraint user_task_event_training_point_category_check check (
     type <> 'event'::text
-    or source_platform = 'Custom'::text
     or (
       training_points = 0
       and training_point_category is null
@@ -165,13 +163,8 @@ create table public.user_task (
     )
     or (
       type = 'event'::text
-      and (
-        source_platform = 'Custom'::text
-        or (
-          estimated_hours is not null
-          and estimated_hours > 0
-        )
-      )
+      and estimated_hours is not null
+      and estimated_hours > 0
     )
   ),
   constraint user_task_start_time_check check (
