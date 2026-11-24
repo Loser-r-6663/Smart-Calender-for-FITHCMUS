@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
+from client.core.models import ClientUser, ConnectionStatus, SyncResult, TaskDraft
+from client.core.source_preferences import ALL_SOURCE_NAMES
+
+
+class MockBackend(ClientBackend):
+    """Offline backend used for UI development and browser tests."""
+
+    def __init__(self, fixture_path: Path | None = None) -> None:
+        self.fixture_path = fixture_path or (
+            Path(__file__).resolve().parents[1] / "fixtures" / "tasks.json"
+        )
+        self._last_sync: datetime | None = None
+        self._disabled_sources: dict[str, set[str]] = {}
+        self._manual_tasks: dict[str, list[dict[str, Any]]] = {}
+        demo_user = ClientUser(
+            id="demo-user",
+            username="student",
+            portal_status=True,
+            moodle_status=True,
+        )
+        self._accounts: dict[str, tuple[str, ClientUser]] = {
+            "student": ("demo", demo_user)
+        }
+        self._portal_configured: set[str] = {demo_user.id}
+        self._portal_connected: set[str] = {demo_user.id}
+        self._moodle_configured: set[str] = {demo_user.id}
+        self._moodle_connected: set[str] = {demo_user.id}
+        self._personal_crawled: set[str] = {demo_user.id}
+
+    async def login(self, username: str, password: str) -> ClientUser:
+        await asyncio.sleep(0.2)
+        account = self._accounts.get(username.strip().lower())
+        if account is None or account[0] != password:
+            raise AuthenticationError("Incorrect username or password")
+        return account[1]
+
+    async def register(self, username: str, password: str) -> ClientUser:
+        clean_username = username.strip()
+        key = clean_username.lower()
+        if not clean_username or not password:
+            raise RegistrationError("Username and password are required.")
+        if key in self._accounts:
+            raise RegistrationError("Username is already taken.")
+        user = ClientUser(id=f"mock-{key}", username=clean_username)
+        self._accounts[key] = (password, user)
+        return user
+
+    async def change_password(
+        self, user: ClientUser, current_password: str, new_password: str
+    ) -> SyncResult:
+        key = user.username.strip().lower()
+        account = self._accounts.get(key)
+        if account is None or account[0] != current_password:
+            return SyncResult(ok=False, message="Current password is incorrect")
+        self._accounts[key] = (new_password, account[1])
+        return SyncResult(ok=True, message="Password changed")
+
+    async def get_tasks(self, user: ClientUser) -> list[Any]:
+        await asyncio.sleep(0.15)
+        tasks = json.loads(self.fixture_path.read_text(encoding="utf-8"))
+        if user.id not in self._personal_crawled:
+            tasks = [
+                task
+                for task in tasks
+                if task.get("source_platform") not in {"Portal", "Moodle"}
+            ]
+        tasks.extend(self._manual_tasks.get(user.id, []))
+        disabled = await self.get_disabled_sources(user)
+        return [task for task in tasks if task.get("source_platform") not in disabled]
+
+    async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
+        await asyncio.sleep(0.1)
+        self._manual_tasks.setdefault(user.id, []).append(
+            self._task_to_record(user, task)
+        )
+        return SyncResult(ok=True, message="Task created")
+
+    @staticmethod
+    def _task_to_record(user: ClientUser, task: TaskDraft, task_id: str | None = None) -> dict[str, Any]:
+        return {
+            "id": task_id or str(uuid4()),
+            "user_id": user.id,
+            "title": task.title,
+            "type": task.kind,
+            "start_time": (
+                {
+                    "date": task.scheduled_date.isoformat(),
+                    "time": task.start_time.isoformat() if task.start_time else None,
+                }
+                if task.scheduled_date
+                else None
+            ),
+            "end_time": (
+                {
+                    "date": task.scheduled_date.isoformat(),
+                    "time": task.end_time.isoformat() if task.end_time else None,
+                }
+                if task.scheduled_date and task.end_time
+                else None
+            ),
+            "deadline": task.deadline.isoformat() if task.deadline else None,
+            "course": task.course,
+            "location": task.location,
+            "description": task.description,
+            "source_url": task.source_url or "",
+            "source_platform": "Custom",
+        }
+
+    async def update_task(
+        self, user: ClientUser, task_id: str, task: TaskDraft
+    ) -> SyncResult:
+        await asyncio.sleep(0.1)
+        records = self._manual_tasks.get(user.id, [])
+        for index, record in enumerate(records):
+            if record["id"] == task_id:
+                records[index] = self._task_to_record(user, task, task_id)
+                return SyncResult(ok=True, message="Task updated")
+        return SyncResult(ok=False, message="Custom task was not found")
+
+    async def delete_task(self, user: ClientUser, task_id: str) -> SyncResult:
+        await asyncio.sleep(0.1)
+        records = self._manual_tasks.get(user.id, [])
+        for index, record in enumerate(records):
+            if record["id"] == task_id:
+                del records[index]
+                return SyncResult(ok=True, message="Task deleted")
+        return SyncResult(ok=False, message="Custom task was not found")
+
+    async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
+        return ConnectionStatus(
+            portal=user.portal_status or user.id in self._portal_connected,
+            moodle=user.moodle_status or user.id in self._moodle_connected,
+            portal_configured=(
+                user.portal_status or user.id in self._portal_configured
+            ),
+            moodle_configured=(
+                user.moodle_status or user.id in self._moodle_configured
+            ),
+            last_sync=self._last_sync,
+        )
+
+    async def save_portal_credentials(
+        self, user: ClientUser, portal_username: str, portal_password: str
+    ) -> SyncResult:
+        if not portal_username.strip() or not portal_password:
+            return SyncResult(ok=False, message="Enter your Portal ID and password")
+        self._portal_configured.add(user.id)
+        return SyncResult(ok=True, message="Portal credentials saved")
+
+    async def connect_moodle(self, user: ClientUser) -> SyncResult:
+        await asyncio.sleep(0.2)
+        self._moodle_configured.add(user.id)
+        self._moodle_connected.add(user.id)
+        return SyncResult(ok=True, message="Mock Moodle connection complete")
+
+    async def get_disabled_sources(self, user: ClientUser) -> set[str]:
+        return set(self._disabled_sources.get(user.id, set()))
+
+    async def set_source_enabled(
+        self, user: ClientUser, source_name: str, enabled: bool
+    ) -> None:
+        disabled = self._disabled_sources.setdefault(user.id, set())
+        if enabled:
+            disabled.discard(source_name)
+        elif source_name in ALL_SOURCE_NAMES:
+            disabled.add(source_name)
+
+    async def set_all_sources_enabled(
+        self, user: ClientUser, enabled: bool
+    ) -> None:
+        self._disabled_sources[user.id] = set() if enabled else set(ALL_SOURCE_NAMES)
+
+    async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
+        await asyncio.sleep(0.7)
+        disabled = await self.get_disabled_sources(user)
+        status = await self.get_connection_status(user)
+        enabled_personal_sources = {
+            source
+            for source, ready in {
+                "Portal": status.portal_configured,
+                "Moodle": status.moodle_configured,
+            }.items()
+            if ready and source not in disabled
+        }
+        if not enabled_personal_sources:
+            return SyncResult(
+                ok=False,
+                message="Connect and enable Portal or Moodle first",
+            )
+
+        tasks = json.loads(self.fixture_path.read_text(encoding="utf-8"))
+        personal_count = sum(
+            task.get("source_platform") in enabled_personal_sources
+            for task in tasks
+        )
+        self._personal_crawled.add(user.id)
+        if "Portal" in enabled_personal_sources:
+            self._portal_connected.add(user.id)
+        self._last_sync = datetime.now().astimezone()
+        return SyncResult(
+            ok=True,
+            message=(
+                f"Mock personal crawl complete: {personal_count} "
+                "personal items available"
+            ),
+        )
+
