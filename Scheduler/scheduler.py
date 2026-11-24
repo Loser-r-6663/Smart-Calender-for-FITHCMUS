@@ -140,10 +140,11 @@ class BranchAndBoundScheduler:
     ) -> ScheduleResult:
         start_time = time.perf_counter()
 
-        # Xác định khoảng tuần lập lịch (Thứ Hai -> Chủ Nhật)
-        week_start = datetime.now(VN_TZ).date()
+        # Xác định tuần hiện tại (Thứ Hai -> Chủ Nhật) nhưng chỉ xếp từ thời điểm hiện tại trở đi.
+        today = datetime.now(VN_TZ).date()
+        week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
-        week_start_dt = _to_vn_datetime(week_start, datetime.now().time())
+        week_start_dt = datetime.now(VN_TZ)
         week_end_dt = _to_vn_datetime(week_end, dt_time(23, 59, 59))
 
         curr_drl = {cat: min(max(0, (initial_drl or {}).get(cat, 0)), cap) for cat, cap in self.drl_caps.items()}
@@ -201,6 +202,8 @@ class BranchAndBoundScheduler:
                         inst_date = week_start + timedelta(days=w_idx)
                         st = _to_vn_datetime(inst_date, task.start_time.time)
                         et = _to_vn_datetime(inst_date, task.end_time.time)
+                        if st < week_start_dt or et <= week_start_dt:
+                            continue
                         overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                         if overlap:
                             unschedulable_tasks.append(ProposedTaskInfo(
@@ -233,7 +236,7 @@ class BranchAndBoundScheduler:
                     ))
                     continue
 
-                if et > week_start_dt and st < week_end_dt:
+                if st >= week_start_dt and et > week_start_dt and st < week_end_dt:
                     overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                     if overlap:
                         unschedulable_tasks.append(ProposedTaskInfo(
@@ -352,7 +355,7 @@ class BranchAndBoundScheduler:
                     continue
 
                 # Chỉ xếp nếu sự kiện diễn ra trong tuần lập lịch
-                if et > week_start_dt and st < week_end_dt:
+                if st >= week_start_dt and et > week_start_dt and st < week_end_dt:
                     candidate_items.append(_SchedItem(
                         task=task, start=st, end=et, is_flexible=False,
                         estimated_hours=(et - st).total_seconds() / 3600.0,
@@ -367,10 +370,6 @@ class BranchAndBoundScheduler:
         unselected_tasks: list[ProposedTaskInfo] = []
 
         for cand in candidate_items:
-            if cand.is_flexible:
-                feasible_candidates.append(cand)
-                continue
-
             conflict_reason: str | None = None
             for fix in fixed_items:
                 # Kiểm tra giao khoảng thời gian
@@ -382,6 +381,10 @@ class BranchAndBoundScheduler:
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=conflict_reason))
             else:
                 feasible_candidates.append(cand)
+            
+            if cand.is_flexible:
+                feasible_candidates.append(cand)
+                continue
 
         # ---------------------------------------------------------------------
         # BƯỚC 3: TIỀN XỬ LÝ CHO NHÁNH CẬN (PRECOMPUTE)
@@ -429,25 +432,50 @@ class BranchAndBoundScheduler:
             if not active_flex:
                 return True
 
-            for wl in active_flex:
-                total_hours = max(0.0, (wl.end - wl.start).total_seconds() / 3600.0)
-                needed_hours = sum(
-                    o.estimated_hours for o in active_flex if not (o.end <= wl.start or o.start >= wl.end)
-                )
-                busy_hours = 0.0
-                for fix in fixed_items:
-                    overlap = min(wl.end, fix.end) - max(wl.start, fix.start)
-                    if overlap.total_seconds() > 0:
-                        busy_hours += overlap.total_seconds() / 3600.0
+            occupied = [(fix.start, fix.end) for fix in fixed_items]
+            occupied += [
+                (ev.start, ev.end)
+                for ev in selected_fixed
+            ]
 
-                for ev in selected:
-                    if ev.is_flexible:
+            def get_day_free_hours(w_start: datetime, w_end: datetime) -> float:
+                free_hours = 0.0
+                cursor_day = w_start.date()
+                end_day = w_end.date()
+                while cursor_day <= end_day:
+                    day_start = max(w_start, _to_vn_datetime(cursor_day, dt_time(8, 0)))
+                    day_end = min(w_end, _to_vn_datetime(cursor_day, dt_time(21, 0)))
+                    if day_end <= day_start:
+                        cursor_day += timedelta(days=1)
                         continue
-                    overlap = min(wl.end, ev.end) - max(wl.start, ev.start)
-                    if overlap.total_seconds() > 0:
-                        busy_hours += overlap.total_seconds() / 3600.0
 
-                if total_hours - busy_hours < needed_hours:
+                    free_ranges = [(day_start, day_end)]
+                    for busy_start, busy_end in occupied:
+                        updated_ranges: list[tuple[datetime, datetime]] = []
+                        for free_start, free_end in free_ranges:
+                            if busy_end <= free_start or busy_start >= free_end:
+                                updated_ranges.append((free_start, free_end))
+                                continue
+                            if busy_start > free_start:
+                                updated_ranges.append((free_start, busy_start))
+                            if busy_end < free_end:
+                                updated_ranges.append((busy_end, free_end))
+                        free_ranges = updated_ranges
+
+                    free_hours += sum(
+                        (free_end - free_start).total_seconds() / 3600.0
+                        for free_start, free_end in free_ranges
+                    )
+                    cursor_day += timedelta(days=1)
+                return free_hours
+
+            for wl in active_flex:
+                needed_hours = sum(
+                    o.estimated_hours
+                    for o in active_flex
+                    if not (o.end <= wl.start or o.start >= wl.end)
+                )
+                if get_day_free_hours(wl.start, wl.end) < needed_hours:
                     return False
             return True
 
@@ -524,18 +552,22 @@ class BranchAndBoundScheduler:
         ] + [(ev.start, ev.end) for ev, _ in best_selection if not ev.is_flexible]
         occupied_slots.sort()
 
-        def allocate_slot(w_start: datetime, w_end: datetime, dur_hours: float) -> tuple[datetime, datetime] | None:
+        def allocate_slots(w_start: datetime, w_end: datetime, dur_hours: float) -> list[tuple[datetime, datetime]]:
             """
-            Phân bổ khe thời gian học tập ban ngày hợp lý (08:00 - 21:00) trước hạn chót w_end.
-            Tuyệt đối không xếp học đêm xuyên qua ngày hôm sau!
+            Ưu tiên một khe liên tục đủ thời lượng trong khung 08:00-21:00.
+            Nếu không có khe liên tục, chia thời lượng thành nhiều phiên trong các khe trống.
             """
-            dur = timedelta(hours=max(0.5, dur_hours))
+            if dur_hours <= 0:
+                return []
+
+            remaining = timedelta(hours=dur_hours)
+            dur = remaining
             cursor_day = w_start.date()
             end_day = w_end.date()
 
+            # 1. Tìm phiên liên tục duy nhất đủ toàn bộ thời lượng.
             while cursor_day <= end_day:
                 day_start = max(w_start, _to_vn_datetime(cursor_day, dt_time(8, 0)))
-                # Khung giờ kết thúc tối đa là 21:00 và không vượt quá w_end
                 day_end = min(w_end, _to_vn_datetime(cursor_day, dt_time(21, 0)))
                 if day_start + dur <= day_end:
                     cursor = day_start
@@ -544,10 +576,51 @@ class BranchAndBoundScheduler:
                         if not conflict:
                             occupied_slots.append((cursor, cursor + dur))
                             occupied_slots.sort()
-                            return cursor, cursor + dur
+                            return [(cursor, cursor + dur)]
                         cursor += timedelta(minutes=30)
                 cursor_day += timedelta(days=1)
-            return None
+
+            # 2. Không có khe liên tục: lấp các khe trống bằng các phiên.
+            sessions: list[tuple[datetime, datetime]] = []
+            cursor_day = w_start.date()
+            while cursor_day <= end_day and remaining > timedelta(0):
+                day_start = max(w_start, _to_vn_datetime(cursor_day, dt_time(8, 0)))
+                day_end = min(w_end, _to_vn_datetime(cursor_day, dt_time(21, 0)))
+                if day_end > day_start:
+                    free_ranges = [(day_start, day_end)]
+                    for busy_start, busy_end in occupied_slots:
+                        updated_ranges: list[tuple[datetime, datetime]] = []
+                        for free_start, free_end in free_ranges:
+                            if busy_end <= free_start or busy_start >= free_end:
+                                updated_ranges.append((free_start, free_end))
+                                continue
+                            if busy_start > free_start:
+                                updated_ranges.append((free_start, busy_start))
+                            if busy_end < free_end:
+                                updated_ranges.append((busy_end, free_end))
+                        free_ranges = updated_ranges
+
+                    for free_start, free_end in free_ranges:
+                        cursor = free_start
+                        while cursor < free_end and remaining > timedelta(0):
+                            session_end = min(cursor + timedelta(minutes=30), free_end)
+                            actual = session_end - cursor
+                            if actual <= timedelta(0):
+                                break
+                            sessions.append((cursor, session_end))
+                            occupied_slots.append((cursor, session_end))
+                            remaining -= actual
+                            cursor = session_end
+                        if remaining <= timedelta(0):
+                            break
+                    occupied_slots.sort()
+                cursor_day += timedelta(days=1)
+
+            if remaining > timedelta(0):
+                for session_start, session_end in sessions:
+                    occupied_slots.remove((session_start, session_end))
+                return []
+            return sessions
 
         # Tổng hợp danh sách Task đã lên lịch
         scheduled_tasks: list[Task] = []
@@ -560,11 +633,10 @@ class BranchAndBoundScheduler:
 
         # Phân bổ slot cho Assignment
         for wl in flexible_workloads:
-            slot = allocate_slot(wl.start, wl.end, wl.estimated_hours)
-            if slot is not None:
-                st, et = slot
-                wl.task.start_time = DateDayTime(date=st.date(), time=st.time())
-                wl.task.end_time = DateDayTime(date=et.date(), time=et.time())
+            sessions = allocate_slots(wl.start, wl.end, wl.estimated_hours)
+            if sessions:
+                wl.task.start_time = DateDayTime(date=sessions[0][0].date(), time=sessions[0][0].time())
+                wl.task.end_time = DateDayTime(date=sessions[-1][1].date(), time=sessions[-1][1].time())
                 wl.task.status = "scheduled"
                 scheduled_tasks.append(wl.task)
             else:
@@ -576,11 +648,10 @@ class BranchAndBoundScheduler:
         selected_ev_tasks = set()
         for ev, gain in best_selection:
             if ev.is_flexible:
-                slot = allocate_slot(ev.start, ev.end, ev.estimated_hours)
-                if slot is not None:
-                    st, et = slot
-                    ev.task.start_time = DateDayTime(date=st.date(), time=st.time())
-                    ev.task.end_time = DateDayTime(date=et.date(), time=et.time())
+                sessions = allocate_slots(ev.start, ev.end, ev.estimated_hours)
+                if sessions:
+                    ev.task.start_time = DateDayTime(date=sessions[0][0].date(), time=sessions[0][0].time())
+                    ev.task.end_time = DateDayTime(date=sessions[-1][1].date(), time=sessions[-1][1].time())
                     ev.task.status = "scheduled"
                     curr_drl[ev.category] += gain
                     scheduled_tasks.append(ev.task)
