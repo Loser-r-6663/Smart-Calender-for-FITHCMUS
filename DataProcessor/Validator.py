@@ -3,6 +3,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 
 from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
+from DataProcessor.Standardization.Task import Task
 
 
 class Validator:
@@ -10,7 +11,7 @@ class Validator:
     def __init__(self):
         self.TEXT_SIMILARITY_THRESHOLD = 0.6
         self.TASK_FIELDS = (
-            "user_id", "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
+            "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
 
     @staticmethod
@@ -42,14 +43,14 @@ class Validator:
                 retained.append(task)
         return retained
 
-    def filter_expired_tasks(self, tasks: list[ExtractedTask]):
+    def filter_expired_tasks(self, tasks: list[ExtractedTask | Task]):
         """Return tasks that have expired as of reference_time (defaults to now)."""
         now = datetime.now(tz=VN_TZ)
-        expired: list[ExtractedTask] = []
+        expired: list[ExtractedTask | Task] = []
         for task in tasks:
-            if isinstance(task.deadline, datetime) and task._to_vn_time(task.deadline) < now:
+            if isinstance(task.deadline, datetime) and ExtractedTask._to_vn_time(task.deadline) < now:
                 expired.append(task)
-            elif isinstance(task.registration_end, datetime) and task._to_vn_time(task.registration_end) < now:
+            elif isinstance(task.registration_end, datetime) and ExtractedTask._to_vn_time(task.registration_end) < now:
                 expired.append(task)
             elif (
                 task.end_time is not None

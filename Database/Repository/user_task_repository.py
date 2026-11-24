@@ -61,6 +61,13 @@ class UserTaskRepository(TaskRepository):
         self._raise(response)
         return [self.row_to_task(row) for row in response.json()]
 
+    def pop_tasks(self, limit: int = 100) -> list[ExtractedTask]:
+        """Get tasks for this user, then delete and return them."""
+        tasks = self.get_tasks(limit=limit)
+        if tasks:
+            self.delete_tasks(tasks)
+        return tasks
+
     def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]
         if not ids:

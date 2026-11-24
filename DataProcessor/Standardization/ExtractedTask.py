@@ -40,11 +40,11 @@ class ExtractedTask(BaseTask):
     )
     registration_start: datetime | None = Field(
         default=None,
-        description="Thời gian bắt đầu mở cổng đăng ký"
+        description="Thời gian bắt đầu mở cổng đăng ký. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
     )
     registration_end: datetime | None = Field(
         default=None,
-        description="Thời gian đóng cổng đăng ký"
+        description="Thời gian đóng cổng đăng ký. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
     )
     start_time: DateDayTime | None = Field(
         default=None,
@@ -56,7 +56,7 @@ class ExtractedTask(BaseTask):
     )
     deadline: datetime | None = Field(
         default=None,
-        description="Hạn chót nộp bài tập hoặc hạn chót hoàn thành nhiệm vụ"
+        description="Hạn chót nộp bài tập hoặc hạn chót hoàn thành nhiệm vụ. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
     )
     training_points: int | None = Field(
         default=None,

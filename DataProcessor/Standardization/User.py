@@ -34,6 +34,10 @@ class User(BaseModel):
         default=False,
         description="Trạng thái hợp lệ của session Portal"
     )
+    training_points: dict[str, int] = Field(
+        default_factory=dict,
+        description="Điểm rèn luyện theo từng điều",
+    )
 
     def update(self, **kwargs):
         """Cập nhật các thuộc tính của User với các keyword arguments được truyền vào."""
