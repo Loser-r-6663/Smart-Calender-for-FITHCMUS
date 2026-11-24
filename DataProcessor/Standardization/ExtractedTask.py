@@ -40,11 +40,11 @@ class ExtractedTask(BaseTask):
     )
     registration_start: datetime | None = Field(
         default=None,
-        description="Thời gian bắt đầu mở cổng đăng ký. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
+        description="Thời gian bắt đầu mở cổng đăng ký"
     )
     registration_end: datetime | None = Field(
         default=None,
-        description="Thời gian đóng cổng đăng ký. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
+        description="Thời gian đóng cổng đăng ký"
     )
     start_time: DateDayTime | None = Field(
         default=None,
@@ -56,7 +56,7 @@ class ExtractedTask(BaseTask):
     )
     deadline: datetime | None = Field(
         default=None,
-        description="Hạn chót nộp bài tập hoặc hạn chót hoàn thành nhiệm vụ. Nếu có ngày mà không có giờ thì mặc định là 00:00:00. Nếu không đề cập thì để None"
+        description="Hạn chót nộp bài tập hoặc hạn chót hoàn thành nhiệm vụ"
     )
     training_points: int | None = Field(
         default=None,
@@ -73,7 +73,7 @@ class ExtractedTask(BaseTask):
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )
-    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thông tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHCMUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thông tin"] = Field(
+    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thông tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHCMUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thông tin", "Custom"] = Field(
         description="Nền tảng nguồn"
     )
     updated_at: datetime = Field(
@@ -82,7 +82,7 @@ class ExtractedTask(BaseTask):
     
     @model_validator(mode="after")
     def check_event_requires_training_points(self):
-        if self.type == "event":
+        if self.type == "event" and self.source_platform != "Custom":
             if self.training_points is None or not (0 <= self.training_points <= 24):
                 raise ValueError("training_points phải nằm trong khoảng 0-24 cho sự kiện.")
             if self.training_points > 0:
@@ -94,7 +94,11 @@ class ExtractedTask(BaseTask):
     
     @model_validator(mode="after")
     def check_event_requires_estimated_hours(self):
-        if self.type == "event" and (self.estimated_hours is None or self.estimated_hours <= 0):
+        if (
+            self.type == "event"
+            and self.source_platform != "Custom"
+            and (self.estimated_hours is None or self.estimated_hours <= 0)
+        ):
             raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event'.")
         return self
     

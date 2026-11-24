@@ -1,0 +1,4 @@
+-r requirements.txt
+nicegui>=3.4,<4
+tzdata>=2026.1
+

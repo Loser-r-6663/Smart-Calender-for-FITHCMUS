@@ -1,0 +1,2 @@
+"""Smart Calendar web client."""
+

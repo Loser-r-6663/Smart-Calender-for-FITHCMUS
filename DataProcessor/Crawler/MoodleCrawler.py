@@ -37,23 +37,20 @@ class MoodleCrawler(PlaywrightCrawler):
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
-        
-        # If the login session has expired
-        if page.url.startswith(self.login_url):
-            page.locator('a.login-identityprovider-btn:first-of-type').click()
-        
-        if settings["headless"] and page.url.startswith("https://accounts.google.com/"):
-            raise ConnectionError("Please log in to Moodle using Google account manually.")
-        
-        page.wait_for_url(self.home_url, timeout=0)
-        page.wait_for_load_state("networkidle")
-        
-        if APP_ROLE == "SERVER":
-            self.state.update(context.storage_state())
-        else:
-            state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
-            self.state.update(context.storage_state(path=state_file))
-        browser.close()
+        try:
+            if page.url.startswith(self.login_url):
+                page.locator('a.login-identityprovider-btn:first-of-type').click()
+
+            if settings["headless"] and page.url.startswith("https://accounts.google.com/"):
+                raise ConnectionError(
+                    "Moodle requires interactive Google sign-in."
+                )
+
+            page.wait_for_url(self.home_url, timeout=300_000)
+            page.wait_for_load_state("networkidle")
+            self.state = context.storage_state()
+        finally:
+            browser.close()
     
     def browse_page(self, page):
         raw_tasks: list[RawTask] = []

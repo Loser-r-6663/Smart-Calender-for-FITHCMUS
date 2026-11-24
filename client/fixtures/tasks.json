@@ -1,0 +1,73 @@
+[
+  {
+    "id": "class-ct",
+    "user_id": "demo-user",
+    "title": "CSC10001 · Computational Thinking",
+    "type": "class",
+    "course": "Computational Thinking",
+    "description": "Weekly lecture",
+    "location": {"room": "E.202", "campus": "Nguyễn Văn Cừ (cơ sở 1)"},
+    "start_time": {"day": "T2", "time_": "08:00:00"},
+    "end_time": {"day": "T2", "time_": "10:00:00"},
+    "source_platform": "Portal",
+    "source_url": "https://portal.ctdb.hcmus.edu.vn/"
+  },
+  {
+    "id": "class-lab",
+    "user_id": "demo-user",
+    "title": "CSC10001 · Practical session",
+    "type": "class",
+    "course": "Computational Thinking",
+    "description": "Weekly practical class",
+    "location": {"room": "I.42", "campus": "Nguyễn Văn Cừ (cơ sở 1)"},
+    "start_time": {"day": "T5", "time_": "13:30:00"},
+    "end_time": {"day": "T5", "time_": "15:30:00"},
+    "source_platform": "Portal",
+    "source_url": "https://portal.ctdb.hcmus.edu.vn/"
+  },
+  {
+    "id": "assignment-report",
+    "user_id": "demo-user",
+    "title": "Submit project progress report",
+    "type": "assignment",
+    "course": "Computational Thinking",
+    "description": "Upload the team progress report before the deadline.",
+    "deadline": "2026-11-24T23:59:00+07:00",
+    "estimated_hours": 3,
+    "source_platform": "Moodle",
+    "source_url": "https://courses.ctda.hcmus.edu.vn/"
+  },
+  {
+    "id": "event-workshop",
+    "title": "Career preparation workshop",
+    "type": "event",
+    "description": "CV review and interview preparation for science students.",
+    "location": {"room": "Giảng đường 1", "campus": "Nguyễn Văn Cừ (cơ sở 1)"},
+    "registration_end": "2026-11-21T17:00:00+07:00",
+    "start_time": "2026-11-23T14:00:00+07:00",
+    "end_time": "2026-11-23T16:00:00+07:00",
+    "training_points": 5,
+    "source_platform": "Phòng Công tác sinh viên",
+    "source_url": "https://ctsv.hcmus.edu.vn/"
+  },
+  {
+    "id": "event-volunteer",
+    "title": "Green Sunday volunteer activity",
+    "type": "event",
+    "description": "Community clean-up activity hosted by the Youth Union.",
+    "location": {"detail": "District 5, Ho Chi Minh City"},
+    "start_time": "2026-11-29T07:00:00+07:00",
+    "end_time": "2026-11-29T11:00:00+07:00",
+    "training_points": 8,
+    "source_platform": "Đoàn trường Khoa học tự nhiên",
+    "source_url": "https://www.facebook.com/DoanTruongKHTN/"
+  },
+  {
+    "id": "announcement-scholarship",
+    "title": "Scholarship application announcement",
+    "type": "announcement",
+    "description": "Review the eligibility requirements on the official page.",
+    "source_platform": "Trường đại học Khoa học tự nhiên",
+    "source_url": "https://hcmus.edu.vn/"
+  }
+]

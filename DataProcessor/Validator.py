@@ -10,7 +10,7 @@ class Validator:
     def __init__(self):
         self.TEXT_SIMILARITY_THRESHOLD = 0.6
         self.TASK_FIELDS = (
-            "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
+            "user_id", "start_time", "end_time", "deadline", "registration_start", "registration_end", "type"
         )
 
     @staticmethod

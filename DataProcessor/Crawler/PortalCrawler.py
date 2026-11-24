@@ -46,43 +46,20 @@ class PortalCrawler(PlaywrightCrawler):
     
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
-        if self.state is None:
-            self.state = {}
         
-        if page.url == self.login_url:
+        if page.url.startswith(self.login_url):
             # Fill in the login form and submit
             username = self.user.portal_username
             password = self.user.portal_password
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
+            page.locator('xpath=//*[@id="dnn_ctr_Login_DNN"]/div/div[3]/span[2]/span/span').click()
             page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
             
             # Manually enter the code from the email
-            try:
-                if APP_ROLE != "SERVER":
-                    page.wait_for_url(
-                        lambda url: url.startswith(self.home_url),
-                        timeout=120000
-                    )
-                else:
-                    page.wait_for_url(
-                        lambda url: url.startswith(self.home_url),
-                        timeout=30000
-                    )
-            except Exception as exc:
-                current_url = page.url
-                page_text = page.locator("body").inner_text(timeout=3000)
-                browser.close()
-                raise AssertionError(
-                    "Portal login failed before reaching the timetable page "
-                    f"(current URL: {current_url}). Page text: {page_text[:1000]}"
-                ) from exc
-            
-            if APP_ROLE == "SERVER":
-                self.state.update(context.storage_state())
-            else:
-                state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
-                self.state.update(context.storage_state(path=state_file))
+            page.wait_for_url(self.home_url, timeout=120_000)
+        
+            self.state = context.storage_state()
         browser.close()
     
     def browse_page(self, page):

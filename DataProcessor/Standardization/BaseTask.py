@@ -25,9 +25,9 @@ class TargetAudience(BaseModel):
 
 
 class Location(BaseModel):
-    room: str | Literal["Online"] | None = Field(
+    room: str | None = Field(
         default=None,
-        description="Phòng học, hội trường hoặc nền tảng trực tuyến (ví dụ: 'C.32', 'Giảng đường 1', 'Hội trường I', 'Online')"
+        description="Phòng học, hội trường hoặc liên kết/nền tảng trực tuyến (ví dụ: 'C.32', 'Giảng đường 1', 'Hội trường I', 'Google Meet', 'MS Teams')"
     )
     campus: Literal["Nguyễn Văn Cừ (cơ sở 1)", "Thủ Đức (cơ sở 2)"] | None = Field(
         default=None,

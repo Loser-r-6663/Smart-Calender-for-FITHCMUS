@@ -1,0 +1,2 @@
+"""NiceGUI page registration."""
+

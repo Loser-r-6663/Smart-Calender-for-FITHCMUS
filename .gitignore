@@ -1,7 +1,6 @@
 # User web state (cookies)
 State/
 History/
-data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -55,6 +54,7 @@ coverage.xml
 *.lcov
 .hypothesis/
 .pytest_cache/
+.nicegui/
 cover/
 
 # Translations
