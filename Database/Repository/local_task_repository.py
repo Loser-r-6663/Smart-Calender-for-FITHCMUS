@@ -82,7 +82,7 @@ class LocalTaskRepository:
             return []
 
         prepared_tasks = [self._ensure_task(t) for t in tasks]
-        rows = []
+        rows: list[dict] = []
         for task in prepared_tasks:
             data = task.model_dump(mode="json")
             values = {"id": task.id}

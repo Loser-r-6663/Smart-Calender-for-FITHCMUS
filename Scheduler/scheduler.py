@@ -5,9 +5,11 @@ from datetime import date, datetime, time as dt_time, timedelta, timezone
 from DataProcessor.Standardization.BaseTask import DateDayTime, Location
 from DataProcessor.Standardization.Task import Task
 
+from Database.Repository.local_task_repository import LocalTaskRepository
+
 VN_TZ = timezone(timedelta(hours=7))
 
-DEFAULT_DRL_CAPS: dict[str, int] = {
+DRL_CAPS: dict[str, int] = {
     "Articles 1": 30,  # Học tập & NCKH
     "Articles 2": 20,  # Kỷ luật, nội quy
     "Articles 3": 25,  # Hoạt động Đoàn - Hội, văn thể mỹ
@@ -62,18 +64,14 @@ class ProposedTaskInfo:
 class ScheduleResult:
     """Kết quả đầu ra của thuật toán lập lịch."""
     scheduled_tasks: list[Task]
-    unselected_tasks: list[ProposedTaskInfo]  # Sự kiện ĐRL hợp lệ nhưng không được chọn (trùng lịch / trần điểm)
+    unselected_tasks: list[ProposedTaskInfo]     # Sự kiện ĐRL hợp lệ nhưng không được chọn (trùng lịch / trần điểm)
     unschedulable_tasks: list[ProposedTaskInfo]  # Task thiếu thông tin bắt buộc, không đủ điều kiện xếp lịch
-    total_drl_gained: int
-    initial_drl: dict[str, int]
     final_drl: dict[str, int]
-    execution_time_seconds: float
-    nodes_explored: int
 
-    def print_timetable(self) -> None:
+    def print_timetable(self):
         """In thời khóa biểu tổng hợp trực quan theo ngày và báo cáo chi tiết."""
         print("\n" + "=" * 88)
-        print(f"LỊCH BIỂU TỔNG HỢP TUẦN (Tổng ĐRL đạt được: +{self.total_drl_gained}đ)")
+        print("LỊCH BIỂU TỔNG HỢP TUẦN")
         print(f"Điểm theo từng Điều: {self.final_drl}")
         print("=" * 88)
 
@@ -123,23 +121,10 @@ class ScheduleResult:
 # =============================================================================
 
 class BranchAndBoundScheduler:
-    def __init__(
-        self,
-        drl_caps: dict[str, int] | None = None,
-        max_total_drl: int = MAX_TOTAL_DRL,
-        campus_travel_minutes: int = 60,
-    ):
-        self.drl_caps = dict(drl_caps or DEFAULT_DRL_CAPS)
-        self.max_total_drl = max_total_drl
-        self.campus_travel_minutes = campus_travel_minutes
-
-    def schedule(
-        self,
-        tasks: list[Task],
-        initial_drl: dict[str, int] | None = None,
-    ) -> ScheduleResult:
-        start_time = time.perf_counter()
-
+    def __init__(self, database: LocalTaskRepository):
+        self.database = database
+ 
+    def schedule(self, tasks: list[Task], initial_drl: dict[str, int] = {}):        
         # Xác định tuần hiện tại (Thứ Hai -> Chủ Nhật) nhưng chỉ xếp từ thời điểm hiện tại trở đi.
         today = datetime.now(VN_TZ).date()
         week_start = today - timedelta(days=today.weekday())
@@ -147,8 +132,7 @@ class BranchAndBoundScheduler:
         week_start_dt = datetime.now(VN_TZ)
         week_end_dt = _to_vn_datetime(week_end, dt_time(23, 59, 59))
 
-        curr_drl = {cat: min(max(0, (initial_drl or {}).get(cat, 0)), cap) for cat, cap in self.drl_caps.items()}
-        base_drl = dict(curr_drl)
+        curr_drl = {cat: min(max(0, initial_drl.get(cat, 0)), cap) for cat, cap in DRL_CAPS.items()}
 
         # Mỗi lần chạy lại đều tính trạng thái mới từ kết quả hiện tại.
         # Chỉ trạng thái "rejected" do người dùng chủ động hủy mới được giữ nguyên.
@@ -176,7 +160,7 @@ class BranchAndBoundScheduler:
                 continue
 
             # -----------------------------------------------------------------
-            # 1.1. Xử lý Lịch cố định bắt buộc (Lớp học, Thi cử, Việc riêng bắt buộc)
+            # 1.1. Xử lý Lịch cố định bắt buộc (Lớp học, Việc riêng bắt buộc)
             # -----------------------------------------------------------------
             if task.type in ("class", "personal") or (task.compulsory and not task.flexible):
                 # Lịch học lặp lại theo thứ trong tuần (Recurrence class)
@@ -289,7 +273,7 @@ class BranchAndBoundScheduler:
             # -----------------------------------------------------------------
             if points > 0:
                 cat = task.training_point_category
-                if cat not in self.drl_caps:
+                if cat not in DRL_CAPS:
                     unschedulable_tasks.append(ProposedTaskInfo(
                         task=task, reason=f"Danh mục ĐRL không hợp lệ: {cat}"
                     ))
@@ -391,7 +375,7 @@ class BranchAndBoundScheduler:
         # ---------------------------------------------------------------------
         feasible_candidates.sort(key=lambda x: (not x.is_flexible, x.start, x.end))
         n_cand = len(feasible_candidates)
-        categories = sorted(self.drl_caps.keys())
+        categories = sorted(DRL_CAPS.keys())
 
         # Mảng next_compatible: chỉ số sự kiện tiếp theo không xung đột thời gian
         next_compatible = [n_cand] * n_cand
@@ -491,13 +475,13 @@ class BranchAndBoundScheduler:
             if not is_workload_feasible(cand_items):
                 continue
 
-            gap = min(self.drl_caps[ev.category] - greedy_pts[ev.category], self.max_total_drl - sum(greedy_pts.values()))
+            gap = min(DRL_CAPS[ev.category] - greedy_pts[ev.category], MAX_TOTAL_DRL - sum(greedy_pts.values()))
             gain = min(ev.points, gap)
             if gain > 0:
                 greedy_pts[ev.category] += gain
                 best_score += gain
                 best_selection.append((ev, gain))
-                if sum(greedy_pts.values()) >= self.max_total_drl:
+                if sum(greedy_pts.values()) >= MAX_TOTAL_DRL:
                     break
 
         nodes_explored = 0
@@ -513,23 +497,23 @@ class BranchAndBoundScheduler:
                 best_selection = list(current_selected)
                 best_duration = dur
 
-            if sum(current_pts.values()) >= self.max_total_drl or idx >= n_cand:
+            if sum(current_pts.values()) >= MAX_TOTAL_DRL or idx >= n_cand:
                 return
 
             # Cận trên (Upper Bound Bounding)
-            potential = sum(min(self.drl_caps[c] - current_pts[c], remaining_by_cat[c][idx]) for c in categories)
-            potential = min(potential, self.max_total_drl - sum(current_pts.values()))
+            potential = sum(min(DRL_CAPS[c] - current_pts[c], remaining_by_cat[c][idx]) for c in categories)
+            potential = min(potential, MAX_TOTAL_DRL - sum(current_pts.values()))
             if score + potential <= best_score:
                 return  # Cắt tỉa nhánh
 
             for i in range(idx, n_cand):
-                quick_pot = sum(min(self.drl_caps[c] - current_pts[c], remaining_by_cat[c][i]) for c in categories)
-                quick_pot = min(quick_pot, self.max_total_drl - sum(current_pts.values()))
+                quick_pot = sum(min(DRL_CAPS[c] - current_pts[c], remaining_by_cat[c][i]) for c in categories)
+                quick_pot = min(quick_pot, MAX_TOTAL_DRL - sum(current_pts.values()))
                 if score + quick_pot <= best_score:
                     break
 
                 ev = feasible_candidates[i]
-                gap = min(self.drl_caps[ev.category] - current_pts[ev.category], self.max_total_drl - sum(current_pts.values()))
+                gap = min(DRL_CAPS[ev.category] - current_pts[ev.category], MAX_TOTAL_DRL - sum(current_pts.values()))
                 gain = min(ev.points, gap)
                 if gain <= 0:
                     continue
@@ -640,9 +624,6 @@ class BranchAndBoundScheduler:
         scheduled_tasks: list[Task] = []
         for f in fixed_items:
             f.task.status = "scheduled"
-            if f.task.recurrence:
-                f.task.start_time = DateDayTime(date=f.start.date(), time=f.start.time())
-                f.task.end_time = DateDayTime(date=f.end.date(), time=f.end.time())
             scheduled_tasks.append(f.task)
 
         # Phân bổ slot cho Assignment
@@ -687,20 +668,16 @@ class BranchAndBoundScheduler:
         # Những sự kiện khả thi nhưng không được chọn trong quá trình tối ưu B&B
         for cand in feasible_candidates:
             if id(cand.task) not in selected_ev_tasks:
-                if curr_drl.get(cand.category, 0) >= self.drl_caps[cand.category]:
-                    r_msg = f"Đã đạt trần tối đa {self.drl_caps[cand.category]}đ của {cand.category}"
+                if curr_drl.get(cand.category, 0) >= DRL_CAPS[cand.category]:
+                    r_msg = f"Đã đạt trần tối đa {DRL_CAPS[cand.category]}đ của {cand.category}"
                 else:
                     r_msg = "Trùng giờ hoặc nhường chỗ cho sự kiện có lợi hơn về điểm/thời lượng"
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=r_msg))
 
-        exec_time = time.perf_counter() - start_time
+        self.database.save_tasks(tasks + scheduled_tasks)
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unselected_tasks=unselected_tasks,
             unschedulable_tasks=unschedulable_tasks,
-            total_drl_gained=sum(curr_drl[c] - base_drl[c] for c in categories),
-            initial_drl=base_drl,
-            final_drl=curr_drl,
-            execution_time_seconds=exec_time,
-            nodes_explored=nodes_explored,
+            final_drl=curr_drl
         )
