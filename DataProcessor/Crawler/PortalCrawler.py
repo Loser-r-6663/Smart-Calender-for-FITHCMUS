@@ -49,7 +49,7 @@ class PortalCrawler(PlaywrightCrawler):
         if self.state is None:
             self.state = {}
         
-        if page.url.startswith(self.login_url):
+        if page.url == self.login_url:
             # Fill in the login form and submit
             username = self.user.portal_username
             password = self.user.portal_password

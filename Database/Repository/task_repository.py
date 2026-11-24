@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Any
 import requests
 
 from DataProcessor.Standardization.BaseTask import DateDayTime
@@ -164,45 +163,18 @@ class TaskRepository(BaseSupabaseClient):
         self._raise(response)
         return response
 
-    def _get_task_rows(
-        self, params: dict[str, Any], limit: int | None
-    ) -> list[dict]:
-        if limit is not None and limit <= 0:
-            raise ValueError("limit must be greater than zero")
-
-        page_size = 1000
-        rows: list[dict] = []
-        offset = 0
-        while limit is None or len(rows) < limit:
-            request_limit = (
-                page_size
-                if limit is None
-                else min(page_size, limit - len(rows))
-            )
-            response = requests.get(
-                self.table_url,
-                params={
-                    **params,
-                    "limit": request_limit,
-                    "offset": offset,
-                },
-                headers=self.headers,
-                timeout=30,
-            )
-            self._raise(response)
-            page = response.json()
-            rows.extend(page)
-            if len(page) < request_limit:
-                break
-            offset += len(page)
-        return rows
-
-    def get_tasks(self, limit: int | None = 100) -> list[ExtractedTask]:
-        rows = self._get_task_rows(
-            {"select": "*", "order": "id.asc"},
-            limit,
+    def get_tasks(self, limit: int = 100) -> list[ExtractedTask]:
+        response = requests.get(
+            self.table_url,
+            params={
+                "select": "*",
+                "limit": limit,
+            },
+            headers=self.headers,
+            timeout=30,
         )
-        return [self.row_to_task(row) for row in rows]
+        self._raise(response)
+        return [self.row_to_task(row) for row in response.json()]
 
     def update_task(self, task_id: str, data: ExtractedTask | dict):
         if isinstance(data, ExtractedTask):
