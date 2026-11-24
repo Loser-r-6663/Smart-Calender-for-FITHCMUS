@@ -370,6 +370,10 @@ class BranchAndBoundScheduler:
         unselected_tasks: list[ProposedTaskInfo] = []
 
         for cand in candidate_items:
+            if cand.is_flexible:
+                feasible_candidates.append(cand)
+                continue
+
             conflict_reason: str | None = None
             for fix in fixed_items:
                 # Kiểm tra giao khoảng thời gian
@@ -381,15 +385,11 @@ class BranchAndBoundScheduler:
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=conflict_reason))
             else:
                 feasible_candidates.append(cand)
-            
-            if cand.is_flexible:
-                feasible_candidates.append(cand)
-                continue
 
         # ---------------------------------------------------------------------
         # BƯỚC 3: TIỀN XỬ LÝ CHO NHÁNH CẬN (PRECOMPUTE)
         # ---------------------------------------------------------------------
-        feasible_candidates.sort(key=lambda x: (x.is_flexible, x.start, x.end))
+        feasible_candidates.sort(key=lambda x: (not x.is_flexible, x.start, x.end))
         n_cand = len(feasible_candidates)
         categories = sorted(self.drl_caps.keys())
 
@@ -622,6 +622,20 @@ class BranchAndBoundScheduler:
                 return []
             return sessions
 
+        def _merge_contiguous_sessions(
+            sessions: list[tuple[datetime, datetime]]
+        ) -> list[tuple[datetime, datetime]]:
+            if not sessions:
+                return []
+            merged = [sessions[0]]
+            for st, et in sessions[1:]:
+                prev_st, prev_et = merged[-1]
+                if st == prev_et:
+                    merged[-1] = (prev_st, et)
+                else:
+                    merged.append((st, et))
+            return merged
+
         # Tổng hợp danh sách Task đã lên lịch
         scheduled_tasks: list[Task] = []
         for f in fixed_items:
@@ -633,12 +647,14 @@ class BranchAndBoundScheduler:
 
         # Phân bổ slot cho Assignment
         for wl in flexible_workloads:
-            sessions = allocate_slots(wl.start, wl.end, wl.estimated_hours)
+            sessions = _merge_contiguous_sessions(allocate_slots(wl.start, wl.end, wl.estimated_hours))
             if sessions:
-                wl.task.start_time = DateDayTime(date=sessions[0][0].date(), time=sessions[0][0].time())
-                wl.task.end_time = DateDayTime(date=sessions[-1][1].date(), time=sessions[-1][1].time())
-                wl.task.status = "scheduled"
-                scheduled_tasks.append(wl.task)
+                for idx_s, (s_st, s_et) in enumerate(sessions):
+                    target_task = wl.task if idx_s == 0 else wl.task.model_copy(deep=True)
+                    target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
+                    target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
+                    target_task.status = "scheduled"
+                    scheduled_tasks.append(target_task)
             else:
                 unschedulable_tasks.append(ProposedTaskInfo(
                     task=wl.task, reason="Không tìm thấy khung giờ rảnh phù hợp (08:00 - 21:00) trước hạn chót"
@@ -648,13 +664,15 @@ class BranchAndBoundScheduler:
         selected_ev_tasks = set()
         for ev, gain in best_selection:
             if ev.is_flexible:
-                sessions = allocate_slots(ev.start, ev.end, ev.estimated_hours)
+                sessions = _merge_contiguous_sessions(allocate_slots(ev.start, ev.end, ev.estimated_hours))
                 if sessions:
-                    ev.task.start_time = DateDayTime(date=sessions[0][0].date(), time=sessions[0][0].time())
-                    ev.task.end_time = DateDayTime(date=sessions[-1][1].date(), time=sessions[-1][1].time())
-                    ev.task.status = "scheduled"
+                    for idx_s, (s_st, s_et) in enumerate(sessions):
+                        target_task = ev.task if idx_s == 0 else ev.task.model_copy(deep=True)
+                        target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
+                        target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
+                        target_task.status = "scheduled"
+                        scheduled_tasks.append(target_task)
                     curr_drl[ev.category] += gain
-                    scheduled_tasks.append(ev.task)
                     selected_ev_tasks.add(id(ev.task))
                 else:
                     unselected_tasks.append(ProposedTaskInfo(
