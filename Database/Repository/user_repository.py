@@ -34,6 +34,7 @@ class UserRepository(BaseSupabaseClient):
             "moodle_status": bool(user.moodle_status),
             "portal_session": crypto.encrypt(user.portal_session),
             "portal_status": bool(user.portal_status),
+            "training_points": user.training_points,
         }
 
     @classmethod
@@ -47,6 +48,7 @@ class UserRepository(BaseSupabaseClient):
             "moodle_status": bool(row.get("moodle_status", False)),
             "portal_session": crypto.decrypt(row.get("portal_session")),
             "portal_status": bool(row.get("portal_status", False)),
+            "training_points": row.get("training_points", {}),
         }
         return User.model_validate(user_data)
 
@@ -67,11 +69,7 @@ class UserRepository(BaseSupabaseClient):
         response = requests.get(
             self.table_url,
             params={
-                "select": (
-                    "id,username,portal_username,portal_password,"
-                    "moodle_session,moodle_status,"
-                    "portal_session,portal_status"
-                ),
+                "select": "*",
                 "id": f"eq.{user_id}",
                 "limit": 1,
             },
@@ -86,10 +84,6 @@ class UserRepository(BaseSupabaseClient):
         if page_size <= 0:
             raise ValueError("page_size must be greater than zero")
 
-        select = (
-            "id,username,portal_username,portal_password,"
-            "moodle_session,moodle_status,portal_session,portal_status"
-        )
         users: list[User] = []
         offset = 0
 
@@ -97,7 +91,7 @@ class UserRepository(BaseSupabaseClient):
             response = requests.get(
                 self.table_url,
                 params={
-                    "select": select,
+                    "select": "*",
                     "limit": page_size,
                     "offset": offset,
                     "order": "id.asc",
@@ -141,6 +135,7 @@ class UserRepository(BaseSupabaseClient):
             if update_data.portal_session is not None:
                 payload["portal_session"] = crypto.encrypt(update_data.portal_session)
             payload["portal_status"] = bool(update_data.portal_status)
+            payload["training_points"] = update_data.training_points
         elif isinstance(update_data, dict):
             payload = dict(update_data)
 

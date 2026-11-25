@@ -35,7 +35,7 @@ class User(BaseModel):
         description="Trạng thái hợp lệ của session Portal"
     )
     training_points: dict[str, int] = Field(
-        default_factory={},
+        default_factory=dict,
         description="Điểm rèn luyện theo từng điều",
     )
 
