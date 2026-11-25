@@ -121,18 +121,34 @@ class ScheduleResult:
 # =============================================================================
 
 class BranchAndBoundScheduler:
-    def __init__(self, database: LocalTaskRepository):
+    def __init__(self, database: LocalTaskRepository | None = None):
         self.database = database
- 
-    def schedule(self, tasks: list[Task], initial_drl: dict[str, int] = {}):        
-        # Xác định tuần hiện tại (Thứ Hai -> Chủ Nhật) nhưng chỉ xếp từ thời điểm hiện tại trở đi.
-        today = datetime.now(VN_TZ).date()
+
+    def schedule(
+        self,
+        tasks: list[Task],
+        initial_drl: dict[str, int] | None = None,
+        *,
+        reference_time: datetime | None = None,
+        include_past_fixed_in_week: bool = False,
+    ) -> ScheduleResult:
+        # Xác định tuần lập lịch (Thứ Hai -> Chủ Nhật).
+        now_dt = reference_time or datetime.now(VN_TZ)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=VN_TZ)
+        today = now_dt.date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
-        week_start_dt = datetime.now(VN_TZ)
+        week_start_dt = now_dt
+        fixed_cutoff_dt = (
+            _to_vn_datetime(week_start, dt_time(0, 0, 0))
+            if include_past_fixed_in_week
+            else week_start_dt
+        )
         week_end_dt = _to_vn_datetime(week_end, dt_time(23, 59, 59))
 
-        curr_drl = {cat: min(max(0, initial_drl.get(cat, 0)), cap) for cat, cap in DRL_CAPS.items()}
+        seed_drl = initial_drl or {}
+        curr_drl = {cat: min(max(0, seed_drl.get(cat, 0)), cap) for cat, cap in DRL_CAPS.items()}
 
         # Mỗi lần chạy lại đều tính trạng thái mới từ kết quả hiện tại.
         # Chỉ trạng thái "rejected" do người dùng chủ động hủy mới được giữ nguyên.
@@ -186,7 +202,7 @@ class BranchAndBoundScheduler:
                         inst_date = week_start + timedelta(days=w_idx)
                         st = _to_vn_datetime(inst_date, task.start_time.time)
                         et = _to_vn_datetime(inst_date, task.end_time.time)
-                        if st < week_start_dt or et <= week_start_dt:
+                        if st < fixed_cutoff_dt or et <= fixed_cutoff_dt:
                             continue
                         overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                         if overlap:
@@ -220,7 +236,7 @@ class BranchAndBoundScheduler:
                     ))
                     continue
 
-                if st >= week_start_dt and et > week_start_dt and st < week_end_dt:
+                if st >= fixed_cutoff_dt and et > fixed_cutoff_dt and st < week_end_dt:
                     overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                     if overlap:
                         unschedulable_tasks.append(ProposedTaskInfo(
@@ -624,17 +640,33 @@ class BranchAndBoundScheduler:
         scheduled_tasks: list[Task] = []
         for f in fixed_items:
             f.task.status = "scheduled"
-            scheduled_tasks.append(f.task)
+            inst_task = f.task.model_copy(deep=True)
+            inst_task.start_time = DateDayTime(
+                date=f.start.date(),
+                day=f.task.start_time.day if f.task.start_time else None,
+                time=f.start.time(),
+            )
+            inst_task.end_time = DateDayTime(
+                date=f.end.date(),
+                day=f.task.end_time.day if f.task.end_time else None,
+                time=f.end.time(),
+            )
+            scheduled_tasks.append(inst_task)
 
         # Phân bổ slot cho Assignment
         for wl in flexible_workloads:
             sessions = _merge_contiguous_sessions(allocate_slots(wl.start, wl.end, wl.estimated_hours))
             if sessions:
+                wl.task.status = "scheduled"
+                base_id = wl.task.id or "flex"
                 for idx_s, (s_st, s_et) in enumerate(sessions):
-                    target_task = wl.task if idx_s == 0 else wl.task.model_copy(deep=True)
+                    target_task = wl.task.model_copy(deep=True)
+                    if len(sessions) > 1:
+                        target_task.id = f"{base_id}#s{idx_s + 1}"
                     target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
                     target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
                     target_task.status = "scheduled"
+                    target_task.flexible = True
                     scheduled_tasks.append(target_task)
             else:
                 unschedulable_tasks.append(ProposedTaskInfo(
@@ -647,11 +679,16 @@ class BranchAndBoundScheduler:
             if ev.is_flexible:
                 sessions = _merge_contiguous_sessions(allocate_slots(ev.start, ev.end, ev.estimated_hours))
                 if sessions:
+                    ev.task.status = "scheduled"
+                    base_id = ev.task.id or "flex-ev"
                     for idx_s, (s_st, s_et) in enumerate(sessions):
-                        target_task = ev.task if idx_s == 0 else ev.task.model_copy(deep=True)
+                        target_task = ev.task.model_copy(deep=True)
+                        if len(sessions) > 1:
+                            target_task.id = f"{base_id}#s{idx_s + 1}"
                         target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
                         target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
                         target_task.status = "scheduled"
+                        target_task.flexible = True
                         scheduled_tasks.append(target_task)
                     curr_drl[ev.category] += gain
                     selected_ev_tasks.add(id(ev.task))
@@ -662,7 +699,7 @@ class BranchAndBoundScheduler:
             else:
                 ev.task.status = "scheduled"
                 curr_drl[ev.category] += gain
-                scheduled_tasks.append(ev.task)
+                scheduled_tasks.append(ev.task.model_copy(deep=True))
                 selected_ev_tasks.add(id(ev.task))
 
         # Những sự kiện khả thi nhưng không được chọn trong quá trình tối ưu B&B
@@ -674,7 +711,8 @@ class BranchAndBoundScheduler:
                     r_msg = "Trùng giờ hoặc nhường chỗ cho sự kiện có lợi hơn về điểm/thời lượng"
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=r_msg))
 
-        self.database.save_tasks(tasks + scheduled_tasks)
+        if self.database is not None:
+            self.database.save_tasks(tasks)
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unselected_tasks=unselected_tasks,
