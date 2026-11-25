@@ -1,0 +1,1021 @@
+{
+  "version": 1,
+  "method": "keyword",
+  "inputs_sha256": {
+    "corpus.json": "d3ad4f8a19046e4f6e66ee4322061b44f099a33203f0e159558d6d9276c05e97",
+    "cases.json": "3012ee824e8576005b86934df0e2606d796ed00ef448286d01f40dc4f02cf0a7"
+  },
+  "matcher_sha256_lf": "8abb07e4fdecebd0f220ef8bbef496431363176d7558320638dd611dffd834b2",
+  "corpus_records": 14,
+  "case_counts": {
+    "exact_control": 3,
+    "paraphrase": 7,
+    "point_filter": 8,
+    "structured_filter": 1,
+    "unrelated": 4,
+    "visibility": 8
+  },
+  "paraphrase_retrieval": {
+    "tuning": {
+      "hits_at_three": 1,
+      "total": 3
+    },
+    "held-out": {
+      "hits_at_three": 0,
+      "total": 4
+    }
+  },
+  "unrelated_queries": {
+    "tuning": {
+      "false_hit_case_ids": [],
+      "false_hits": 0,
+      "total": 2
+    },
+    "held-out": {
+      "false_hit_case_ids": [],
+      "false_hits": 0,
+      "total": 2
+    },
+    "all": {
+      "false_hit_case_ids": [],
+      "false_hits": 0,
+      "total": 4
+    }
+  },
+  "correctness_violations": {
+    "visibility": [],
+    "point_filter": [],
+    "strict_boundary": [],
+    "controls": []
+  },
+  "cases": [
+    {
+      "case_id": "T-P01",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "hạn cuối đóng học phí",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "T-P02",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "tìm chỗ làm lập trình",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "T-P03",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "hiến máu cứu người",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "55555555-5555-4555-8555-555555555555"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-P01",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "học bổng",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "H-P02",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "luyện nói ngoại ngữ",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "44444444-4444-4444-8444-444444444444"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "H-P03",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "giữ gìn thiên nhiên",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ],
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": null
+        },
+        {
+          "key": [
+            "public",
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "H-P04",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "chuẩn bị thi toán",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        ]
+      ],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+          ],
+          "position": null
+        }
+      ]
+    },
+    {
+      "case_id": "T-X01",
+      "split": "tuning",
+      "kind": "exact_control",
+      "query": "Thời điểm hoàn tất nghĩa vụ tài chính",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 11,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "11111111-1111-4111-8111-111111111111"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-X01",
+      "split": "held-out",
+      "kind": "exact_control",
+      "query": "CSC10006",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 13,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-X02",
+      "split": "held-out",
+      "kind": "exact_control",
+      "query": "Quỹ tài trợ sinh viên xuất sắc",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 13,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "T-V01",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "T-V02",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 13,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-V01",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 12,
+      "expected_positions": []
+    },
+    {
+      "case_id": "H-V02",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 12,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-V03",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 13,
+      "expected_positions": []
+    },
+    {
+      "case_id": "H-V04",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "T-V03",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": [
+          "Moodle"
+        ]
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "H-V05",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "Quỹ tài trợ sinh viên xuất sắc",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 12,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "33333333-3333-4333-8333-333333333333"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "T-F01",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 1,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "88888888-8888-4888-8888-888888888888"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "T-F02",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "hit_count": 2,
+      "eligible_count": 2,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "88888888-8888-4888-8888-888888888888"
+          ],
+          "position": 1
+        },
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": 2
+        }
+      ]
+    },
+    {
+      "case_id": "H-F01",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "nhiều hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 1,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-F02",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "bé hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "44444444-4444-4444-8444-444444444444"
+        ],
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ],
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "99999999-9999-4999-8999-999999999999"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "44444444-4444-4444-8444-444444444444"
+        ],
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ]
+      ],
+      "hit_count": 4,
+      "eligible_count": 4,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "44444444-4444-4444-8444-444444444444"
+          ],
+          "position": 2
+        },
+        {
+          "key": [
+            "public",
+            "55555555-5555-4555-8555-555555555555"
+          ],
+          "position": 3
+        },
+        {
+          "key": [
+            "public",
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "position": 1
+        },
+        {
+          "key": [
+            "public",
+            "99999999-9999-4999-8999-999999999999"
+          ],
+          "position": 4
+        }
+      ]
+    },
+    {
+      "case_id": "T-F03",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "thiện nguyện 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 1,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "88888888-8888-4888-8888-888888888888"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "T-F04",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "thiện nguyện từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "hit_count": 2,
+      "eligible_count": 2,
+      "expected_positions": [
+        {
+          "key": [
+            "personal",
+            "88888888-8888-4888-8888-888888888888"
+          ],
+          "position": 1
+        },
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": 2
+        }
+      ]
+    },
+    {
+      "case_id": "H-F03",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "thiện nguyện nhiều hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 1,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "H-F04",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "thiện nguyện bé hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "99999999-9999-4999-8999-999999999999"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "99999999-9999-4999-8999-999999999999"
+        ]
+      ],
+      "hit_count": 2,
+      "eligible_count": 4,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "77777777-7777-4777-8777-777777777777"
+          ],
+          "position": 1
+        },
+        {
+          "key": [
+            "public",
+            "99999999-9999-4999-8999-999999999999"
+          ],
+          "position": 2
+        }
+      ]
+    },
+    {
+      "case_id": "H-S01",
+      "split": "held-out",
+      "kind": "structured_filter",
+      "query": "thiện nguyện từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "course": "COMMUNITY",
+        "deadline_start": "2026-11-26",
+        "deadline_end": "2026-11-27"
+      },
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "actual_top_three": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "hit_count": 1,
+      "eligible_count": 1,
+      "expected_positions": [
+        {
+          "key": [
+            "public",
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "position": 1
+        }
+      ]
+    },
+    {
+      "case_id": "T-U01",
+      "split": "tuning",
+      "kind": "unrelated",
+      "query": "động cơ tên lửa sao Hỏa",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "T-U02",
+      "split": "tuning",
+      "kind": "unrelated",
+      "query": "công thức nấu phở",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "H-U01",
+      "split": "held-out",
+      "kind": "unrelated",
+      "query": "khủng long kỷ Jura",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    },
+    {
+      "case_id": "H-U02",
+      "split": "held-out",
+      "kind": "unrelated",
+      "query": "dự báo bão ngoài biển",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "expected_relevant_keys": [],
+      "actual_top_three": [],
+      "hit_count": 0,
+      "eligible_count": 11,
+      "expected_positions": []
+    }
+  ]
+}

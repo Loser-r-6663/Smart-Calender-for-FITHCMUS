@@ -12,7 +12,7 @@ from .records import SearchRecord
 VN_TZ = timezone(timedelta(hours=7))
 TASK_TYPES = ("class", "assignment", "event", "announcement")
 SORTS = ("best_match", "soonest_deadline", "latest_deadline", "title")
-POINT_PREFIX = r"lớn hơn|nhỏ hơn|ít hơn|nhiều nhất|ít nhất|tối thiểu|tối đa|hơn|trên|dưới|từ|bằng"
+POINT_PREFIX = r"lớn hơn|nhiều hơn|nhỏ hơn|bé hơn|ít hơn|nhiều nhất|ít nhất|tối thiểu|tối đa|hơn|trên|dưới|từ|bằng"
 POINT_SUFFIX = r"trở lên|trở xuống"
 POINTS = re.compile(
     rf"(?<!\w)(?:(?P<prefix>{POINT_PREFIX})\s+)?(?P<number>[0-9]+)\s+"
@@ -99,11 +99,11 @@ def _interpret(query, filters):
     number = int(digits)
     comparison = (match["prefix"] or match["suffix"] or "bằng").casefold()
     # Integer points convert strict comparisons to inclusive bounds without clamping.
-    if comparison in ("bằng", "hơn", "lớn hơn", "trên", "từ", "ít nhất", "tối thiểu", "trở lên"):
-        minimum = number + (comparison in ("hơn", "lớn hơn", "trên"))
+    if comparison in ("bằng", "hơn", "lớn hơn", "nhiều hơn", "trên", "từ", "ít nhất", "tối thiểu", "trở lên"):
+        minimum = number + (comparison in ("hơn", "lớn hơn", "nhiều hơn", "trên"))
         filters["min_training_points"] = max(filters.get("min_training_points", 0), minimum)
-    if comparison in ("bằng", "ít hơn", "nhỏ hơn", "dưới", "nhiều nhất", "tối đa", "trở xuống"):
-        maximum = number - (comparison in ("ít hơn", "nhỏ hơn", "dưới"))
+    if comparison in ("bằng", "ít hơn", "nhỏ hơn", "bé hơn", "dưới", "nhiều nhất", "tối đa", "trở xuống"):
+        maximum = number - (comparison in ("ít hơn", "nhỏ hơn", "bé hơn", "dưới"))
         filters["max_training_points"] = min(filters.get("max_training_points", 100), maximum)
     _require(filters.get("min_training_points", 0) <= filters.get("max_training_points", 100),
              "Conflicting training-point constraints")

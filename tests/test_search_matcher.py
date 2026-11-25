@@ -48,9 +48,9 @@ class SearchMatcherTests(unittest.TestCase):
         comparisons = (
             (("5 {unit}", "bằng 5 {unit}"),
              {"min_training_points": 5, "max_training_points": 5}, [five], [five]),
-            (("hơn 5 {unit}", "lớn hơn 5 {unit}", "trên 5 {unit}"),
+            (("hơn 5 {unit}", "lớn hơn 5 {unit}", "nhiều hơn 5 {unit}", "trên 5 {unit}"),
              {"min_training_points": 6}, [seven], [seven]),
-            (("ít hơn 5 {unit}", "nhỏ hơn 5 {unit}", "dưới 5 {unit}"),
+            (("ít hơn 5 {unit}", "nhỏ hơn 5 {unit}", "bé hơn 5 {unit}", "dưới 5 {unit}"),
              {"max_training_points": 4}, [zero, four], [zero, four]),
             (("từ 5 {unit}", "ít nhất 5 {unit}", "tối thiểu 5 {unit}", "5 {unit} trở lên"),
              {"min_training_points": 5}, [five, seven], [five, seven]),
@@ -125,7 +125,9 @@ class SearchMatcherTests(unittest.TestCase):
                 self.assertEqual(selected, original)
         for query, selected in (
             ("hơn 5 điểm", {"max_training_points": 5}),
+            ("nhiều hơn 5 điểm", {"max_training_points": 5}),
             ("ít hơn 5 điểm", {"min_training_points": 5}),
+            ("bé hơn 5 điểm", {"min_training_points": 5}),
             ("tối đa 5 điểm", {"min_training_points": 7}),
         ):
             with self.subTest(query=query), self.assertRaisesRegex(SearchFilterError, "Conflicting"):
@@ -147,7 +149,7 @@ class SearchMatcherTests(unittest.TestCase):
                 result = search_records(records, query)
                 self.assertEqual(keys(result.hits), expected)
                 self.assertNotIn(key(5, "personal"), keys(result.eligible_records))
-        for query in ("ít hơn 0 điểm", "hơn 100 điểm"):
+        for query in ("ít hơn 0 điểm", "bé hơn 0 điểm", "hơn 100 điểm", "nhiều hơn 100 điểm"):
             with self.subTest(query=query), self.assertRaisesRegex(SearchFilterError, "Conflicting"):
                 search_records(records, query)
 
