@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import date
 from typing import Any
 
-from client.core.models import ClientUser, ConnectionStatus, SyncResult, TaskDraft
+from client.core.models import (
+    ClientUser,
+    ConnectionStatus,
+    ScheduleViewData,
+    SyncResult,
+    TaskDraft,
+)
 
 
 class AuthenticationError(ValueError):
@@ -52,6 +59,37 @@ class ClientBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def run_schedule(
+        self, user: ClientUser, week_anchor: date | None = None
+    ) -> ScheduleViewData:
+        """Run BranchAndBoundScheduler for the requested week and return view data."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_task_schedule_state(
+        self,
+        user: ClientUser,
+        task_id: str,
+        *,
+        status: str | None = None,
+        compulsory: bool | None = None,
+    ) -> SyncResult:
+        """Remove/restore a task from scheduling or toggle compulsory pinning."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_initial_drl(self, user: ClientUser) -> dict[str, int]:
+        """Return the user's baseline training points per Article."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def save_initial_drl(
+        self, user: ClientUser, points: dict[str, int]
+    ) -> SyncResult:
+        """Persist the user's baseline training points per Article."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         raise NotImplementedError
 
@@ -89,4 +127,3 @@ class ClientBackend(ABC):
     @abstractmethod
     async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
         raise NotImplementedError
-

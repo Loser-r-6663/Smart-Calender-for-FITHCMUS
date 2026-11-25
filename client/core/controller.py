@@ -60,31 +60,30 @@ def _parse_time(value: Any) -> time | None:
     return None
 
 
-def _weekly_time(value: Any) -> tuple[int, time] | None:
+def _weekly_time(value: Any) -> tuple[str, int, time | None] | None:
     day = _value(value, "day") if value is not None else None
     raw_time = _value(value, "time") if value is not None else None
     if raw_time is None and value is not None:
         raw_time = _value(value, "time_")
-    if day not in WEEKDAYS or raw_time is None:
+    if day not in WEEKDAYS:
         return None
-    parsed_time = _parse_time(raw_time)
-    if parsed_time is None:
-        return None
-    return WEEKDAYS[day], parsed_time
+    parsed_time = _parse_time(raw_time) if raw_time is not None else None
+    return day, WEEKDAYS[day], parsed_time
 
 
-def _location_label(value: Any) -> str | None:
+def _location_fields(value: Any) -> tuple[str | None, str | None, str | None]:
     if value is None:
-        return None
+        return None, None, None
     if isinstance(value, str):
-        return value
-    parts = [
-        _value(value, "room"),
-        _value(value, "campus"),
-        _value(value, "detail"),
-    ]
+        clean = value.strip() or None
+        return clean, clean, None
+    room = _value(value, "room")
+    campus = _value(value, "campus")
+    detail = _value(value, "detail")
+    parts = [room, campus, detail]
     compact = [str(part).strip() for part in parts if part]
-    return " · ".join(dict.fromkeys(compact)) or None
+    label = " · ".join(dict.fromkeys(compact)) or None
+    return label, room, campus
 
 
 class TaskMapper:
@@ -95,21 +94,51 @@ class TaskMapper:
         cls, record: Any, range_start: date, range_end: date
     ) -> list[CalendarItem]:
         task_id = str(_value(record, "id") or f"task-{id(record)}")
+        loc_label, room, campus = _location_fields(_value(record, "location"))
+        source = _value(record, "source_platform")
+        status = str(_value(record, "status") or "proposed")
+        raw_start = _value(record, "start_time")
+        raw_end = _value(record, "end_time")
+        weekly_start = _weekly_time(raw_start)
+        weekly_end = _weekly_time(raw_end)
+        kind = str(_value(record, "type") or "announcement")
+
+        recurrence = _value(record, "recurrence")
+        if recurrence is None:
+            recurrence = weekly_start is not None
+
+        compulsory = _value(record, "compulsory")
+        if compulsory is None:
+            compulsory = kind in {"class", "assignment", "personal"}
+
+        flexible = _value(record, "flexible")
+        if flexible is None:
+            flexible = kind == "assignment"
+
         common = {
             "task_id": task_id,
             "title": str(_value(record, "title") or "Untitled task"),
-            "kind": str(_value(record, "type") or "announcement"),
+            "kind": kind,
             "course": _value(record, "course"),
-            "location": _location_label(_value(record, "location")),
+            "location": loc_label,
+            "room": room,
+            "campus": campus,
             "description": _value(record, "description"),
             "points": _value(record, "training_points"),
-            "source": _value(record, "source_platform"),
+            "training_point_category": _value(record, "training_point_category"),
+            "estimated_hours": _value(record, "estimated_hours"),
+            "source": source,
             "source_url": _value(record, "source_url"),
-            "is_personal": bool(_value(record, "user_id")),
+            "is_personal": bool(
+                _value(record, "user_id") or source in {"Custom", "Portal", "Moodle"}
+            ),
+            "status": status,
+            "recurrence": bool(recurrence),
+            "weekday": weekly_start[0] if weekly_start else None,
+            "flexible": bool(flexible),
+            "compulsory": bool(compulsory),
         }
 
-        raw_start = _value(record, "start_time")
-        raw_end = _value(record, "end_time")
         exact_start = _parse_datetime(raw_start)
         exact_end = _parse_datetime(raw_end)
         deadline = _parse_datetime(_value(record, "deadline"))
@@ -125,11 +154,9 @@ class TaskMapper:
                 )
             ]
 
-        weekly_start = _weekly_time(raw_start)
-        weekly_end = _weekly_time(raw_end)
-        if weekly_start:
-            weekday, start_clock = weekly_start
-            end_clock = weekly_end[1] if weekly_end else None
+        if weekly_start and weekly_start[2] is not None:
+            _, weekday, start_clock = weekly_start
+            end_clock = weekly_end[2] if weekly_end else None
             current = range_start
             occurrences: list[CalendarItem] = []
             while current <= range_end:
@@ -178,6 +205,9 @@ class ClientController:
         )
         return weeks[0][0], weeks[-1][-1]
 
+    def week_anchor_date(self) -> date:
+        return date.today() + timedelta(days=7 * self.state.schedule_week_offset)
+
     async def load_month(self, month: date | None = None) -> None:
         if self.state.user is None:
             return
@@ -193,7 +223,32 @@ class ClientController:
                 for task in tasks
                 for item in TaskMapper.map_range(task, start, end)
             ]
-            self.select_date(self.state.selected_date)
+            if self.state.selected_item_id is None:
+                self.select_date(self.state.selected_date)
+        except Exception as exc:
+            self.state.error = str(exc)
+        finally:
+            self.state.loading = False
+
+    async def load_schedule(self, week_offset: int | None = None) -> None:
+        if self.state.user is None:
+            return
+        if week_offset is not None:
+            self.state.schedule_week_offset = week_offset
+        self.state.loading = True
+        self.state.error = None
+        try:
+            self.state.schedule = await self.backend.run_schedule(
+                self.state.user,
+                week_anchor=self.week_anchor_date(),
+            )
+            # Default to first non-empty review tab if current tab has 0 items
+            sched = self.state.schedule
+            if self.state.schedule_tab == "needs_info" and not sched.unschedulable:
+                if sched.unselected:
+                    self.state.schedule_tab = "suggestions"
+                elif sched.rejected_items:
+                    self.state.schedule_tab = "removed"
         except Exception as exc:
             self.state.error = str(exc)
         finally:
@@ -208,10 +263,15 @@ class ClientController:
         self.state.selected_item_id = item_id
 
     @property
+    def active_items(self) -> list[CalendarItem]:
+        """Calendar/Agenda items excluding tasks explicitly removed from schedule."""
+        return [item for item in self.state.items if item.status != "rejected"]
+
+    @property
     def filtered_items(self) -> list[CalendarItem]:
         kind = self.state.filters.kind
         query = self.state.filters.query.strip().casefold()
-        items = self.state.items
+        items = self.active_items
         if kind != "all":
             items = [item for item in items if item.kind == kind]
         if query:
@@ -229,12 +289,6 @@ class ClientController:
 
     @property
     def training_points_this_month(self) -> int:
-        """Temporary client-side total until the backend scheduler is integrated.
-
-        This sums point-bearing events already loaded by the client. Replace it
-        with the scheduler's authoritative monthly result once that service is
-        merged into the active backend and exposed through ClientBackend.
-        """
         month = self.state.visible_month
         return sum(
             item.points or 0
@@ -244,16 +298,25 @@ class ClientController:
 
     @property
     def training_points_overall(self) -> int:
-        """Temporary client-side total until the backend scheduler is integrated.
-
-        This is an aggregate of loaded event records, not an optimized or
-        expected score. Replace it with the scheduler response when available.
-        """
         return sum(item.points or 0 for item in self._unique_point_events())
+
+    @property
+    def scheduled_drl_total(self) -> int | None:
+        if self.state.schedule is None:
+            return None
+        return min(100, sum(self.state.schedule.final_drl.values()))
+
+    @property
+    def scheduled_drl_gain(self) -> int | None:
+        if self.state.schedule is None:
+            return None
+        base = sum(self.state.schedule.initial_drl.values())
+        final = sum(self.state.schedule.final_drl.values())
+        return max(0, final - base)
 
     def _unique_point_events(self) -> list[CalendarItem]:
         unique: dict[str, CalendarItem] = {}
-        for item in self.state.items:
+        for item in self.active_items:
             if item.kind == "event" and item.points:
                 unique.setdefault(item.task_id, item)
         return list(unique.values())
@@ -264,16 +327,46 @@ class ClientController:
             key=lambda item: item.start or item.deadline or datetime.max.replace(tzinfo=VN_TZ),
         )
 
+    def find_item_by_task_id(self, task_id: str) -> CalendarItem | None:
+        if self.state.schedule is not None:
+            for candidate in self._all_schedule_items():
+                if candidate.task_id == task_id and not candidate.is_allocated_session:
+                    return candidate
+        for candidate in self.state.items:
+            if candidate.task_id == task_id:
+                return candidate
+        if self.state.schedule is not None:
+            for candidate in self._all_schedule_items():
+                if candidate.task_id == task_id:
+                    return candidate
+        return None
+
+    def _all_schedule_items(self) -> list[CalendarItem]:
+        sched = self.state.schedule
+        if sched is None:
+            return []
+        return [
+            *sched.scheduled_items,
+            *(p.item for p in sched.unschedulable),
+            *(p.item for p in sched.unselected),
+            *sched.rejected_items,
+        ]
+
     @property
     def selected_item(self) -> CalendarItem | None:
-        return next(
-            (
-                item
-                for item in self.filtered_items
-                if item.id == self.state.selected_item_id
-            ),
-            None,
-        )
+        target = self.state.selected_item_id
+        if not target:
+            return None
+        for item in self.filtered_items:
+            if item.id == target:
+                return item
+        for item in self._all_schedule_items():
+            if item.id == target:
+                return item
+        for item in self.state.items:
+            if item.id == target or item.task_id == target:
+                return item
+        return None
 
     def set_filter(self, kind: str) -> None:
         self.state.filters.kind = kind
@@ -286,3 +379,5 @@ class ClientController:
     def set_view(self, view: str) -> None:
         self.state.view = view
 
+    def set_schedule_tab(self, tab: str) -> None:
+        self.state.schedule_tab = tab

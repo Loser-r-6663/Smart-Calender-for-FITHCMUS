@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from DataProcessor.Standardization.Task import Task
 from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
-from client.core.models import ClientUser, ConnectionStatus, SyncResult, TaskDraft
+from client.core.models import (
+    ClientUser,
+    ConnectionStatus,
+    ScheduleViewData,
+    SyncResult,
+    TaskDraft,
+)
+from client.core.schedule_service import (
+    apply_draft_to_task,
+    build_schedule_view_data,
+    normalize_drl,
+)
 from client.core.source_preferences import ALL_SOURCE_NAMES
 
 
@@ -22,6 +34,9 @@ class MockBackend(ClientBackend):
         self._last_sync: datetime | None = None
         self._disabled_sources: dict[str, set[str]] = {}
         self._manual_tasks: dict[str, list[dict[str, Any]]] = {}
+        self._task_overrides: dict[str, dict[str, dict[str, Any]]] = {}
+        self._deleted_ids: dict[str, set[str]] = {}
+        self._initial_drl: dict[str, dict[str, int]] = {}
         demo_user = ClientUser(
             id="demo-user",
             username="student",
@@ -38,7 +53,7 @@ class MockBackend(ClientBackend):
         self._personal_crawled: set[str] = {demo_user.id}
 
     async def login(self, username: str, password: str) -> ClientUser:
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.05)
         account = self._accounts.get(username.strip().lower())
         if account is None or account[0] != password:
             raise AuthenticationError("Incorrect username or password")
@@ -65,8 +80,7 @@ class MockBackend(ClientBackend):
         self._accounts[key] = (new_password, account[1])
         return SyncResult(ok=True, message="Password changed")
 
-    async def get_tasks(self, user: ClientUser) -> list[Any]:
-        await asyncio.sleep(0.15)
+    def _raw_user_records(self, user: ClientUser) -> list[dict[str, Any]]:
         tasks = json.loads(self.fixture_path.read_text(encoding="utf-8"))
         if user.id not in self._personal_crawled:
             tasks = [
@@ -75,66 +89,225 @@ class MockBackend(ClientBackend):
                 if task.get("source_platform") not in {"Portal", "Moodle"}
             ]
         tasks.extend(self._manual_tasks.get(user.id, []))
+        deleted = self._deleted_ids.get(user.id, set())
+        overrides = self._task_overrides.get(user.id, {})
+        merged: list[dict[str, Any]] = []
+        for record in tasks:
+            rec_id = str(record.get("id") or "")
+            if rec_id in deleted:
+                continue
+            if rec_id in overrides:
+                merged.append({**record, **overrides[rec_id]})
+            else:
+                merged.append(dict(record))
+        return merged
+
+    async def get_tasks(self, user: ClientUser) -> list[Any]:
+        await asyncio.sleep(0.05)
+        tasks = self._raw_user_records(user)
         disabled = await self.get_disabled_sources(user)
         return [task for task in tasks if task.get("source_platform") not in disabled]
 
     async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
         self._manual_tasks.setdefault(user.id, []).append(
             self._task_to_record(user, task)
         )
         return SyncResult(ok=True, message="Task created")
 
     @staticmethod
-    def _task_to_record(user: ClientUser, task: TaskDraft, task_id: str | None = None) -> dict[str, Any]:
-        return {
-            "id": task_id or str(uuid4()),
-            "user_id": user.id,
-            "title": task.title,
-            "type": task.kind,
-            "start_time": (
+    def _task_to_record(
+        user: ClientUser,
+        task: TaskDraft,
+        task_id: str | None = None,
+        existing: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        recurrence = bool(task.recurrence and task.weekday)
+        if recurrence:
+            start_payload: dict[str, Any] | None = {
+                "day": task.weekday,
+                "time": task.start_time.isoformat() if task.start_time else None,
+            }
+            end_payload: dict[str, Any] | None = (
+                {
+                    "day": task.weekday,
+                    "time": task.end_time.isoformat(),
+                }
+                if task.end_time
+                else None
+            )
+        else:
+            start_payload = (
                 {
                     "date": task.scheduled_date.isoformat(),
                     "time": task.start_time.isoformat() if task.start_time else None,
                 }
                 if task.scheduled_date
                 else None
-            ),
-            "end_time": (
+            )
+            end_payload = (
                 {
                     "date": task.scheduled_date.isoformat(),
                     "time": task.end_time.isoformat() if task.end_time else None,
                 }
                 if task.scheduled_date and task.end_time
                 else None
-            ),
+            )
+
+        location_payload: Any = None
+        if task.location or task.campus:
+            location_payload = {
+                "room": task.location,
+                "campus": task.campus,
+            }
+
+        source_platform = (
+            existing.get("source_platform", "Custom") if existing else "Custom"
+        )
+        source_url = (
+            task.source_url
+            if task.source_url is not None
+            else (existing.get("source_url", "") if existing else "")
+        )
+
+        return {
+            "id": task_id or str(uuid4()),
+            "user_id": existing.get("user_id", user.id) if existing else user.id,
+            "title": task.title,
+            "type": task.kind,
+            "start_time": start_payload,
+            "end_time": end_payload,
             "deadline": task.deadline.isoformat() if task.deadline else None,
             "course": task.course,
-            "location": task.location,
+            "location": location_payload,
             "description": task.description,
-            "source_url": task.source_url or "",
-            "source_platform": "Custom",
+            "source_url": source_url or "",
+            "source_platform": source_platform,
+            "estimated_hours": task.estimated_hours,
+            "training_points": task.training_points,
+            "training_point_category": (
+                None if task.training_points == 0 else task.training_point_category
+            ),
+            "recurrence": recurrence,
+            "flexible": task.flexible,
+            "compulsory": task.compulsory,
+            "status": (
+                existing.get("status", "proposed")
+                if existing and existing.get("status") == "rejected"
+                else "proposed"
+            ),
+            "user_modified": True,
         }
 
     async def update_task(
         self, user: ClientUser, task_id: str, task: TaskDraft
     ) -> SyncResult:
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
         records = self._manual_tasks.get(user.id, [])
         for index, record in enumerate(records):
             if record["id"] == task_id:
-                records[index] = self._task_to_record(user, task, task_id)
+                records[index] = self._task_to_record(user, task, task_id, record)
                 return SyncResult(ok=True, message="Task updated")
+
+        visible = {str(r.get("id")): r for r in self._raw_user_records(user)}
+        if task_id in visible:
+            self._task_overrides.setdefault(user.id, {})[task_id] = (
+                self._task_to_record(user, task, task_id, visible[task_id])
+            )
+            return SyncResult(ok=True, message="Task updated")
+
         return SyncResult(ok=False, message="Custom task was not found")
 
     async def delete_task(self, user: ClientUser, task_id: str) -> SyncResult:
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
         records = self._manual_tasks.get(user.id, [])
         for index, record in enumerate(records):
             if record["id"] == task_id:
                 del records[index]
+                self._task_overrides.get(user.id, {}).pop(task_id, None)
                 return SyncResult(ok=True, message="Task deleted")
+
+        visible_ids = {str(r.get("id")) for r in self._raw_user_records(user)}
+        if task_id in visible_ids:
+            self._deleted_ids.setdefault(user.id, set()).add(task_id)
+            self._task_overrides.get(user.id, {}).pop(task_id, None)
+            return SyncResult(ok=True, message="Task deleted")
+
         return SyncResult(ok=False, message="Custom task was not found")
+
+    async def run_schedule(
+        self, user: ClientUser, week_anchor: date | None = None
+    ) -> ScheduleViewData:
+        raw_records = await self.get_tasks(user)
+        task_models = [Task.from_any(rec) for rec in raw_records]
+        initial = await self.get_initial_drl(user)
+        view_data = build_schedule_view_data(
+            task_models,
+            initial_drl=initial,
+            database=None,
+            week_anchor=week_anchor,
+        )
+        overrides = self._task_overrides.setdefault(user.id, {})
+        manual_ids = {r["id"] for r in self._manual_tasks.get(user.id, [])}
+        for model in task_models:
+            if not model.id:
+                continue
+            if model.id in manual_ids:
+                for rec in self._manual_tasks.get(user.id, []):
+                    if rec["id"] == model.id:
+                        rec["status"] = model.status
+            elif model.id in overrides:
+                overrides[model.id]["status"] = model.status
+        return view_data
+
+    async def set_task_schedule_state(
+        self,
+        user: ClientUser,
+        task_id: str,
+        *,
+        status: str | None = None,
+        compulsory: bool | None = None,
+    ) -> SyncResult:
+        for record in self._manual_tasks.get(user.id, []):
+            if record["id"] == task_id:
+                if status is not None:
+                    record["status"] = status
+                if compulsory is not None:
+                    record["compulsory"] = compulsory
+                return SyncResult(ok=True, message=self._state_message(status, compulsory))
+
+        visible = {str(r.get("id")): r for r in self._raw_user_records(user)}
+        if task_id not in visible:
+            return SyncResult(ok=False, message="Task was not found")
+
+        patch = dict(self._task_overrides.setdefault(user.id, {}).get(task_id, {}))
+        if status is not None:
+            patch["status"] = status
+        if compulsory is not None:
+            patch["compulsory"] = compulsory
+            if compulsory and patch.get("status") == "rejected":
+                patch["status"] = "proposed"
+        self._task_overrides[user.id][task_id] = patch
+        return SyncResult(ok=True, message=self._state_message(status, compulsory))
+
+    @staticmethod
+    def _state_message(status: str | None, compulsory: bool | None) -> str:
+        if status == "rejected":
+            return "Removed from schedule"
+        if compulsory is True:
+            return "Pinned to schedule"
+        if status == "proposed":
+            return "Restored to schedule candidates"
+        return "Schedule preference updated"
+
+    async def get_initial_drl(self, user: ClientUser) -> dict[str, int]:
+        return normalize_drl(self._initial_drl.get(user.id))
+
+    async def save_initial_drl(
+        self, user: ClientUser, points: dict[str, int]
+    ) -> SyncResult:
+        self._initial_drl[user.id] = normalize_drl(points)
+        return SyncResult(ok=True, message="Training points baseline updated")
 
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         return ConnectionStatus(
@@ -181,7 +354,7 @@ class MockBackend(ClientBackend):
         self._disabled_sources[user.id] = set() if enabled else set(ALL_SOURCE_NAMES)
 
     async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
-        await asyncio.sleep(0.7)
+        await asyncio.sleep(0.4)
         disabled = await self.get_disabled_sources(user)
         status = await self.get_connection_status(user)
         enabled_personal_sources = {
@@ -214,4 +387,3 @@ class MockBackend(ClientBackend):
                 "personal items available"
             ),
         )
-
