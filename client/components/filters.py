@@ -12,6 +12,7 @@ FILTERS = (
     ("class", "Classes"),
     ("assignment", "Assignments"),
     ("event", "Events"),
+    ("personal", "Personal"),
     ("announcement", "Notices"),
 )
 
@@ -24,6 +25,10 @@ def render_filters(
     on_view: Callable[[str], None],
     on_search_result: Callable[[str], None],
 ) -> None:
+    needs_info_count = (
+        len(state.schedule.unschedulable) if state.schedule is not None else 0
+    )
+
     with ui.row().classes("filter-row items-center justify-between w-full"):
         with ui.row().classes("filter-group items-center gap-1"):
             for value, label in FILTERS:
@@ -69,6 +74,16 @@ def render_filters(
                 ).props("flat no-caps").classes(
                     "active" if state.view == "calendar" else ""
                 )
+                sched_btn = ui.button(
+                    "Schedule",
+                    icon="event_note",
+                    on_click=lambda: on_view("schedule"),
+                ).props("flat no-caps").classes(
+                    "active" if state.view == "schedule" else ""
+                )
+                if needs_info_count > 0:
+                    with sched_btn:
+                        ui.badge(str(needs_info_count)).classes("sched-warn-badge")
                 ui.button(
                     "Agenda",
                     icon="view_agenda",
@@ -76,4 +91,3 @@ def render_filters(
                 ).props("flat no-caps").classes(
                     "active" if state.view == "agenda" else ""
                 )
-
