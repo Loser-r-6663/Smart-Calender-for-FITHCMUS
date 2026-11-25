@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from DataProcessor.Standardization.BaseTask import DateDayTime, Location
 from DataProcessor.Standardization.Task import Task
-from Database.Repository.local_task_repository import LocalTaskRepository
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 from Scheduler.scheduler import BranchAndBoundScheduler, DRL_CAPS
 from client.core.models import (
     CalendarItem,
@@ -75,7 +74,7 @@ def apply_draft_to_task(
         compulsory = True
         flexible = True
 
-    source_platform = existing.source_platform if existing else "Custom"
+    source_platform = existing.source_platform if existing else None
     source_url = (
         draft.source_url
         if draft.source_url is not None
@@ -106,7 +105,6 @@ def apply_draft_to_task(
         status=status,
         compulsory=compulsory,
         flexible=flexible,
-        user_modified=True,
     )
 
 
@@ -119,7 +117,10 @@ def task_to_calendar_item(
     raw_id = task.id or str(uuid4())
     base_task_id = raw_id.split("#s")[0]
     is_allocated = "#s" in raw_id or (
-        task.flexible and task.status == "scheduled" and task.start_time is not None and task.start_time.time is not None
+        task.flexible
+        and task.status == "scheduled"
+        and task.start_time is not None
+        and task.start_time.time is not None
     )
 
     start_at: datetime | None = None
@@ -134,7 +135,9 @@ def task_to_calendar_item(
                 task.start_time.time or time.min,
                 tzinfo=VN_TZ,
             )
-    if task.end_time and (task.end_time.date or (task.start_time and task.start_time.date)):
+    if task.end_time and (
+        task.end_time.date or (task.start_time and task.start_time.date)
+    ):
         end_date = task.end_time.date or task.start_time.date
         if end_date and task.end_time.time:
             end_at = datetime.combine(end_date, task.end_time.time, tzinfo=VN_TZ)
@@ -145,10 +148,11 @@ def task_to_calendar_item(
     loc_parts = [p.strip() for p in (room, campus, detail) if p and p.strip()]
     loc_label = " · ".join(dict.fromkeys(loc_parts)) or None
 
+    display_source = task.source_platform or "Custom"
     personal_flag = (
         is_personal
         if is_personal is not None
-        else task.source_platform in {"Custom", "Portal", "Moodle"}
+        else task.source_platform in {None, "Custom", "Portal", "Moodle"}
     )
 
     return CalendarItem(
@@ -167,7 +171,7 @@ def task_to_calendar_item(
         points=task.training_points,
         training_point_category=task.training_point_category,
         estimated_hours=task.estimated_hours,
-        source=task.source_platform,
+        source=display_source,
         source_url=task.source_url or None,
         is_personal=personal_flag,
         status=task.status,
@@ -184,7 +188,7 @@ def build_schedule_view_data(
     tasks: list[Task],
     *,
     initial_drl: dict[str, int] | None = None,
-    database: LocalTaskRepository | None = None,
+    database: UserTaskStateRepository | None = None,
     week_anchor: date | None = None,
 ) -> ScheduleViewData:
     now = datetime.now(VN_TZ)

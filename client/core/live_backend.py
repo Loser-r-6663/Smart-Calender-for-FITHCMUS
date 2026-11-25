@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 from requests import HTTPError, RequestException
@@ -34,26 +33,36 @@ def _source_platform(task: Any) -> str | None:
     return getattr(task, "source_platform", None)
 
 
-def _is_full_task_record(task: Any) -> bool:
+def _has_id_and_type(task: Any) -> bool:
     if isinstance(task, dict):
-        return "type" in task and "title" in task
-    return hasattr(task, "type") and hasattr(task, "title")
+        return bool(task.get("id")) and "type" in task
+    return bool(getattr(task, "id", None)) and hasattr(task, "type")
 
 
 class LiveBackend(ClientBackend):
-    """Adapter over Supabase repositories + per-user SQLite schedule state."""
+    """Adapter over Supabase repositories (`tasks`, `user_task`, `user_task_state`)."""
 
-    def __init__(self, local_db_dir: str | Path | None = None) -> None:
-        self._local_db_dir = local_db_dir
+    def __init__(self) -> None:
         self._users: dict[str, Any] = {}
         self._access_tokens: dict[str, str] = {}
         self._crawl_locks: dict[str, asyncio.Lock] = {}
         self._disabled_sources: dict[str, set[str]] = {}
+        self._personal_tasks_by_id: dict[str, dict[str, Any]] = {}
+        self._public_tasks_by_id: dict[str, dict[str, Any]] = {}
+        self._merged_tasks_by_id: dict[str, dict[str, Any]] = {}
 
-    def _open_local_repo(self, user_id: str):
-        from Database.Repository.local_task_repository import LocalTaskRepository
+    def _state_repository(self, user: ClientUser):
+        from Database.Repository.user_task_state_repository import (
+            UserTaskStateRepository,
+        )
 
-        return LocalTaskRepository(user_id, database_dir=self._local_db_dir)
+        access_token = self._access_tokens.get(user.id)
+        if access_token is None:
+            return None
+        return UserTaskStateRepository(
+            access_token=access_token,
+            user_id=user.id,
+        )
 
     async def login(self, username: str, password: str) -> ClientUser:
         from Database.auth import sign_in
@@ -126,105 +135,169 @@ class LiveBackend(ClientBackend):
         self._access_tokens[user.id] = access_token
         return SyncResult(ok=True, message="Password changed")
 
-    def _sync_and_load_local_tasks(self, user_id: str, cloud_tasks: list[Any]) -> list[Any]:
-        from DataProcessor.Standardization.Task import Task
-
-        converted = [Task.from_any(item) for item in cloud_tasks]
-        with self._open_local_repo(user_id) as local_repo:
-            return local_repo.sync_external_tasks(converted)
-
     async def get_tasks(self, user: ClientUser) -> list[Any]:
+        from DataProcessor.Standardization.Task import Task
         from Database.Repository.task_repository import TaskRepository
         from Database.Repository.user_task_repository import UserTaskRepository
 
-        public_tasks = await asyncio.to_thread(TaskRepository().get_tasks, None)
+        public_tasks = list(await asyncio.to_thread(TaskRepository().get_tasks, None))
         access_token = self._access_tokens.get(user.id)
         if access_token is None:
-            tasks = list(public_tasks)
+            personal_tasks: list[Any] = []
         else:
-            personal_tasks = await asyncio.to_thread(
-                UserTaskRepository(
-                    access_token=access_token,
-                    user_id=user.id,
-                ).get_tasks,
-                None,
+            personal_tasks = list(
+                await asyncio.to_thread(
+                    UserTaskRepository(
+                        access_token=access_token,
+                        user_id=user.id,
+                    ).get_tasks,
+                    None,
+                )
             )
-            tasks = list(public_tasks) + list(personal_tasks)
 
-        if tasks and all(_is_full_task_record(t) for t in tasks):
-            tasks = await asyncio.to_thread(
-                self._sync_and_load_local_tasks, user.id, tasks
-            )
-        elif not tasks:
-            def _load_existing() -> list[Any]:
-                with self._open_local_repo(user.id) as local_repo:
-                    return local_repo.get_tasks(limit=None)
-
-            local_only = await asyncio.to_thread(_load_existing)
-            if local_only:
-                tasks = local_only
-
+        raw_combined = public_tasks + personal_tasks
         disabled = await self.get_disabled_sources(user)
-        return [task for task in tasks if _source_platform(task) not in disabled]
+
+        if not raw_combined or not all(_has_id_and_type(t) for t in raw_combined):
+            return [task for task in raw_combined if _source_platform(task) not in disabled]
+
+        self._public_tasks_by_id[user.id] = {
+            str(getattr(t, "id", None) or t["id"]): t for t in public_tasks
+        }
+        self._personal_tasks_by_id[user.id] = {
+            str(getattr(t, "id", None) or t["id"]): t for t in personal_tasks
+        }
+
+        state_repo = self._state_repository(user)
+        states: dict[str, dict[str, Any]] = {}
+        if state_repo is not None:
+            try:
+                states = await asyncio.to_thread(
+                    state_repo.get_task_states,
+                    raw_combined,
+                )
+            except (HTTPError, RequestException, ValueError):
+                logger.warning("Could not load user_task_state for %s", user.id)
+
+        merged: list[Task] = []
+        merged_map: dict[str, Task] = {}
+        for rec in raw_combined:
+            task = Task.from_any(rec)
+            if task.id and task.id in states:
+                task = Task.model_validate({**task.model_dump(), **states[task.id]})
+            if task.id:
+                merged_map[task.id] = task
+            if (task.source_platform or "Custom") not in disabled:
+                merged.append(task)
+
+        self._merged_tasks_by_id[user.id] = merged_map
+        return merged
 
     async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
         return await self._save_custom_task(user, task)
+
+    async def _persist_schedule_flags(
+        self,
+        user: ClientUser,
+        task_id: str,
+        draft: TaskDraft,
+        *,
+        status: str = "proposed",
+    ) -> None:
+        state_repo = self._state_repository(user)
+        if state_repo is None or not task_id:
+            return
+        local_task = apply_draft_to_task(draft, None, task_id=task_id)
+        local_task.status = status  # type: ignore[assignment]
+        try:
+            await asyncio.to_thread(state_repo.update_tasks, [local_task])
+        except (HTTPError, RequestException, ValueError):
+            logger.debug("Skipped user_task_state upsert for %s", task_id)
 
     async def update_task(
         self, user: ClientUser, task_id: str, task: TaskDraft
     ) -> SyncResult:
         from pydantic import ValidationError
 
-        access_token = self._access_tokens.get(user.id)
-        if access_token is None:
-            return SyncResult(ok=False, message="Sign in again before editing tasks")
-
-        def _get_local():
-            with self._open_local_repo(user.id) as local_repo:
-                return local_repo.get_task(task_id)
-
-        local_existing = await asyncio.to_thread(_get_local)
-        if local_existing is not None and local_existing.source_platform != "Custom":
-            try:
-                updated_model = apply_draft_to_task(
-                    task, local_existing, task_id=task_id
-                )
-
-                def _save_local() -> None:
-                    with self._open_local_repo(user.id) as local_repo:
-                        local_repo.save_tasks([updated_model])
-
-                await asyncio.to_thread(_save_local)
-                return SyncResult(ok=True, message="Task updated")
-            except (TypeError, ValidationError, ValueError):
-                logger.exception("Could not update local task %s for user %s", task_id, user.id)
-                return SyncResult(
-                    ok=False,
-                    message="Could not update the task. Check the fields and try again.",
-                )
-
         repository = self._custom_task_repository(user)
         if repository is None:
             return SyncResult(ok=False, message="Sign in again before editing tasks")
 
-        # For pure local-only types like 'personal' that already exist locally:
-        if local_existing is not None and task.kind == "personal":
-            updated_model = apply_draft_to_task(task, local_existing, task_id=task_id)
+        personal_map = self._personal_tasks_by_id.get(user.id, {})
+        public_map = self._public_tasks_by_id.get(user.id, {})
+        existing_merged = self._merged_tasks_by_id.get(user.id, {}).get(task_id)
+        kept_status = (
+            "rejected"
+            if existing_merged and existing_merged.status == "rejected"
+            else "proposed"
+        )
 
-            def _save_personal() -> None:
-                with self._open_local_repo(user.id) as local_repo:
-                    local_repo.save_tasks([updated_model])
-
-            await asyncio.to_thread(_save_personal)
+        # Case 1: Editing a personal crawled or null-source task in user_task
+        if task_id in personal_map and _source_platform(personal_map[task_id]) != "Custom":
+            orig_source = _source_platform(personal_map[task_id])
+            try:
+                extracted = self._task_model(
+                    user, task, source_platform=orig_source, strict_db=True
+                )
+                updated = await asyncio.to_thread(
+                    repository.update_owned_task,
+                    task_id,
+                    extracted,
+                )
+            except (RequestException, TypeError, ValidationError, ValueError):
+                logger.exception("Could not update personal task %s for %s", task_id, user.id)
+                return SyncResult(
+                    ok=False,
+                    message="Could not update the task. Check the fields and try again.",
+                )
+            if not updated:
+                return SyncResult(ok=False, message="Task was not found")
+            await self._persist_schedule_flags(user, task_id, task, status=kept_status)
             return SyncResult(ok=True, message="Task updated")
 
+        # Case 2: Editing/completing info on a shared public task -> create personal override & hide original
+        if task_id in public_map and task_id not in personal_map:
+            orig_pub = public_map[task_id]
+            orig_source = _source_platform(orig_pub)
+            try:
+                override_extracted = self._task_model(
+                    user, task, source_platform=orig_source, strict_db=True
+                )
+                response = await asyncio.to_thread(
+                    repository.save_tasks, [override_extracted]
+                )
+                created_id = self._extract_created_id(response)
+                if created_id:
+                    await self._persist_schedule_flags(
+                        user, created_id, task, status=kept_status
+                    )
+                await self.set_task_schedule_state(user, task_id, status="rejected")
+                return SyncResult(ok=True, message="Task updated")
+            except (RequestException, TypeError, ValidationError, ValueError):
+                logger.exception("Could not save override for public task %s", task_id)
+                return SyncResult(
+                    ok=False,
+                    message="Could not save task changes. Check the fields and try again.",
+                )
+
+        # Case 3: Custom task (or direct uncached task_id)
         try:
             extracted_task = self._task_model(user, task)
-            updated = await asyncio.to_thread(
-                repository.update_custom_task,
-                task_id,
-                extracted_task,
-            )
+            try:
+                updated = await asyncio.to_thread(
+                    repository.update_custom_task,
+                    task_id,
+                    extracted_task,
+                )
+            except HTTPError:
+                fallback_task = self._task_model(
+                    user, task, source_platform=None, strict_db=True
+                )
+                updated = await asyncio.to_thread(
+                    repository.update_owned_task,
+                    task_id,
+                    fallback_task,
+                )
         except (RequestException, TypeError, ValidationError, ValueError):
             logger.exception("Could not update custom task for user %s", user.id)
             return SyncResult(
@@ -233,26 +306,9 @@ class LiveBackend(ClientBackend):
             )
 
         if not updated:
-            if local_existing is not None:
-                updated_model = apply_draft_to_task(task, local_existing, task_id=task_id)
-
-                def _save_fallback() -> None:
-                    with self._open_local_repo(user.id) as local_repo:
-                        local_repo.save_tasks([updated_model])
-
-                await asyncio.to_thread(_save_fallback)
-                return SyncResult(ok=True, message="Task updated")
             return SyncResult(ok=False, message="Custom task was not found")
 
-        if local_existing is not None:
-            updated_model = apply_draft_to_task(task, local_existing, task_id=task_id)
-
-            def _sync_local() -> None:
-                with self._open_local_repo(user.id) as local_repo:
-                    local_repo.save_tasks([updated_model])
-
-            await asyncio.to_thread(_sync_local)
-
+        await self._persist_schedule_flags(user, task_id, task, status=kept_status)
         return SyncResult(ok=True, message="Task updated")
 
     async def delete_task(self, user: ClientUser, task_id: str) -> SyncResult:
@@ -260,34 +316,30 @@ class LiveBackend(ClientBackend):
         if repository is None:
             return SyncResult(ok=False, message="Sign in again before deleting tasks")
 
-        def _get_local():
-            with self._open_local_repo(user.id) as local_repo:
-                return local_repo.get_task(task_id)
+        personal_map = self._personal_tasks_by_id.get(user.id, {})
+        public_map = self._public_tasks_by_id.get(user.id, {})
+        state_repo = self._state_repository(user)
 
-        local_existing = await asyncio.to_thread(_get_local)
-        if local_existing is not None and local_existing.source_platform != "Custom":
-            def _delete_non_custom() -> None:
-                with self._open_local_repo(user.id) as local_repo:
-                    local_repo.mark_deleted(task_id)
-
-            await asyncio.to_thread(_delete_non_custom)
-            if local_existing.source_platform in {"Portal", "Moodle"}:
-                try:
-                    from DataProcessor.Standardization.ExtractedTask import ExtractedTask
-
-                    placeholder = ExtractedTask(
-                        id=task_id,
-                        user_id=user.id,
-                        title=local_existing.title,
-                        type="announcement",
-                        source_url=local_existing.source_url or "",
-                        source_platform=local_existing.source_platform,
-                        updated_at=local_existing.updated_at,
-                    )
-                    await asyncio.to_thread(repository.delete_tasks, [placeholder])
-                except Exception:
-                    logger.debug("Skipped remote personal delete for %s", task_id)
+        if task_id in personal_map and _source_platform(personal_map[task_id]) != "Custom":
+            try:
+                deleted = await asyncio.to_thread(
+                    repository.delete_owned_task,
+                    task_id,
+                )
+                if state_repo is not None:
+                    await asyncio.to_thread(state_repo.delete_task_states, [task_id])
+            except (RequestException, TypeError, ValueError):
+                logger.exception("Could not delete personal task %s", task_id)
+                return SyncResult(
+                    ok=False,
+                    message="Could not delete the task. Check the service and try again.",
+                )
+            if not deleted:
+                return SyncResult(ok=False, message="Task was not found")
             return SyncResult(ok=True, message="Task deleted")
+
+        if task_id in public_map and task_id not in personal_map:
+            return await self.set_task_schedule_state(user, task_id, status="rejected")
 
         try:
             deleted = await asyncio.to_thread(
@@ -302,22 +354,13 @@ class LiveBackend(ClientBackend):
             )
 
         if not deleted:
-            if local_existing is not None:
-                def _delete_local_only() -> None:
-                    with self._open_local_repo(user.id) as local_repo:
-                        local_repo.mark_deleted(task_id)
-
-                await asyncio.to_thread(_delete_local_only)
-                return SyncResult(ok=True, message="Task deleted")
             return SyncResult(ok=False, message="Custom task was not found")
 
-        if local_existing is not None:
-            def _cleanup_local() -> None:
-                with self._open_local_repo(user.id) as local_repo:
-                    local_repo.mark_deleted(task_id)
-
-            await asyncio.to_thread(_cleanup_local)
-
+        if state_repo is not None and task_id in personal_map:
+            try:
+                await asyncio.to_thread(state_repo.delete_task_states, [task_id])
+            except (HTTPError, RequestException, ValueError):
+                pass
         return SyncResult(ok=True, message="Task deleted")
 
     def _custom_task_repository(self, user: ClientUser) -> Any | None:
@@ -332,7 +375,21 @@ class LiveBackend(ClientBackend):
         )
 
     @staticmethod
-    def _task_model(user: ClientUser, task: TaskDraft) -> Any:
+    def _extract_created_id(response: Any) -> str | None:
+        if response is not None and hasattr(response, "json"):
+            rows = response.json()
+            if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                return str(rows[0].get("id") or "") or None
+        return None
+
+    @staticmethod
+    def _task_model(
+        user: ClientUser,
+        task: TaskDraft,
+        *,
+        source_platform: str | None = "Custom",
+        strict_db: bool = False,
+    ) -> Any:
         from datetime import datetime
         from zoneinfo import ZoneInfo
 
@@ -340,7 +397,28 @@ class LiveBackend(ClientBackend):
         from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 
         tz = ZoneInfo("Asia/Ho_Chi_Minh")
-        cloud_kind = "event" if task.kind == "personal" else task.kind
+        kind = task.kind
+        points = task.training_points
+        est_hours = task.estimated_hours
+
+        if not strict_db and kind == "personal":
+            kind = "event"
+        elif strict_db and kind == "event":
+            # Ensure compatibility with strict user_task event constraints on Supabase
+            if points is None and source_platform is None:
+                kind = "personal"
+            else:
+                if points is None:
+                    points = 0
+                if est_hours is None or est_hours <= 0:
+                    if task.start_time and task.end_time and task.end_time > task.start_time:
+                        delta_mins = (
+                            task.end_time.hour * 60 + task.end_time.minute
+                        ) - (task.start_time.hour * 60 + task.start_time.minute)
+                        est_hours = max(0.5, round(delta_mins / 60.0, 2))
+                    else:
+                        est_hours = 1.0
+
         if task.recurrence and task.weekday:
             start_dt = DateDayTime(day=task.weekday, time=task.start_time)
             end_dt = (
@@ -368,20 +446,20 @@ class LiveBackend(ClientBackend):
         return ExtractedTask(
             user_id=user.id,
             title=task.title,
-            type=cloud_kind,
+            type=kind,
             start_time=start_dt,
             end_time=end_dt,
             deadline=task.deadline,
             course=task.course,
             location=loc,
             description=task.description,
-            estimated_hours=task.estimated_hours,
-            training_points=task.training_points,
+            estimated_hours=est_hours,
+            training_points=points,
             training_point_category=(
-                None if task.training_points == 0 else task.training_point_category
+                None if points == 0 else task.training_point_category
             ),
             source_url=task.source_url or "",
-            source_platform="Custom",
+            source_platform=source_platform,  # type: ignore[arg-type]
             updated_at=datetime.now(tz),
         )
 
@@ -394,25 +472,26 @@ class LiveBackend(ClientBackend):
             return SyncResult(ok=False, message="Sign in again before creating a task")
 
         try:
-            extracted_task = self._task_model(user, task)
             repository = UserTaskRepository(
                 access_token=access_token,
                 user_id=user.id,
             )
-            response = await asyncio.to_thread(repository.save_tasks, [extracted_task])
-            created_id: str | None = None
-            if response is not None and hasattr(response, "json"):
-                rows = response.json()
-                if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-                    created_id = str(rows[0].get("id") or "") or None
+            extracted_task = self._task_model(user, task)
+            try:
+                response = await asyncio.to_thread(
+                    repository.save_tasks, [extracted_task]
+                )
+            except HTTPError:
+                fallback_task = self._task_model(
+                    user, task, source_platform=None, strict_db=True
+                )
+                response = await asyncio.to_thread(
+                    repository.save_tasks, [fallback_task]
+                )
+
+            created_id = self._extract_created_id(response)
             if created_id:
-                local_model = apply_draft_to_task(task, None, task_id=created_id)
-
-                def _save_created() -> None:
-                    with self._open_local_repo(user.id) as local_repo:
-                        local_repo.save_tasks([local_model])
-
-                await asyncio.to_thread(_save_created)
+                await self._persist_schedule_flags(user, created_id, task)
         except (RequestException, TypeError, ValidationError, ValueError):
             logger.exception("Could not save custom task for user %s", user.id)
             return SyncResult(
@@ -431,20 +510,19 @@ class LiveBackend(ClientBackend):
         task_models = [
             Task.from_any(item)
             for item in visible_tasks
-            if _is_full_task_record(item)
+            if _has_id_and_type(item) or isinstance(item, Task)
         ]
         initial = await self.get_initial_drl(user)
+        state_repo = self._state_repository(user)
 
-        def _execute() -> ScheduleViewData:
-            with self._open_local_repo(user.id) as local_repo:
-                return build_schedule_view_data(
-                    task_models,
-                    initial_drl=initial,
-                    database=local_repo,
-                    week_anchor=week_anchor,
-                )
-
-        return await asyncio.to_thread(_execute)
+        return await asyncio.to_thread(
+            lambda: build_schedule_view_data(
+                task_models,
+                initial_drl=initial,
+                database=state_repo,
+                week_anchor=week_anchor,
+            )
+        )
 
     async def set_task_schedule_state(
         self,
@@ -454,24 +532,35 @@ class LiveBackend(ClientBackend):
         status: str | None = None,
         compulsory: bool | None = None,
     ) -> SyncResult:
-        def _apply() -> bool:
-            with self._open_local_repo(user.id) as local_repo:
-                existing = local_repo.get_task(task_id)
-                if existing is None:
-                    return False
-                if status is not None:
-                    existing.status = status
-                if compulsory is not None:
-                    existing.compulsory = compulsory
-                    if compulsory and existing.status == "rejected":
-                        existing.status = "proposed"
-                existing.user_modified = True
-                local_repo.save_tasks([existing])
-                return True
+        state_repo = self._state_repository(user)
+        if state_repo is None:
+            return SyncResult(ok=False, message="Sign in again before updating schedule")
 
-        found = await asyncio.to_thread(_apply)
-        if not found:
-            return SyncResult(ok=False, message="Task was not found in local store")
+        if user.id not in self._merged_tasks_by_id:
+            await self.get_tasks(user)
+
+        existing = self._merged_tasks_by_id.get(user.id, {}).get(task_id)
+        if existing is None:
+            return SyncResult(ok=False, message="Task was not found")
+
+        updated = existing.model_copy(deep=True)
+        if status is not None:
+            updated.status = status  # type: ignore[assignment]
+        if compulsory is not None:
+            updated.compulsory = compulsory
+            if compulsory and updated.status == "rejected":
+                updated.status = "proposed"
+
+        try:
+            await asyncio.to_thread(state_repo.update_tasks, [updated])
+            self._merged_tasks_by_id.setdefault(user.id, {})[task_id] = updated
+        except (HTTPError, RequestException, ValueError):
+            logger.exception("Could not update user_task_state for %s", task_id)
+            return SyncResult(
+                ok=False,
+                message="Could not save schedule state. Make sure user_task.sql migration has been applied.",
+            )
+
         if status == "rejected":
             return SyncResult(ok=True, message="Removed from schedule")
         if compulsory is True:

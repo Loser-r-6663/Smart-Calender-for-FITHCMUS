@@ -95,7 +95,13 @@ class TaskMapper:
     ) -> list[CalendarItem]:
         task_id = str(_value(record, "id") or f"task-{id(record)}")
         loc_label, room, campus = _location_fields(_value(record, "location"))
-        source = _value(record, "source_platform")
+        raw_source = _value(record, "source_platform")
+        is_personal = bool(
+            _value(record, "user_id")
+            or raw_source in {"Custom", "Portal", "Moodle"}
+            or (raw_source is None and not isinstance(record, dict))
+        )
+        source = raw_source or ("Custom" if is_personal else None)
         status = str(_value(record, "status") or "proposed")
         raw_start = _value(record, "start_time")
         raw_end = _value(record, "end_time")
@@ -129,9 +135,7 @@ class TaskMapper:
             "estimated_hours": _value(record, "estimated_hours"),
             "source": source,
             "source_url": _value(record, "source_url"),
-            "is_personal": bool(
-                _value(record, "user_id") or source in {"Custom", "Portal", "Moodle"}
-            ),
+            "is_personal": is_personal,
             "status": status,
             "recurrence": bool(recurrence),
             "weekday": weekly_start[0] if weekly_start else None,

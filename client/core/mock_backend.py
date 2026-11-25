@@ -50,7 +50,7 @@ class MockBackend(ClientBackend):
         self._portal_connected: set[str] = {demo_user.id}
         self._moodle_configured: set[str] = {demo_user.id}
         self._moodle_connected: set[str] = {demo_user.id}
-        self._personal_crawled: set[str] = {demo_user.id}
+        self._awaiting_personal_crawl: set[str] = set()
 
     async def login(self, username: str, password: str) -> ClientUser:
         await asyncio.sleep(0.05)
@@ -68,6 +68,7 @@ class MockBackend(ClientBackend):
             raise RegistrationError("Username is already taken.")
         user = ClientUser(id=f"mock-{key}", username=clean_username)
         self._accounts[key] = (password, user)
+        self._awaiting_personal_crawl.add(user.id)
         return user
 
     async def change_password(
@@ -82,7 +83,7 @@ class MockBackend(ClientBackend):
 
     def _raw_user_records(self, user: ClientUser) -> list[dict[str, Any]]:
         tasks = json.loads(self.fixture_path.read_text(encoding="utf-8"))
-        if user.id not in self._personal_crawled:
+        if user.id in self._awaiting_personal_crawl:
             tasks = [
                 task
                 for task in tasks
@@ -376,7 +377,7 @@ class MockBackend(ClientBackend):
             task.get("source_platform") in enabled_personal_sources
             for task in tasks
         )
-        self._personal_crawled.add(user.id)
+        self._awaiting_personal_crawl.discard(user.id)
         if "Portal" in enabled_personal_sources:
             self._portal_connected.add(user.id)
         self._last_sync = datetime.now().astimezone()

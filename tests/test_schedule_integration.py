@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, time, timedelta
-from pathlib import Path
 
 from DataProcessor.Standardization.BaseTask import DateDayTime
 from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
@@ -25,10 +24,9 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
         user = await controller.login("student", "demo")
 
         next_monday = _next_week_anchor()
-        event_day = next_monday + timedelta(days=2)  # Wednesday next week
-        due_day = next_monday + timedelta(days=4)    # Friday next week
+        event_day = next_monday + timedelta(days=2)
+        due_day = next_monday + timedelta(days=4)
 
-        # 1. Create an incomplete event (missing DRL category) -> lands in Needs Info
         await backend.create_task(
             user,
             TaskDraft(
@@ -40,7 +38,6 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
                 training_points=6,
             ),
         )
-        # 2. Create a flexible assignment -> auto-allocated into daytime slots
         await backend.create_task(
             user,
             TaskDraft(
@@ -58,17 +55,14 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
         sched = controller.state.schedule
         assert sched is not None
 
-        # Recurring classes + allocated assignment should be scheduled
         scheduled_titles = [it.title for it in sched.scheduled_items]
         assert "CSC10001 · Computational Thinking" in scheduled_titles
         assert "Write CT report" in scheduled_titles
 
-        # Incomplete seminar is flagged in unschedulable (Needs Info)
         unsched_map = {p.item.title: p for p in sched.unschedulable}
         assert "AI Seminar without category" in unsched_map
         seminar_id = unsched_map["AI Seminar without category"].item.task_id
 
-        # 3. Complete missing info (add Articles 1 + estimated_hours)
         upd = await backend.update_task(
             user,
             seminar_id,
@@ -91,14 +85,12 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
         assert any(it.task_id == seminar_id for it in sched.scheduled_items)
         assert sched.final_drl["Articles 1"] == 6
 
-        # 4. Baseline DRL caps gain accurately (28 existing + 6 event -> capped at 30)
         await backend.save_initial_drl(user, {"Articles 1": 28})
         await controller.load_schedule(week_offset=1)
         assert controller.state.schedule is not None
         assert controller.state.schedule.final_drl["Articles 1"] == 30
         assert controller.scheduled_drl_gain == 2
 
-        # 5. Remove task from schedule (status='rejected') without deleting
         rem = await backend.set_task_schedule_state(
             user, seminar_id, status="rejected"
         )
@@ -111,7 +103,6 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
         assert any(it.task_id == seminar_id for it in sched.rejected_items)
         assert not any(it.task_id == seminar_id for it in controller.active_items)
 
-        # 6. Restore task back to schedule
         res = await backend.set_task_schedule_state(
             user, seminar_id, status="proposed"
         )
@@ -123,7 +114,6 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
             for it in controller.state.schedule.scheduled_items
         )
 
-        # 7. Permanently delete crawled fixture task ('class-ct')
         del_res = await backend.delete_task(user, "class-ct")
         assert del_res.ok is True
         await controller.load_month(next_monday)
@@ -137,8 +127,8 @@ def test_mock_schedule_complete_info_remove_restore_and_delete() -> None:
     asyncio.run(scenario())
 
 
-def test_live_backend_persists_crawled_task_edits_and_deletions_across_syncs(
-    monkeypatch, tmp_path: Path
+def test_live_backend_uses_user_task_state_and_supabase_overrides(
+    monkeypatch,
 ) -> None:
     from DataProcessor.Standardization.User import User
 
@@ -150,30 +140,46 @@ def test_live_backend_persists_crawled_task_edits_and_deletions_across_syncs(
         username="student@hcmus.edu.vn",
         training_points={"Articles 3": 10},
     )
-    crawled_assignment = ExtractedTask(
-        id="moodle-hw-1",
-        user_id="live-user-1",
-        title="Moodle Homework Missing Hours",
-        type="assignment",
-        deadline=datetime.combine(due_day, time(23, 0), tzinfo=VN_TZ),
-        estimated_hours=None,
-        source_url="https://courses.ctda.hcmus.edu.vn/mod/assign/1",
-        source_platform="Moodle",
-        updated_at=datetime.now(VN_TZ),
-    )
-    public_event = ExtractedTask(
-        id="osa-ev-1",
-        title="OSA Youth Seminar",
-        type="event",
-        start_time=DateDayTime(date=next_monday + timedelta(days=1), time=time(14, 0)),
-        end_time=DateDayTime(date=next_monday + timedelta(days=1), time=time(16, 0)),
-        training_points=5,
-        training_point_category="Articles 3",
-        estimated_hours=2.0,
-        source_url="https://ctsv.hcmus.edu.vn/ev1",
-        source_platform="Phòng Công tác sinh viên",
-        updated_at=datetime.now(VN_TZ),
-    )
+    personal_store: dict[str, ExtractedTask] = {
+        "moodle-hw-1": ExtractedTask(
+            id="moodle-hw-1",
+            user_id="live-user-1",
+            title="Moodle Homework Missing Hours",
+            type="assignment",
+            deadline=datetime.combine(due_day, time(23, 0), tzinfo=VN_TZ),
+            estimated_hours=None,
+            source_url="https://courses.ctda.hcmus.edu.vn/mod/assign/1",
+            source_platform="Moodle",
+            updated_at=datetime.now(VN_TZ),
+        ),
+        "null-custom-1": ExtractedTask(
+            id="null-custom-1",
+            user_id="live-user-1",
+            title="Migrated personal task",
+            type="personal",
+            start_time=DateDayTime(date=next_monday, time=time(15, 0)),
+            end_time=DateDayTime(date=next_monday, time=time(16, 30)),
+            source_url="",
+            source_platform=None,
+            updated_at=datetime.now(VN_TZ),
+        ),
+    }
+    public_store: dict[str, ExtractedTask] = {
+        "osa-ev-1": ExtractedTask(
+            id="osa-ev-1",
+            title="OSA Youth Seminar",
+            type="event",
+            start_time=DateDayTime(date=next_monday + timedelta(days=1), time=time(14, 0)),
+            end_time=DateDayTime(date=next_monday + timedelta(days=1), time=time(16, 0)),
+            training_points=5,
+            training_point_category="Articles 3",
+            estimated_hours=2.0,
+            source_url="https://ctsv.hcmus.edu.vn/ev1",
+            source_platform="Phòng Công tác sinh viên",
+            updated_at=datetime.now(VN_TZ),
+        )
+    }
+    state_store: dict[str, dict[str, bool | str]] = {}
 
     monkeypatch.setattr(
         "Database.auth.sign_in",
@@ -181,28 +187,73 @@ def test_live_backend_persists_crawled_task_edits_and_deletions_across_syncs(
     )
     monkeypatch.setattr(
         "Database.Repository.task_repository.TaskRepository.get_tasks",
-        lambda self, limit=None: [public_event],
+        lambda self, limit=None: list(public_store.values()),
     )
     monkeypatch.setattr(
         "Database.Repository.user_task_repository.UserTaskRepository.get_tasks",
-        lambda self, limit=None: [crawled_assignment],
+        lambda self, limit=None: list(personal_store.values()),
+    )
+
+    def update_owned(self, task_id: str, task: ExtractedTask) -> bool:
+        if task_id not in personal_store:
+            return False
+        task.id = task_id
+        personal_store[task_id] = task
+        return True
+
+    def delete_owned(self, task_id: str) -> bool:
+        return personal_store.pop(task_id, None) is not None
+
+    monkeypatch.setattr(
+        "Database.Repository.user_task_repository.UserTaskRepository.update_owned_task",
+        update_owned,
     )
     monkeypatch.setattr(
-        "Database.Repository.user_task_repository.UserTaskRepository.delete_tasks",
-        lambda self, tasks: None,
+        "Database.Repository.user_task_repository.UserTaskRepository.delete_owned_task",
+        delete_owned,
+    )
+    monkeypatch.setattr(
+        "Database.Repository.user_task_state_repository.UserTaskStateRepository.get_task_states",
+        lambda self, tasks: {
+            t.id: dict(state_store[t.id])
+            for t in tasks
+            if getattr(t, "id", None) in state_store
+        },
+    )
+
+    def upsert_states(self, tasks):
+        for t in tasks:
+            state_store[t.id] = {
+                "recurrence": t.recurrence,
+                "status": t.status,
+                "compulsory": t.compulsory,
+                "flexible": t.flexible,
+            }
+
+    monkeypatch.setattr(
+        "Database.Repository.user_task_state_repository.UserTaskStateRepository.update_tasks",
+        upsert_states,
+    )
+    monkeypatch.setattr(
+        "Database.Repository.user_task_state_repository.UserTaskStateRepository.delete_task_states",
+        lambda self, ids: [state_store.pop(i, None) for i in ids],
     )
 
     async def scenario() -> None:
-        backend = LiveBackend(local_db_dir=tmp_path)
+        backend = LiveBackend()
         user = await backend.login("student@hcmus.edu.vn", "secret123")
 
-        # Initial schedule: Moodle homework lacks estimated_hours -> unschedulable
+        # 1. Initial schedule: Moodle homework lacks estimated_hours -> unschedulable;
+        # migrated null-source 'personal' task & OSA event are scheduled!
         sched1 = await backend.run_schedule(user, week_anchor=next_monday)
         assert any(p.item.task_id == "moodle-hw-1" for p in sched1.unschedulable)
+        assert any(it.task_id == "null-custom-1" for it in sched1.scheduled_items)
         assert any(it.task_id == "osa-ev-1" for it in sched1.scheduled_items)
-        assert sched1.final_drl["Articles 3"] == 15  # 10 baseline + 5 event
+        assert sched1.final_drl["Articles 3"] == 15
+        assert state_store["osa-ev-1"]["status"] == "scheduled"
+        assert state_store["moodle-hw-1"]["status"] == "proposed"
 
-        # User completes missing estimated_hours on crawled Moodle task
+        # 2. Complete missing estimated_hours on personal Moodle task in user_task
         upd = await backend.update_task(
             user,
             "moodle-hw-1",
@@ -217,15 +268,25 @@ def test_live_backend_persists_crawled_task_edits_and_deletions_across_syncs(
         )
         assert upd.ok is True
 
-        # Re-run schedule: cloud still returns estimated_hours=None, but user_modified wins!
         sched2 = await backend.run_schedule(user, week_anchor=next_monday)
         assert not any(p.item.task_id == "moodle-hw-1" for p in sched2.unschedulable)
         assert any(it.task_id == "moodle-hw-1" for it in sched2.scheduled_items)
 
-        # Permanently delete public crawled event -> stays deleted on next sync
-        deleted = await backend.delete_task(user, "osa-ev-1")
-        assert deleted.ok is True
+        # 3. Remove public event from schedule via user_task_state ('rejected')
+        rem = await backend.set_task_schedule_state(
+            user, "osa-ev-1", status="rejected"
+        )
+        assert rem.ok is True
+        assert state_store["osa-ev-1"]["status"] == "rejected"
+
         sched3 = await backend.run_schedule(user, week_anchor=next_monday)
         assert not any(it.task_id == "osa-ev-1" for it in sched3.scheduled_items)
+        assert any(it.task_id == "osa-ev-1" for it in sched3.rejected_items)
+
+        # 4. Delete owned Moodle task -> removed from user_task & user_task_state
+        deleted = await backend.delete_task(user, "moodle-hw-1")
+        assert deleted.ok is True
+        assert "moodle-hw-1" not in personal_store
+        assert "moodle-hw-1" not in state_store
 
     asyncio.run(scenario())
