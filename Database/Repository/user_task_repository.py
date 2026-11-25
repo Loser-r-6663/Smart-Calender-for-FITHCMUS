@@ -52,12 +52,38 @@ class UserTaskRepository(TaskRepository):
         rows = self._get_task_rows(params, limit)
         return [self.row_to_task(row) for row in rows]
 
-    def pop_tasks(self, limit: int | None = 100) -> list[ExtractedTask]:
-        """Get tasks for this user, then delete and return them."""
-        tasks = self.get_tasks(limit=limit)
-        if tasks:
-            self.delete_tasks(tasks)
-        return tasks
+    def update_owned_task(self, task_id: str, task: ExtractedTask) -> bool:
+        if not self.user_id:
+            raise ValueError("user_id is required to update a personal task")
+
+        response = requests.patch(
+            self.table_url,
+            params={
+                "id": f"eq.{task_id}",
+                "user_id": f"eq.{self.user_id}",
+            },
+            headers=self.headers,
+            json=self.task_to_row(task, user_id=self.user_id),
+            timeout=30,
+        )
+        self._raise(response)
+        return bool(response.json())
+
+    def delete_owned_task(self, task_id: str) -> bool:
+        if not self.user_id:
+            raise ValueError("user_id is required to delete a personal task")
+
+        response = requests.delete(
+            self.table_url,
+            params={
+                "id": f"eq.{task_id}",
+                "user_id": f"eq.{self.user_id}",
+            },
+            headers=self.headers,
+            timeout=30,
+        )
+        self._raise(response)
+        return bool(response.json())
 
     def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]

@@ -119,7 +119,7 @@ class Task(BaseTask):
         "Đoàn khoa - Liên chi hội khoa Vật lý",
         "Facebook Khoa Công nghệ thông tin",
         "Custom",
-    ] = "Custom"
+    ] | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(VN_ZONE))
     recurrence: bool = Field(default=False, description="Task có thời gian lặp lại hay không")
     status: Literal["scheduled", "proposed", "rejected"] = Field(
@@ -127,7 +127,6 @@ class Task(BaseTask):
     )
     compulsory: bool = Field(default=False, description="Task có bắt buộc phải lên lịch hay không")
     flexible: bool = Field(default=False, description="Task có thời gian linh hoạt hay không")
-    user_modified: bool = Field(default=False, description="Task đã được người dùng chỉnh sửa cục bộ")
 
     @model_validator(mode="after")
     def validate_event(self):
@@ -171,9 +170,12 @@ class Task(BaseTask):
         if kind not in {"class", "assignment", "announcement", "event", "personal"}:
             kind = "announcement"
 
-        platform = str(record.get("source_platform") or "Custom")
-        if platform not in VALID_PLATFORMS:
-            platform = "Custom"
+        raw_platform = record.get("source_platform")
+        if raw_platform is None:
+            platform = None
+        else:
+            platform_str = str(raw_platform)
+            platform = platform_str if platform_str in VALID_PLATFORMS else None
 
         start_dt = _coerce_date_day_time(record.get("start_time"))
         end_dt = _coerce_date_day_time(record.get("end_time"))
@@ -241,6 +243,5 @@ class Task(BaseTask):
                 "status": status,
                 "compulsory": bool(compulsory),
                 "flexible": bool(flexible),
-                "user_modified": bool(record.get("user_modified", False)),
             }
         )

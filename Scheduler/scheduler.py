@@ -5,7 +5,7 @@ from datetime import date, datetime, time as dt_time, timedelta, timezone
 from DataProcessor.Standardization.BaseTask import DateDayTime, Location
 from DataProcessor.Standardization.Task import Task
 
-from Database.Repository.local_task_repository import LocalTaskRepository
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -76,8 +76,26 @@ class ScheduleResult:
         print("=" * 88)
 
         tasks_with_time: list[tuple[datetime, datetime, Task]] = []
+        now = datetime.now(VN_TZ)
+        week_start = now.date() - timedelta(days=now.weekday())
         for t in self.scheduled_tasks:
-            if t.start_time and t.start_time.date and t.start_time.time and t.end_time and t.end_time.time:
+            if (
+                t.recurrence
+                and t.start_time
+                and t.start_time.day
+                and t.start_time.time
+                and t.end_time
+                and t.end_time.time
+                and not t.start_time.date
+            ):
+                weekday = WEEKDAY_MAP.get(t.start_time.day)
+                if weekday is None:
+                    continue
+                occurrence_date = week_start + timedelta(days=weekday)
+                st = _to_vn_datetime(occurrence_date, t.start_time.time)
+                et = _to_vn_datetime(occurrence_date, t.end_time.time)
+                tasks_with_time.append((st, et, t))
+            elif t.start_time and t.start_time.date and t.start_time.time and t.end_time and t.end_time.time:
                 st = _to_vn_datetime(t.start_time.date, t.start_time.time)
                 et = _to_vn_datetime(t.end_time.date or t.start_time.date, t.end_time.time)
                 tasks_with_time.append((st, et, t))
@@ -121,7 +139,7 @@ class ScheduleResult:
 # =============================================================================
 
 class BranchAndBoundScheduler:
-    def __init__(self, database: LocalTaskRepository | None = None):
+    def __init__(self, database: UserTaskStateRepository | None = None):
         self.database = database
 
     def schedule(
@@ -712,7 +730,8 @@ class BranchAndBoundScheduler:
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=r_msg))
 
         if self.database is not None:
-            self.database.save_tasks(tasks)
+            valid_state_tasks = [t for t in tasks if t.id and "#s" not in t.id]
+            self.database.update_tasks(valid_state_tasks)
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unselected_tasks=unselected_tasks,
