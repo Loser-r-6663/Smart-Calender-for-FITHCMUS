@@ -31,7 +31,7 @@ def run_pipeline(user: User | None = None):
     else:
         repo = TaskRepository(supabase_key=SUPABASE_SECRET_KEY)
     validator = Validator()
-    
+
     extracted_tasks = TaskCreator(user).create_task()
     retained_tasks = repo.get_tasks()
     tasks = validator.deduplicate_task(extracted_tasks, retained_tasks)

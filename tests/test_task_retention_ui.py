@@ -11,6 +11,7 @@ from DataProcessor.Standardization.User import User
 from Database.Repository.local_task_repository import LocalTaskRepository
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_task_repository import UserTaskRepository
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 from Scheduler.scheduler import BranchAndBoundScheduler
 import client.core.personal_crawl as personal_crawl
 import sqlite3
@@ -47,6 +48,7 @@ def read(repo, limit):
     return [ExtractedTask.model_validate(value) for value in values if bool(value.get('user_id')) == personal][:limit]
 TaskRepository.get_tasks = read
 UserTaskRepository.get_tasks = read
+UserTaskStateRepository.get_task_states = lambda self, tasks: {}
 def prohibited(*args, **kwargs): raise AssertionError('UI consumed/deleted tasks or invoked scheduler')
 UserTaskRepository.pop_tasks = prohibited
 UserTaskRepository.delete_tasks = prohibited

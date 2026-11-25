@@ -39,9 +39,9 @@ python -m pytest -q
 modules. It installs the full crawler dependencies declared by
 requirements-web.txt for the existing personal refresh action.
 
-## Crawler and local scheduler
+## Crawler and scheduler
 
-Install `requirements.txt` for the Crawler and local scheduler entry points.
+Install `requirements.txt` for the Crawler and scheduler entry points.
 Copy `.env.example` to a private `.env` and configure the required values.
 `SUPABASE_PUBLIC_KEY` is the client key; `SUPABASE_SECRET_KEY` is server-only.
 `SUPABASE_ENCRYPTION_KEY` protects stored account data. Crawler sources may also
@@ -51,59 +51,47 @@ the corresponding consumers.
 
 - `python server.py` runs the public crawling pipeline by default. With
   `APP_ROLE=SERVER`, the Actor input selects public, personal, or all sources.
-- `python user.py` starts the interactive `UserManager` authentication and local
-  scheduling workflow. It reads public tasks and **consumes** personal Supabase
-  rows through `UserTaskRepository.pop_tasks()` only after their local commit
-  succeeds. Scheduling separately persists its results and updates the user's
-  training points.
+- `python user.py` starts interactive authentication and the separately invoked
+  scheduler. It reads original Supabase tasks without consuming them and stores
+  per-user scheduling fields in `user_task_state`.
 
-### Shared owner store for the single-machine demo
+### Calendar, task management and bounded Search
 
-NiceGUI and `python user.py` use the same durable SQLite database per
-**authenticated owner**. `LOCAL_TASK_DB_DIR` defaults to `Database/data` relative
-to the repository root, independent of the process working directory. Set it to
-the same absolute directory in both processes when deploying elsewhere. If the
-web client runs in a container, mount this directory as a shared durable volume;
-the scheduler process must see that same storage. Multi-device synchronization
-is not provided.
+The merged live client uses FE's paginated `get_tasks(None)` reads for public and
+owner/token-bound personal repositories. Calendar and scheduling apply the
+owner's `user_task_state` overlay. Editing, removing/restoring, pinning and
+creating tasks retain the incoming FE repository and state-persistence paths.
+The supplied SQL is in `Database/Repository/user_task.sql` and
+`custom_task_migration.sql`; no live schema changes were applied during merge
+verification. Public client configuration and server-only secrets remain separate.
 
-Authenticated calendar open and explicit refresh read public and owner-scoped
-personal Supabase tasks once per repository, at the existing 1,000-row read
-limit. They commit original source facts locally, then construct Search and
-calendar state from SQLite. Retained history has no 100-row local truncation.
-Missing rows in a later remote response do not erase retained records. Source
-preferences apply to the retained snapshot. Month navigation, queries, filters,
-sorting and details reuse memory without SQLite or Supabase reads. The existing
-Run personal crawl action may add newly crawled tasks to Supabase; it does not
-consume/delete task rows or invoke scheduling. Its calendar callback performs
-one refresh after the crawl. Guest reads remain public-only and never open an
-owner's store.
+The compatibility bridge builds Search records from the same already-loaded
+originals, before calendar occurrence expansion. Search retains a limit of
+1,000 originals per repository; this bound does not truncate FE's calendar data.
+New `personal` task types remain available in Calendar/Agenda and scheduling,
+while Search keeps its existing class, assignment, event and announcement types.
+Source preferences apply to both views. Search selection uses `(scope, UUID)`
+and opens the existing read-only dialog without another task request. Query,
+filter, sort and month-navigation interactions reuse the loaded data.
 
-Verified rows carry their authenticated owner, originating repository scope and
-original UUID. Public and personal rows sharing a UUID remain independent by
-`(scope, UUID)`. Original source facts and saved schedule state are stored
-separately: source refresh cannot overwrite scheduled times or split sessions,
-and scheduling cannot replace the facts shown in Search. Expired scheduled
-history and consumed but unscheduled personal tasks remain searchable; expiry
-and eligibility apply when scheduling, not when retaining Search history.
+Original facts remain separate from scheduling flags. The original task tables
+are not consumed by the incoming FE scheduler. The personal-crawl wrapper adds
+owner-scoped tasks without deleting expired rows or invoking scheduling itself;
+the FE calendar refresh also refreshes an already-open weekly schedule.
 
-Existing ID-only databases migrate in a single SQLite transaction. Legacy rows
-and their raw fields/schedules are preserved as `unknown` scope. They remain
-available to the scheduler, but Search excludes them. A matching UUID, title,
-source platform or owner filename does not promote a legacy row to a verified
-scope. Fresh verified records coexist with unknown legacy records rather than
-silently inheriting their provenance or schedules.
+Complete paginated Search coverage, the UUID/overlay-collision contract and its
+acceptance checks remain subsequent work. The frozen keyword baseline can be
+reproduced with `python -m fixtures.search_semantic.run_keyword --check`.
 
-Scheduler ingestion commits all received source records before acknowledging
-personal Supabase rows. A failed local write or commit acknowledges nothing.
-Acknowledgements are restricted to that owner, original IDs and fetched
-`updated_at` versions, so a concurrently updated row is not consumed. If an
-acknowledgement fails after local commit, rerunning ingestion safely upserts the
-same scoped records and preserves schedules. Public rows are never consumption
-targets. Scoped scheduler reads/updates/deletes use `Task.key`; verified original
-facts enter through `ingest_sources`, while schedule updates use `save_tasks`
-or `save_schedule`. Previously saved schedules and recurring/split occurrences
-are retained on subsequent scheduler runs.
+### Existing SQLite utilities
+
+The old owner-store utilities and migration tests remain in the repository for
+review of the earlier retention contract. The active merged client and
+`UserManager` no longer read or write those stores. Existing files are not
+migrated or deleted automatically. Tests asserting application ingestion,
+consumption acknowledgements or Search visibility from that retired SQLite
+path remain visible failures until the replacement contract is verified; see
+the merge handoff in the external roadmap.
 
 For offline verification, use the project environment and disable dotenv loading:
 

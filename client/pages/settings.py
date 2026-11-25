@@ -38,12 +38,15 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
             nonlocal status
             result = await backend.sync(user)
             status = await backend.get_connection_status(user)
-            last_updated_label.set_text(last_updated_text())
-            ui.notify(
-                result.message,
-                type="positive" if result.ok else "negative",
-                position="bottom-right",
-            )
+            try:
+                last_updated_label.set_text(last_updated_text())
+                ui.notify(
+                    result.message,
+                    type="positive" if result.ok else "negative",
+                    position="bottom-right",
+                )
+            except RuntimeError:
+                pass
 
         render_header(
             user,

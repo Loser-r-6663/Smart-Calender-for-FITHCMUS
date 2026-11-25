@@ -19,8 +19,8 @@ class ExtractedTask(BaseTask):
     title: str = Field(
         description="Tiêu đề chính xác, ngắn gọn và rõ ràng của nhiệm vụ, sự kiện hoặc thông báo"
     )
-    type: Literal["class", "assignment", "announcement", "event"] = Field(
-        description="Phân loại bài viết (class: lịch học, assignment: bài tập, announcement: thông báo chung, event: thông báo tổ chức sự kiện)"
+    type: Literal["class", "assignment", "announcement", "event", "personal"] = Field(
+        description="Phân loại bài viết (class: lịch học, assignment: bài tập, announcement: thông báo chung, event: thông báo tổ chức sự kiện, personal: lịch cá nhân)"
     )
     course: str | None = Field(
         default=None,
@@ -73,16 +73,17 @@ class ExtractedTask(BaseTask):
     source_url: str = Field(
         description="Đường link bài viết gốc hoặc link form đăng ký"
     )
-    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thông tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHCMUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thông tin"] = Field(
+    source_platform: Literal["Portal", "Moodle", "Khoa Công nghệ thông tin", "Trường đại học Khoa học tự nhiên", "Phòng Công tác sinh viên", "VNUHCMUS", "VNUHMCUS", "Đoàn trường Khoa học tự nhiên", "Đoàn khoa - Liên chi hội khoa Môi trường", "Đoàn khoa - Liên chi hội khoa Hóa học", "Đoàn khoa - Liên chi hội khoa Sinh học", "Đoàn khoa - Liên chi hội khoa Địa chất", "Đoàn khoa - Liên chi hội khoa Vật lý", "Facebook Khoa Công nghệ thông tin", "Custom"] | None = Field(
+        default=None,
         description="Nền tảng nguồn"
     )
     updated_at: datetime = Field(
         description="Thời điểm trích xuất dữ liệu này"
     )
-    
+
     @model_validator(mode="after")
     def check_event_requires_training_points(self):
-        if self.type == "event":
+        if self.type == "event" and self.source_platform not in (None, "Custom"):
             if self.training_points is None or not (0 <= self.training_points <= 24):
                 raise ValueError("training_points phải nằm trong khoảng 0-24 cho sự kiện.")
             if self.training_points > 0:
@@ -91,24 +92,28 @@ class ExtractedTask(BaseTask):
             elif self.training_point_category is not None:
                 raise ValueError("training_point_category phải là None khi training_points = 0.")
         return self
-    
+
     @model_validator(mode="after")
     def check_event_requires_estimated_hours(self):
-        if self.type == "event" and (self.estimated_hours is None or self.estimated_hours <= 0):
+        if (
+            self.type == "event"
+            and self.source_platform not in (None, "Custom")
+            and (self.estimated_hours is None or self.estimated_hours <= 0)
+        ):
             raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event'.")
         return self
-    
+
     @model_validator(mode="after")
     def check_assignment_estimated_hours(self):
         if self.type == "assignment" and self.estimated_hours is not None and self.estimated_hours <= 0:
             raise ValueError("Khi type là 'assignment'. Nếu thiếu thông tin để tính estimated_hours, chia thành 2 trường hợp, ngắn hạn thì estimated_hours = 1-4, dài hạn thì estimated_hours = None")
         return self
-    
+
     @field_validator("deadline", "registration_start", "registration_end", mode="after")
     @classmethod
     def ensure_vn_tz(cls, v: datetime | None):
         return cls._to_vn_time(v)
-    
+
     @staticmethod
     def _to_vn_time(val: str | datetime | None) -> datetime | None:
         if not val:
@@ -118,7 +123,7 @@ class ExtractedTask(BaseTask):
         else:
             dt = val
         return dt.astimezone(VN_TZ)
-    
+
     @classmethod
     def from_raw_task(cls, raw_task: RawTask) -> "ExtractedTask":
         """Create an ExtractedTask instance from a RawTask instance."""
@@ -130,7 +135,7 @@ class ExtractedTask(BaseTask):
                 location_obj = Location(**raw_task.location)
             else:
                 location_obj = Location(room=str(raw_task.location))
-        
+
         return cls(
             title=raw_task.title or "",
             type=raw_task.type or "class",

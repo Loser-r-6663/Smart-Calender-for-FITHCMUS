@@ -14,10 +14,10 @@ def get_daytime(v: str):
     if not v: return (None, None)
     day, time_range = v.split(" ")
     start_time, end_time = time_range.split("-")
-    
+
     start_time = datetime.strptime(start_time, "%H:%M").time()
     end_time = datetime.strptime(end_time, "%H:%M").time()
-    
+
     return DateDayTime(day=day, time=start_time), DateDayTime(day=day, time=end_time)
 
 
@@ -25,84 +25,59 @@ class PortalCrawler(PlaywrightCrawler):
     def __init__(self, user: User):
         self.history_key = None
         self.state_key = "PortalState"
-        
+
         self.login_url = "https://portal.ctdb.hcmus.edu.vn/Login?returnurl=%2fsinh-vien%2fket-qua-dkhp"
         self.home_url = "https://portal.ctdb.hcmus.edu.vn/sinh-vien/ket-qua-dkhp"
         self.user = user
-    
+
     def get_state(self):
         if self.user.portal_session:
             return json.loads(self.user.portal_session)
-    
+
     def check_state(self):
         assert self.user.portal_username and self.user.portal_password
-        
+
         if not self.state:
             assert APP_ROLE != "SERVER"
             return False, {"headless": False, "storage_state": None}
-        
+
         headless = APP_ROLE == "SERVER"
         return False, {"headless": headless, "storage_state": self.state}
-    
+
     def login(self, settings):
         page, context, browser = self.launch_engine(self.home_url, settings)
-        if self.state is None:
-            self.state = {}
-        
-        if page.url == self.login_url:
-            # Fill in the login form and submit
-            username = self.user.portal_username
-            password = self.user.portal_password
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
-            page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
-            
-            # Manually enter the code from the email
-            try:
-                if APP_ROLE != "SERVER":
-                    page.wait_for_url(
-                        lambda url: url.startswith(self.home_url),
-                        timeout=120000
-                    )
-                else:
-                    page.wait_for_url(
-                        lambda url: url.startswith(self.home_url),
-                        timeout=30000
-                    )
-            except Exception as exc:
-                current_url = page.url
-                page_text = page.locator("body").inner_text(timeout=3000)
-                browser.close()
-                raise AssertionError(
-                    "Portal login failed before reaching the timetable page "
-                    f"(current URL: {current_url}). Page text: {page_text[:1000]}"
-                ) from exc
+        try:
+            if page.url.startswith(self.login_url):
+                username = self.user.portal_username
+                password = self.user.portal_password
+                page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtUsername"]').fill(username)
+                page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_txtPassword"]').fill(password)
+                page.locator('xpath=//*[@id="dnn_ctr_Login_Login_DNN_cmdLogin"]').click()
 
-            if APP_ROLE == "SERVER":
-                self.state.update(context.storage_state())
-            else:
-                state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
-                self.state.update(context.storage_state(path=state_file))
-        browser.close()
-    
+                timeout_ms = 30_000 if APP_ROLE == "SERVER" else 120_000
+                page.wait_for_url(self.home_url, timeout=timeout_ms)
+                self.state = context.storage_state()
+        finally:
+            browser.close()
+
     def browse_page(self, page):
         page.wait_for_selector("table", timeout=10000)
         rows = page.locator("table tr").all()
         if not rows: return []
-        
+
         # Extract headers and table data
         headers = rows[0].locator("th").all_inner_texts()
         table = [
             dict(zip(headers, row.locator("td").all_inner_texts()))
             for row in rows[1:] if row.locator("td").count() > 0
         ]
-        
+
         # Process table data and create RawTask objects
         raw_tasks: list[RawTask] = []
         for row in table:
             title = f'{row["Mã MH"]} · {row["Tên MH"]}'
             course = row["Tên MH"]
-            
+
             dur_loc = lambda st: str(st).rstrip(")").split(" (") if "(" in st else (st or None, None)
             duration, location = dur_loc(row["Lịch LT"]); time_range = get_daytime(duration)
             raw_task = RawTask(
@@ -116,7 +91,7 @@ class PortalCrawler(PlaywrightCrawler):
                 link=self.home_url
             )
             raw_tasks.append(raw_task)
-            
+
             if row["Lịch TH"]:
                 duration, location = dur_loc(row["Lịch TH"]); time_range = get_daytime(duration)
                 raw_task = RawTask(
@@ -130,5 +105,5 @@ class PortalCrawler(PlaywrightCrawler):
                     link=self.home_url
                 )
                 raw_tasks.append(raw_task)
-        
+
         return raw_tasks

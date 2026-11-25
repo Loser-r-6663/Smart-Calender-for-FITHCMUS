@@ -5,8 +5,7 @@ from datetime import date, datetime, time as dt_time, timedelta, timezone
 from DataProcessor.Standardization.BaseTask import DateDayTime, Location
 from DataProcessor.Standardization.Task import Task
 
-from Database.Repository.local_task_repository import LocalTaskRepository
-from DataProcessor.Validator import Validator
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -77,8 +76,26 @@ class ScheduleResult:
         print("=" * 88)
 
         tasks_with_time: list[tuple[datetime, datetime, Task]] = []
+        now = datetime.now(VN_TZ)
+        week_start = now.date() - timedelta(days=now.weekday())
         for t in self.scheduled_tasks:
-            if t.start_time and t.start_time.date and t.start_time.time and t.end_time and t.end_time.time:
+            if (
+                t.recurrence
+                and t.start_time
+                and t.start_time.day
+                and t.start_time.time
+                and t.end_time
+                and t.end_time.time
+                and not t.start_time.date
+            ):
+                weekday = WEEKDAY_MAP.get(t.start_time.day)
+                if weekday is None:
+                    continue
+                occurrence_date = week_start + timedelta(days=weekday)
+                st = _to_vn_datetime(occurrence_date, t.start_time.time)
+                et = _to_vn_datetime(occurrence_date, t.end_time.time)
+                tasks_with_time.append((st, et, t))
+            elif t.start_time and t.start_time.date and t.start_time.time and t.end_time and t.end_time.time:
                 st = _to_vn_datetime(t.start_time.date, t.start_time.time)
                 et = _to_vn_datetime(t.end_time.date or t.start_time.date, t.end_time.time)
                 tasks_with_time.append((st, et, t))
@@ -122,23 +139,34 @@ class ScheduleResult:
 # =============================================================================
 
 class BranchAndBoundScheduler:
-    def __init__(self, database: LocalTaskRepository):
+    def __init__(self, database: UserTaskStateRepository | None = None):
         self.database = database
 
-    def schedule(self, tasks: list[Task], initial_drl: dict[str, int] = {}):
-        all_tasks = list({task.key: task for task in tasks}.values())
-        saved = [task for task in all_tasks if task.status == "scheduled"]
-        saved_keys = {task.key for task in saved}
-        expired = {task.key for task in Validator().filter_expired_tasks(all_tasks)}
-        tasks = [task for task in all_tasks if task.status != "scheduled" and task.key not in expired]
-        # Xác định tuần hiện tại (Thứ Hai -> Chủ Nhật) nhưng chỉ xếp từ thời điểm hiện tại trở đi.
-        today = datetime.now(VN_TZ).date()
+    def schedule(
+        self,
+        tasks: list[Task],
+        initial_drl: dict[str, int] | None = None,
+        *,
+        reference_time: datetime | None = None,
+        include_past_fixed_in_week: bool = False,
+    ) -> ScheduleResult:
+        # Xác định tuần lập lịch (Thứ Hai -> Chủ Nhật).
+        now_dt = reference_time or datetime.now(VN_TZ)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=VN_TZ)
+        today = now_dt.date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
-        week_start_dt = datetime.now(VN_TZ)
+        week_start_dt = now_dt
+        fixed_cutoff_dt = (
+            _to_vn_datetime(week_start, dt_time(0, 0, 0))
+            if include_past_fixed_in_week
+            else week_start_dt
+        )
         week_end_dt = _to_vn_datetime(week_end, dt_time(23, 59, 59))
 
-        curr_drl = {cat: min(max(0, initial_drl.get(cat, 0)), cap) for cat, cap in DRL_CAPS.items()}
+        seed_drl = initial_drl or {}
+        curr_drl = {cat: min(max(0, seed_drl.get(cat, 0)), cap) for cat, cap in DRL_CAPS.items()}
 
         # Mỗi lần chạy lại đều tính trạng thái mới từ kết quả hiện tại.
         # Chỉ trạng thái "rejected" do người dùng chủ động hủy mới được giữ nguyên.
@@ -151,22 +179,6 @@ class BranchAndBoundScheduler:
         # ---------------------------------------------------------------------
         unschedulable_tasks: list[ProposedTaskInfo] = []
         fixed_items: list[_SchedItem] = []
-        for task in saved:
-            occurrences = task.scheduled_occurrences or [task]
-            for occurrence in occurrences:
-                start, end = occurrence.start_time, occurrence.end_time
-                if start and start.time and end and end.time and (start.date or start.day):
-                    day = start.date or week_start + timedelta(days=WEEKDAY_MAP[start.day])
-                    st = _to_vn_datetime(day, start.time)
-                    et = _to_vn_datetime(end.date or day, end.time)
-                    if et > max(st, week_start_dt) and st < week_end_dt:
-                        reserved = task.model_copy(update={
-                            "start_time": DateDayTime(date=st.date(), time=st.time()),
-                            "end_time": DateDayTime(date=et.date(), time=et.time()),
-                            "scheduled_occurrences": [],
-                        })
-                        fixed_items.append(_SchedItem(reserved, st, et, False,
-                                                      (et - st).total_seconds() / 3600))
         flexible_workloads: list[_SchedItem] = []
         candidate_items: list[_SchedItem] = []
 
@@ -208,7 +220,7 @@ class BranchAndBoundScheduler:
                         inst_date = week_start + timedelta(days=w_idx)
                         st = _to_vn_datetime(inst_date, task.start_time.time)
                         et = _to_vn_datetime(inst_date, task.end_time.time)
-                        if st < week_start_dt or et <= week_start_dt:
+                        if st < fixed_cutoff_dt or et <= fixed_cutoff_dt:
                             continue
                         overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                         if overlap:
@@ -242,7 +254,7 @@ class BranchAndBoundScheduler:
                     ))
                     continue
 
-                if st >= week_start_dt and et > week_start_dt and st < week_end_dt:
+                if st >= fixed_cutoff_dt and et > fixed_cutoff_dt and st < week_end_dt:
                     overlap = any(not (et <= fix.start or st >= fix.end) for fix in fixed_items)
                     if overlap:
                         unschedulable_tasks.append(ProposedTaskInfo(
@@ -646,17 +658,33 @@ class BranchAndBoundScheduler:
         scheduled_tasks: list[Task] = []
         for f in fixed_items:
             f.task.status = "scheduled"
-            scheduled_tasks.append(f.task)
+            inst_task = f.task.model_copy(deep=True)
+            inst_task.start_time = DateDayTime(
+                date=f.start.date(),
+                day=f.task.start_time.day if f.task.start_time else None,
+                time=f.start.time(),
+            )
+            inst_task.end_time = DateDayTime(
+                date=f.end.date(),
+                day=f.task.end_time.day if f.task.end_time else None,
+                time=f.end.time(),
+            )
+            scheduled_tasks.append(inst_task)
 
         # Phân bổ slot cho Assignment
         for wl in flexible_workloads:
             sessions = _merge_contiguous_sessions(allocate_slots(wl.start, wl.end, wl.estimated_hours))
             if sessions:
+                wl.task.status = "scheduled"
+                base_id = wl.task.id or "flex"
                 for idx_s, (s_st, s_et) in enumerate(sessions):
-                    target_task = wl.task if idx_s == 0 else wl.task.model_copy(deep=True)
+                    target_task = wl.task.model_copy(deep=True)
+                    if len(sessions) > 1:
+                        target_task.id = f"{base_id}#s{idx_s + 1}"
                     target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
                     target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
                     target_task.status = "scheduled"
+                    target_task.flexible = True
                     scheduled_tasks.append(target_task)
             else:
                 unschedulable_tasks.append(ProposedTaskInfo(
@@ -669,11 +697,16 @@ class BranchAndBoundScheduler:
             if ev.is_flexible:
                 sessions = _merge_contiguous_sessions(allocate_slots(ev.start, ev.end, ev.estimated_hours))
                 if sessions:
+                    ev.task.status = "scheduled"
+                    base_id = ev.task.id or "flex-ev"
                     for idx_s, (s_st, s_et) in enumerate(sessions):
-                        target_task = ev.task if idx_s == 0 else ev.task.model_copy(deep=True)
+                        target_task = ev.task.model_copy(deep=True)
+                        if len(sessions) > 1:
+                            target_task.id = f"{base_id}#s{idx_s + 1}"
                         target_task.start_time = DateDayTime(date=s_st.date(), time=s_st.time())
                         target_task.end_time = DateDayTime(date=s_et.date(), time=s_et.time())
                         target_task.status = "scheduled"
+                        target_task.flexible = True
                         scheduled_tasks.append(target_task)
                     curr_drl[ev.category] += gain
                     selected_ev_tasks.add(id(ev.task))
@@ -684,7 +717,7 @@ class BranchAndBoundScheduler:
             else:
                 ev.task.status = "scheduled"
                 curr_drl[ev.category] += gain
-                scheduled_tasks.append(ev.task)
+                scheduled_tasks.append(ev.task.model_copy(deep=True))
                 selected_ev_tasks.add(id(ev.task))
 
         # Những sự kiện khả thi nhưng không được chọn trong quá trình tối ưu B&B
@@ -696,7 +729,9 @@ class BranchAndBoundScheduler:
                     r_msg = "Trùng giờ hoặc nhường chỗ cho sự kiện có lợi hơn về điểm/thời lượng"
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=r_msg))
 
-        self.database.save_schedule(all_tasks, [task for task in scheduled_tasks if task.key not in saved_keys])
+        if self.database is not None:
+            valid_state_tasks = [t for t in tasks if t.id and "#s" not in t.id]
+            self.database.update_tasks(valid_state_tasks)
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unselected_tasks=unselected_tasks,

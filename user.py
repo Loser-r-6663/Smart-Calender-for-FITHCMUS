@@ -2,14 +2,18 @@ import json
 import traceback
 
 from DataProcessor.Standardization.User import User
+from DataProcessor.Standardization.Task import Task
 
 from DataProcessor.Crawler.PortalCrawler import PortalCrawler
 from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
 
+from DataProcessor.Validator import Validator
 
 from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
-from Database.Repository.local_task_repository import LocalTaskRepository
+from Database.Repository.task_repository import TaskRepository
+from Database.Repository.user_task_repository import UserTaskRepository
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 
 from Scheduler.scheduler import BranchAndBoundScheduler
 
@@ -76,24 +80,40 @@ class UserManager:
         self.update_local_session()
 
     def get_tasks(self):
-        from Database.task_sync import sync_owner_tasks
+        database = TaskRepository()
+        public_tasks = database.get_tasks()
 
-        sync_owner_tasks(self.user.id, self.access_token, consume=True)
-        with LocalTaskRepository(self.user.id) as database:
-            return database.get_tasks()
+        database = UserTaskRepository(access_token=self.access_token, user_id=self.user.id)
+        personal_tasks = database.get_tasks()
 
-    def schedule_tasks(self):
-        tasks = self.get_tasks()
+        # Combine public and personal tasks, and retrieve their states from the database
+        extracted_tasks = public_tasks + personal_tasks
+        state_repository = UserTaskStateRepository(access_token=self.access_token, user_id=self.user.id)
+        task_states = state_repository.get_task_states(extracted_tasks)
 
-        with LocalTaskRepository(self.user.id) as database:
-            scheduler = BranchAndBoundScheduler(database)
-            result = scheduler.schedule(tasks, initial_drl=self.user.training_points)
-            result.print_timetable()
+        # Create Task objects from extracted tasks and update their states if available
+        tasks: list[Task] = []
+        for extracted_task in extracted_tasks:
+            task = Task.from_extracted_task(extracted_task)
+            if task.id in task_states:
+                task = Task.model_validate({**task.model_dump(), **task_states[task.id]})
+            tasks.append(task)
 
-        self.user.training_points.update(result.final_drl)
-        self.user_repo.update_user(self.user)
+        expired_tasks = Validator().filter_expired_tasks(tasks)
+        tasks = [task for task in tasks if task not in expired_tasks]
+        return tasks
+
+    def schedule_tasks(self, tasks: list[Task]):
+        """Schedule tasks using the Branch and Bound algorithm."""
+        database = UserTaskStateRepository(access_token=self.access_token, user_id=self.user.id)
+
+        scheduler = BranchAndBoundScheduler(database)
+        result = scheduler.schedule(tasks, initial_drl=self.user.training_points)
+        result.print_timetable()
         return result
 
 
 if __name__ == "__main__":
-    UserManager().schedule_tasks()
+    user_manager = UserManager()
+    tasks = user_manager.get_tasks()
+    user_manager.schedule_tasks(tasks)

@@ -40,6 +40,7 @@ def install_reads(monkeypatch):
     monkeypatch.setenv("SUPABASE_PUBLIC_KEY", "fictional-public-key")
     monkeypatch.setattr("Database.Repository.task_repository.TaskRepository.get_tasks", public_read)
     monkeypatch.setattr("Database.Repository.user_task_repository.UserTaskRepository.get_tasks", personal_read)
+    monkeypatch.setattr("Database.Repository.user_task_state_repository.UserTaskStateRepository.get_task_states", lambda *args: {})
     return calls
 
 
@@ -52,8 +53,8 @@ def test_one_live_load_serves_calendar_search_and_scoped_details(monkeypatch):
         controller = ClientController(backend, ClientUser(OWNER_A, "A"))
         await controller.load_month(MONTH)
         assert calls == [
-            ("public", 1000, "fictional-public-key", "Bearer fictional-public-key"),
-            ("personal", 1000, OWNER_A, "fictional-public-key", "Bearer fictional-token-a"),
+            ("public", None, "fictional-public-key", "Bearer fictional-public-key"),
+            ("personal", None, OWNER_A, "fictional-public-key", "Bearer fictional-token-a"),
         ]
         snapshot = controller.state.search_snapshot
         assert snapshot.loaded_scopes == ("public", "personal")

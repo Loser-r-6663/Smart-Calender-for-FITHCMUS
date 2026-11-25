@@ -17,6 +17,7 @@ FILTERS = (
     ("assignment", "Assignments"),
     ("event", "Events"),
     ("announcement", "Notices"),
+    ("personal", "Personal"),
 )
 
 
@@ -38,7 +39,7 @@ class SearchPanel:
             with ui.row().classes("items-center justify-between w-full"):
                 ui.label("Search loaded tasks").classes("search-heading")
                 with ui.row().classes("view-switch"):
-                    for view, label in (("calendar", "Calendar"), ("agenda", "Agenda")):
+                    for view, label in (("calendar", "Calendar"), ("schedule", "Schedule"), ("agenda", "Agenda")):
                         ui.button(label, on_click=lambda value=view: on_view(value)).props("flat no-caps").classes(
                             "active" if self.controller.state.view == view else ""
                         )
@@ -114,6 +115,9 @@ class SearchPanel:
             return
         if state.error:
             ui.label("Could not load tasks. Try refreshing.").props('role=alert')
+            return
+        if state.filters.kind == "personal":
+            ui.label("Personal tasks are available in Calendar and Schedule.").props("role=status")
             return
         filters = {}
         if self.course:

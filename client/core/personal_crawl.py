@@ -128,3 +128,17 @@ def run_personal_crawl(
             f"Personal crawl could not {stage}. Check the service and sign-in, then retry."
         ) from None
     return PersonalCrawlResult(len(new_tasks), len(combined_tasks), tuple(failed_sources))
+
+
+def capture_moodle_session(backend_user: Any) -> str:
+    """Run Moodle's interactive sign-in in a local browser and return its state."""
+    from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
+
+    crawler = MoodleCrawler(backend_user)
+    with crawler.load_engine() as playwright:
+        crawler.crawler = playwright
+        crawler.authenticate()
+
+    if not crawler.state:
+        raise RuntimeError("Moodle did not return an authenticated browser session")
+    return json.dumps(crawler.state)

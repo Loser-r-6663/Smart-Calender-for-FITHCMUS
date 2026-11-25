@@ -47,7 +47,7 @@ class SearchLoaderTests(unittest.TestCase):
         self.get.assert_called_once()
         args = self.get.call_args
         self.assertEqual(args.args, (URL + "/rest/v1/tasks",))
-        self.assertEqual(args.kwargs["params"], {"select": "*", "limit": 23})
+        self.assertEqual(args.kwargs["params"], {"select": "*", "limit": 23, "offset": 0, "order": "id.asc"})
         self.assertEqual(args.kwargs["headers"]["apikey"], PUBLIC_KEY)
         self.assertEqual(args.kwargs["headers"]["Authorization"], "Bearer " + PUBLIC_KEY)
         self.assertEqual(snapshot.loaded_scopes, ("public",))
@@ -69,7 +69,7 @@ class SearchLoaderTests(unittest.TestCase):
                 self.assertEqual(public_call.kwargs["headers"]["Authorization"], "Bearer " + PUBLIC_KEY)
                 self.assertEqual(personal_call.args, (URL + "/rest/v1/user_task",))
                 self.assertEqual(personal_call.kwargs["params"],
-                                 {"select": "*", "limit": 23, "user_id": "eq." + owner})
+                                 {"select": "*", "limit": 23, "offset": 0, "order": "id.asc", "user_id": "eq." + owner})
                 self.assertEqual(personal_call.kwargs["headers"]["apikey"], PUBLIC_KEY)
                 self.assertEqual(personal_call.kwargs["headers"]["Authorization"], "Bearer " + token)
                 self.assertEqual(snapshot.loaded_scopes, ("public", "personal"))

@@ -38,6 +38,10 @@ def remote(monkeypatch):
     def get(url, *, params, headers, timeout):
         assert headers['apikey'] == 'fictional-public'
         owner = params.get('user_id','')[3:]
+        if url.endswith('/user_task_state'):
+            assert owner in (A, B)
+            assert headers['Authorization'] == f'Bearer token-{owner}'
+            return Mock(ok=True, json=lambda: [])
         state['gets'].append((url,owner,params['limit'],headers['Authorization']))
         values = state['personal'].get(owner,[]) if owner else state['public']
         if owner:
