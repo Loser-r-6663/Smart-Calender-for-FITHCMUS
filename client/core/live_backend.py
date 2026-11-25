@@ -194,7 +194,7 @@ class LiveBackend(ClientBackend):
         self._disabled_sources[user.id] = set() if enabled else set(ALL_SOURCE_NAMES)
 
     async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
-        from client.core.personal_crawl import run_personal_crawl
+        from client.core.personal_crawl import PersonalCrawlError, log_crawl_failure, run_personal_crawl
 
         backend_user = self._users.get(user.id)
         access_token = self._access_tokens.get(user.id)
@@ -221,7 +221,6 @@ class LiveBackend(ClientBackend):
             "Portal" in enabled_personal_sources
             and backend_user.portal_username
             and backend_user.portal_password
-            and backend_user.portal_session
         )
         moodle_ready = (
             "Moodle" in enabled_personal_sources
@@ -239,14 +238,29 @@ class LiveBackend(ClientBackend):
 
         async with lock:
             try:
-                new_count, total_count = await asyncio.to_thread(
+                result = await asyncio.to_thread(
                     run_personal_crawl,
                     backend_user,
                     access_token,
                     enabled_personal_sources,
                 )
-            except Exception:
-                return SyncResult(ok=False, message="Personal crawl failed")
+            except PersonalCrawlError as error:
+                return SyncResult(ok=False, message=str(error))
+            except Exception as error:
+                log_crawl_failure("personal", "initialization", error)
+                return SyncResult(ok=False, message=(
+                    "Personal crawl could not start. Check terminal diagnostics, "
+                    "reconnect Portal/Moodle in Settings, then retry."
+                ))
+
+        new_count, total_count = result
+        failed_sources = getattr(result, "failed_sources", ())
+        if failed_sources:
+            return SyncResult(ok=False, message=(
+                f"Personal crawl partially completed: {new_count} new, {total_count} stored. "
+                f"{', '.join(failed_sources)} failed; reconnect the source in Settings "
+                "and retry. Check terminal diagnostics."
+            ))
 
         return SyncResult(
             ok=True,
