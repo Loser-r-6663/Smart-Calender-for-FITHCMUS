@@ -194,7 +194,7 @@ body { margin: 0; }
 .type-badge.solid-kind-event { background: var(--event) !important; }
 .type-badge.solid-kind-announcement { background: var(--announcement) !important; }
 .points-label { color: var(--event); font-size: 0.75rem; font-weight: 700; }
-.detail-title { font-family: Georgia, "Times New Roman", serif; font-size: 1.2rem; font-weight: 600; line-height: 1.25; }
+.detail-title { font-family: inherit; font-size: 1.2rem; font-weight: 600; line-height: 1.25; }
 .detail-description { color: var(--ink-soft); font-size: 0.83rem; line-height: 1.55; }
 .detail-row { color: var(--ink-soft); font-size: 0.78rem; line-height: 1.4; }
 .detail-row .q-icon { color: var(--ink-soft); margin-top: 1px; }
