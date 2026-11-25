@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from urllib.request import urlopen
 
 import pytest
@@ -181,19 +182,18 @@ def test_missing_or_unusable_source_does_not_hide_task_facts(monkeypatch, url):
     ui.link.assert_not_called()
 
 
-@pytest.fixture(scope="module")
-def ui_server(tmp_path_factory):
-    directory = tmp_path_factory.mktemp("search-ui")
+@contextmanager
+def serve_ui(directory, app_code=APP, tasks=None):
     fixture = directory / "tasks.json"
-    fixture.write_text(json.dumps(fictional_tasks(), ensure_ascii=False), encoding="utf-8")
+    fixture.write_text(json.dumps(fictional_tasks() if tasks is None else tasks, ensure_ascii=False), encoding="utf-8")
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     env = {**os.environ, "SEARCH_UI_FIXTURE": str(fixture), "SEARCH_UI_PORT": str(port),
-           "PYTHON_DOTENV_DISABLED": "1"}
+           "PYTHON_DOTENV_DISABLED": "1", "LOCAL_TASK_DB_DIR": str(directory / "owner-stores")}
     env.pop("PYTEST_CURRENT_TEST", None)
     log = (directory / "server.log").open("w", encoding="utf-8")
-    process = subprocess.Popen([sys.executable, "-B", "-X", "utf8", "-c", APP],
+    process = subprocess.Popen([sys.executable, "-B", "-X", "utf8", "-c", app_code],
                                cwd=Path(__file__).resolve().parents[1], env=env,
                                stdout=log, stderr=subprocess.STDOUT,
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -214,6 +214,12 @@ def ui_server(tmp_path_factory):
         process.terminate()
         process.wait(timeout=15)
         log.close()
+
+
+@pytest.fixture(scope="module")
+def ui_server(tmp_path_factory):
+    with serve_ui(tmp_path_factory.mktemp("search-ui")) as url:
+        yield url
 
 
 @pytest.fixture
@@ -378,8 +384,10 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     page.get_by_label("Deadline through").fill("2027-01-31")
     assert_keys(page, [OFF_MONTH])
     page.locator(f'[data-search-key="{OFF_MONTH}"]').click()
-    panel = page.locator(".task-detail")
+    panel = page.locator(".search-detail-dialog .task-detail")
+    calendar_panel = page.locator(".task-panel .task-detail")
     expect(panel.locator(".detail-title")).to_have_text("Off-month report")
+    expect(calendar_panel).to_have_count(0)
     for text in ("0 training points", "Course: OTHER", "Publisher: VNUHCMUS",
                  "Deadline: 15 Jan 2027, 09:00 (Vietnam)",
                  "Registration opens: 10 Jan 2027, 08:00 (Vietnam)",
@@ -410,6 +418,7 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     page.locator(".search-query-row").get_by_role("button", name="Clear", exact=True).click()
     page.locator(f'[data-search-key="{NOTICE}"]').click()
     expect(panel.locator(".detail-title")).to_have_text("Campus notice")
+    expect(calendar_panel).to_have_count(0)
     expect(panel.get_by_text("Training points not provided", exact=True)).to_be_visible()
     expect(panel.get_by_text("Date not provided", exact=True)).to_be_visible()
     assert "Scheduled" not in panel.inner_text()
@@ -433,14 +442,14 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     close_details(page)
     page.get_by_role("button", name="Agenda", exact=True).click()
     page.locator(".agenda-item").filter(has_text="Weekly class").filter(has_text="08:00–10:00").first.click()
-    expect(panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
-    assert "Every Monday" not in panel.inner_text()
+    expect(calendar_panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
+    assert "Every Monday" not in calendar_panel.inner_text()
     page.get_by_role("button", name="Calendar", exact=True).click()
     expect(page.locator(".month-grid")).to_be_visible()
     page.locator(f'[data-search-key="{WEEKLY}"]').click()
     close_details(page)
     page.locator(".event-pill").filter(has_text="Weekly class").first.click()
-    expect(panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
+    expect(calendar_panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
     assert page.request.get(ui_server + "/test-state").json()["reads"] == before
 
     submit(page, "off-month")
@@ -489,7 +498,7 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
     page.set_viewport_size({"width": width, "height": height})
     page.request.post(ui_server + "/fixture/long")
     old_list_id = page.locator(".search-results").get_attribute("id")
-    page.get_by_role("button", name="Today", exact=True).click()
+    page.get_by_role("button", name="Run personal crawl", exact=True).click()
     expect(page.locator(".search-results")).not_to_have_attribute("id", old_list_id)
     expect(page.get_by_text("6 tasks · Soonest deadline", exact=True)).to_be_visible()
     submit(page, "shared topic")

@@ -6,6 +6,7 @@ from DataProcessor.Standardization.BaseTask import DateDayTime, Location
 from DataProcessor.Standardization.Task import Task
 
 from Database.Repository.local_task_repository import LocalTaskRepository
+from DataProcessor.Validator import Validator
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -125,6 +126,11 @@ class BranchAndBoundScheduler:
         self.database = database
 
     def schedule(self, tasks: list[Task], initial_drl: dict[str, int] = {}):
+        all_tasks = list({task.key: task for task in tasks}.values())
+        saved = [task for task in all_tasks if task.status == "scheduled"]
+        saved_keys = {task.key for task in saved}
+        expired = {task.key for task in Validator().filter_expired_tasks(all_tasks)}
+        tasks = [task for task in all_tasks if task.status != "scheduled" and task.key not in expired]
         # Xác định tuần hiện tại (Thứ Hai -> Chủ Nhật) nhưng chỉ xếp từ thời điểm hiện tại trở đi.
         today = datetime.now(VN_TZ).date()
         week_start = today - timedelta(days=today.weekday())
@@ -145,6 +151,22 @@ class BranchAndBoundScheduler:
         # ---------------------------------------------------------------------
         unschedulable_tasks: list[ProposedTaskInfo] = []
         fixed_items: list[_SchedItem] = []
+        for task in saved:
+            occurrences = task.scheduled_occurrences or [task]
+            for occurrence in occurrences:
+                start, end = occurrence.start_time, occurrence.end_time
+                if start and start.time and end and end.time and (start.date or start.day):
+                    day = start.date or week_start + timedelta(days=WEEKDAY_MAP[start.day])
+                    st = _to_vn_datetime(day, start.time)
+                    et = _to_vn_datetime(end.date or day, end.time)
+                    if et > max(st, week_start_dt) and st < week_end_dt:
+                        reserved = task.model_copy(update={
+                            "start_time": DateDayTime(date=st.date(), time=st.time()),
+                            "end_time": DateDayTime(date=et.date(), time=et.time()),
+                            "scheduled_occurrences": [],
+                        })
+                        fixed_items.append(_SchedItem(reserved, st, et, False,
+                                                      (et - st).total_seconds() / 3600))
         flexible_workloads: list[_SchedItem] = []
         candidate_items: list[_SchedItem] = []
 
@@ -674,7 +696,7 @@ class BranchAndBoundScheduler:
                     r_msg = "Trùng giờ hoặc nhường chỗ cho sự kiện có lợi hơn về điểm/thời lượng"
                 unselected_tasks.append(ProposedTaskInfo(task=cand.task, reason=r_msg))
 
-        self.database.save_tasks(tasks + scheduled_tasks)
+        self.database.save_schedule(all_tasks, [task for task in scheduled_tasks if task.key not in saved_keys])
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unselected_tasks=unselected_tasks,

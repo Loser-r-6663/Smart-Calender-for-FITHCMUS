@@ -53,17 +53,57 @@ the corresponding consumers.
   `APP_ROLE=SERVER`, the Actor input selects public, personal, or all sources.
 - `python user.py` starts the interactive `UserManager` authentication and local
   scheduling workflow. It reads public tasks and **consumes** personal Supabase
-  rows through `UserTaskRepository.pop_tasks()`, then persists scheduler tasks
-  in per-user SQLite files under `LOCAL_TASK_DB_DIR` (default `Database/data`).
-  Scheduling also persists its results and updates the user's training points.
+  rows through `UserTaskRepository.pop_tasks()` only after their local commit
+  succeeds. Scheduling separately persists its results and updates the user's
+  training points.
 
-Search and calendar refresh continue to call `get_tasks()` without consuming
-rows. They currently cover authorized, source-enabled rows still in Supabase,
-within the existing 1,000-row limit per repository. After the separate ingestion
-workflow consumes a personal row, it is no longer available to these reads.
-Whether Search should include consumed local tasks requires a separate coverage
-and provenance decision: local scheduler tasks combine public and personal
-inputs and do not retain `user_id`. No scope is inferred from a SQLite filename.
+### Shared owner store for the single-machine demo
+
+NiceGUI and `python user.py` use the same durable SQLite database per
+**authenticated owner**. `LOCAL_TASK_DB_DIR` defaults to `Database/data` relative
+to the repository root, independent of the process working directory. Set it to
+the same absolute directory in both processes when deploying elsewhere. If the
+web client runs in a container, mount this directory as a shared durable volume;
+the scheduler process must see that same storage. Multi-device synchronization
+is not provided.
+
+Authenticated calendar open and explicit refresh read public and owner-scoped
+personal Supabase tasks once per repository, at the existing 1,000-row read
+limit. They commit original source facts locally, then construct Search and
+calendar state from SQLite. Retained history has no 100-row local truncation.
+Missing rows in a later remote response do not erase retained records. Source
+preferences apply to the retained snapshot. Month navigation, queries, filters,
+sorting and details reuse memory without SQLite or Supabase reads. The existing
+Run personal crawl action may add newly crawled tasks to Supabase; it does not
+consume/delete task rows or invoke scheduling. Its calendar callback performs
+one refresh after the crawl. Guest reads remain public-only and never open an
+owner's store.
+
+Verified rows carry their authenticated owner, originating repository scope and
+original UUID. Public and personal rows sharing a UUID remain independent by
+`(scope, UUID)`. Original source facts and saved schedule state are stored
+separately: source refresh cannot overwrite scheduled times or split sessions,
+and scheduling cannot replace the facts shown in Search. Expired scheduled
+history and consumed but unscheduled personal tasks remain searchable; expiry
+and eligibility apply when scheduling, not when retaining Search history.
+
+Existing ID-only databases migrate in a single SQLite transaction. Legacy rows
+and their raw fields/schedules are preserved as `unknown` scope. They remain
+available to the scheduler, but Search excludes them. A matching UUID, title,
+source platform or owner filename does not promote a legacy row to a verified
+scope. Fresh verified records coexist with unknown legacy records rather than
+silently inheriting their provenance or schedules.
+
+Scheduler ingestion commits all received source records before acknowledging
+personal Supabase rows. A failed local write or commit acknowledges nothing.
+Acknowledgements are restricted to that owner, original IDs and fetched
+`updated_at` versions, so a concurrently updated row is not consumed. If an
+acknowledgement fails after local commit, rerunning ingestion safely upserts the
+same scoped records and preserves schedules. Public rows are never consumption
+targets. Scoped scheduler reads/updates/deletes use `Task.key`; verified original
+facts enter through `ingest_sources`, while schedule updates use `save_tasks`
+or `save_schedule`. Previously saved schedules and recurring/split occurrences
+are retained on subsequent scheduler runs.
 
 For offline verification, use the project environment and disable dotenv loading:
 

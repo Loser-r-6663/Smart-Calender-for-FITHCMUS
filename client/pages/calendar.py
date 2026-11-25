@@ -91,13 +91,13 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
         async def change_month(offset: int) -> None:
             month = _shift_month(controller.state.visible_month, offset)
             controller.state.selected_date = month
-            await load_month(month)
+            controller.show_month(month)
             body.refresh()
 
         async def go_today() -> None:
             today = date.today()
             controller.state.selected_date = today
-            await load_month(today.replace(day=1))
+            controller.show_month(today.replace(day=1))
             body.refresh()
 
         search_details = SearchDetailsDialog(controller)

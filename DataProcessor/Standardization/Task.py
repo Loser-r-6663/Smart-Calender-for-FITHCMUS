@@ -5,12 +5,21 @@ from pydantic import Field, field_validator, model_validator
 
 from DataProcessor.Standardization.BaseTask import BaseTask, DateDayTime, Location, TargetAudience
 from DataProcessor.Standardization.ExtractedTask import ExtractedTask
+from uuid import UUID
+
+
+class ScheduledOccurrence(BaseTask):
+    start_time: DateDayTime
+    end_time: DateDayTime
 
 
 class Task(BaseTask):
     """A complete task belonging to one user."""
 
     id: str | None = None
+    owner_id: str | None = None
+    scope: Literal["public", "personal", "unknown"] = "unknown"
+    scheduled_occurrences: list[ScheduledOccurrence] = Field(default_factory=list)
     title: str
     type: Literal["class", "assignment", "announcement", "event", "personal"]
     course: str | None = None
@@ -68,12 +77,25 @@ class Task(BaseTask):
         return ExtractedTask._to_vn_time(value)
 
     @classmethod
-    def from_extracted_task(cls, task: ExtractedTask) -> "Task":
+    def from_extracted_task(cls, task: ExtractedTask, *, owner_id: str | None = None,
+                            scope: Literal["public", "personal", "unknown"] = "unknown") -> "Task":
         if not isinstance(task, ExtractedTask):
             raise TypeError("task must be an instance of ExtractedTask")
         data = task.model_dump(exclude={"user_id"})
+        if scope != "unknown":
+            if not owner_id or not task.id:
+                raise ValueError("Verified tasks require an owner and original UUID")
+            UUID(task.id)
+            if scope == "personal" and task.user_id not in (None, owner_id):
+                raise ValueError("Personal task belongs to another owner")
+        data.update(owner_id=owner_id, scope=scope)
         if task.type == "class":
-            data.update(recurrence=True, compulsory=True)
+            data.update(recurrence=bool(task.start_time and task.start_time.date is None
+                                        and task.start_time.day), compulsory=True)
         elif task.type == "assignment":
             data.update(compulsory=True, flexible=True)
         return cls.model_validate(data)
+
+    @property
+    def key(self) -> tuple[str, str | None]:
+        return self.scope, self.id

@@ -2,17 +2,13 @@ import json
 import traceback
 
 from DataProcessor.Standardization.User import User
-from DataProcessor.Standardization.Task import Task
 
 from DataProcessor.Crawler.PortalCrawler import PortalCrawler
 from DataProcessor.Crawler.MoodleCrawler import MoodleCrawler
 
-from DataProcessor.Validator import Validator
 
 from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
-from Database.Repository.task_repository import TaskRepository
-from Database.Repository.user_task_repository import UserTaskRepository
 from Database.Repository.local_task_repository import LocalTaskRepository
 
 from Scheduler.scheduler import BranchAndBoundScheduler
@@ -80,25 +76,11 @@ class UserManager:
         self.update_local_session()
 
     def get_tasks(self):
-        database = TaskRepository()
-        public_tasks = database.get_tasks()
+        from Database.task_sync import sync_owner_tasks
 
-        database = UserTaskRepository(access_token=self.access_token, user_id=self.user.id)
-        personal_tasks = database.pop_tasks()
-
-        tasks = public_tasks + personal_tasks
-        expired_tasks = Validator().filter_expired_tasks(tasks)
-        tasks = [task for task in tasks if task not in expired_tasks]
-
+        sync_owner_tasks(self.user.id, self.access_token, consume=True)
         with LocalTaskRepository(self.user.id) as database:
-            tasks = [Task.from_extracted_task(task) for task in tasks]
-            retained_tasks = database.get_tasks()
-            tasks = Validator().deduplicate_task(tasks, retained_tasks)
-
-            new_tasks = [task for task in tasks if task not in retained_tasks]
-            database.save_tasks(new_tasks)
-
-        return tasks
+            return database.get_tasks()
 
     def schedule_tasks(self):
         tasks = self.get_tasks()

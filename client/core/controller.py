@@ -82,6 +82,16 @@ class TaskMapper:
         cls, record: Any, range_start: date, range_end: date
     ) -> list[CalendarItem]:
         task_id = str(_value(record, "id") or f"task-{id(record)}")
+        scheduled = _value(record, "scheduled_occurrences", [])
+        if scheduled:
+            occurrences = []
+            for occurrence in scheduled:
+                values = record.model_dump() if hasattr(record, "model_dump") else dict(record)
+                values.update(start_time=_value(occurrence, "start_time"), end_time=_value(occurrence, "end_time"),
+                              scheduled_occurrences=[])
+                for item in cls.map_range(values, range_start, range_end):
+                    occurrences.append(replace(item, id=f"{task_id}:{item.start.isoformat()}"))
+            return occurrences
         common = {
             "task_id": task_id,
             "title": str(_value(record, "title") or "Untitled task"),
@@ -154,11 +164,13 @@ class ClientController:
         self.state = ClientState(user=user)
         self._generation = 0
         self._selection_session = 0
+        self._loaded_tasks = None
         self._search_filters = {}
         self._search_sort = None
         self.backend.watch(self)
 
     def _clear_tasks(self) -> None:
+        self._loaded_tasks = None
         self.state.items = []
         self.state.search_snapshot = SearchSnapshot((), (), 1000)
         self.state.selected_item_id = None
@@ -204,7 +216,6 @@ class ClientController:
             return
         if month is not None:
             self.state.visible_month = month.replace(day=1)
-        start, end = self.month_bounds(self.state.visible_month)
         self._generation += 1
         generation = self._generation
         user = self.state.user
@@ -216,16 +227,9 @@ class ClientController:
             loaded = await self.backend.load_tasks(user)
             if generation != self._generation or self.state.user is not user:
                 return
-            items = [
-                replace(item, id=f"{record.scope}:{item.id}",
-                        task_id=f"{record.scope}:{item.task_id}", is_personal=record.scope == "personal")
-                for task, record in zip(loaded.tasks, loaded.snapshot.records)
-                for item in TaskMapper.map_range(task, start, end)
-                if item.day is not None and start <= item.day <= end
-            ]
-            self.state.items = items
+            self._loaded_tasks = loaded
             self.state.search_snapshot = loaded.snapshot
-            self.select_date(self.state.selected_date)
+            self.show_month(self.state.visible_month)
             if selected_search_key is not None:
                 self.state.selected_item_id = None
                 if loaded.snapshot.get_task(selected_search_key) is not None:
@@ -241,6 +245,21 @@ class ClientController:
         finally:
             if generation == self._generation:
                 self.state.loading = False
+
+    def show_month(self, month: date) -> None:
+        self.state.visible_month = month.replace(day=1)
+        if self._loaded_tasks is None:
+            return
+        start, end = self.month_bounds(self.state.visible_month)
+        self.state.items = [
+            replace(item, id=f"{record.scope}:{item.id}", task_id=f"{record.scope}:{item.task_id}",
+                    is_personal=record.scope == "personal")
+            for task, record in zip(self._loaded_tasks.tasks, self._loaded_tasks.snapshot.records)
+            for item in TaskMapper.map_range(task, start, end)
+            if item.day is not None and start <= item.day <= end
+        ]
+        if self.state.selected_search_key is None:
+            self.select_date(self.state.selected_date)
 
     def search(self, query: str, *, filters=None, sort=None):
         self.state.filters.query = query

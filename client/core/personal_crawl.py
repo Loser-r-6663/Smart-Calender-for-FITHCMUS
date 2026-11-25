@@ -76,18 +76,14 @@ def run_personal_crawl(
     retained_tasks = repository.get_tasks(limit=1000)
     combined_tasks = validator.deduplicate_task(extracted_tasks, retained_tasks)
 
-    expired_tasks = validator.filter_expired_tasks(combined_tasks)
-    if expired_tasks:
-        repository.delete_tasks(expired_tasks)
-
     new_tasks = [
         task
         for task in combined_tasks
-        if task not in retained_tasks and task not in expired_tasks
+        if task not in retained_tasks
     ]
     if new_tasks:
         repository.save_tasks(new_tasks)
 
     # Persist refreshed sessions and connection status on the same user row.
     UserRepository(access_token=access_token).update_user(backend_user)
-    return len(new_tasks), len(combined_tasks) - len(expired_tasks)
+    return len(new_tasks), len(combined_tasks)

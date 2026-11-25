@@ -20,6 +20,7 @@ class UserTaskRepository(TaskRepository):
         super().__init__(supabase_url, supabase_key, access_token)
         self.table_url = f"{self.supabase_url}/rest/v1/user_task"
         self.user_id = user_id
+        self.access_token = access_token
 
     @classmethod
     def task_to_row(cls, task: ExtractedTask, user_id: str | None = None) -> dict:
@@ -61,12 +62,32 @@ class UserTaskRepository(TaskRepository):
         self._raise(response)
         return [self.row_to_task(row) for row in response.json()]
 
-    def pop_tasks(self, limit: int = 100) -> list[ExtractedTask]:
-        """Get tasks for this user, then delete and return them."""
+    def pop_tasks(self, *, persist, limit: int = 100) -> list[ExtractedTask]:
+        """Acknowledge only owner-scoped rows after durable persistence returns."""
+        if not self.user_id or not self.access_token:
+            raise ValueError("Consumption requires an authenticated owner and token")
         tasks = self.get_tasks(limit=limit)
-        if tasks:
-            self.delete_tasks(tasks)
+        if any(task.user_id not in (None, self.user_id) for task in tasks):
+            raise ValueError("Personal row belongs to another owner")
+        saved_ids = set(persist(tasks))
+        acknowledged = [task for task in tasks if task.id in saved_ids]
+        if acknowledged:
+            self.acknowledge_tasks(acknowledged)
         return tasks
+
+    def acknowledge_tasks(self, tasks: list[ExtractedTask]):
+        if not self.user_id or not self.access_token:
+            raise ValueError("Acknowledgement requires an authenticated owner and token")
+        for task in tasks:
+            if task.user_id not in (None, self.user_id) or task.id is None:
+                raise ValueError("Acknowledgement requires this owner's persisted rows")
+        for task in tasks:
+            response = requests.delete(
+                self.table_url, headers=self.headers,
+                params={"user_id": f"eq.{self.user_id}", "id": f"eq.{task.id}",
+                        "updated_at": f"eq.{task.updated_at.isoformat()}"}, timeout=30,
+            )
+            self._raise(response)
 
     def delete_tasks(self, tasks: list[ExtractedTask]):
         ids = [task.id for task in tasks if task.id is not None]

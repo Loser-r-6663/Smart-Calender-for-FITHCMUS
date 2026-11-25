@@ -103,20 +103,25 @@ class LiveBackend(ClientBackend):
 
     async def load_tasks(self, user: ClientUser):
         from Database.Repository.task_repository import TaskRepository
-        from Database.Repository.user_task_repository import UserTaskRepository
+        from Database.Repository.local_task_repository import LocalTaskRepository
+        from Database.task_sync import sync_owner_tasks
+        from academic_search import SearchSnapshot, map_task
+        from client.core.backend import TaskLoad
+
+        if user is None:
+            public = await asyncio.to_thread(TaskRepository().get_tasks, 1000)
+            return task_load((("public", public),), set())
 
         access_token = self._access_tokens.get(user.id)
         if not access_token or not user.id:
             raise SessionExpiredError("Session expired. Sign in again.")
         try:
-            public_tasks = await asyncio.to_thread(TaskRepository().get_tasks, 1000)
-            personal_tasks = await asyncio.to_thread(
-                UserTaskRepository(
-                    access_token=access_token,
-                    user_id=user.id,
-                ).get_tasks,
-                1000,
-            )
+            def load():
+                sync_owner_tasks(user.id, access_token)
+                with LocalTaskRepository(user.id) as store:
+                    return store.get_verified_tasks()
+
+            retained = await asyncio.to_thread(load)
         except HTTPError as error:
             if error.response is not None and error.response.status_code in (401, 403):
                 raise SessionExpiredError("Session expired. Sign in again.") from error
@@ -124,7 +129,10 @@ class LiveBackend(ClientBackend):
         if self._access_tokens.get(user.id) != access_token:
             raise SessionExpiredError("Session changed. Sign in again.")
         disabled = await self.get_disabled_sources(user)
-        return task_load((("public", public_tasks), ("personal", personal_tasks)), disabled)
+        retained = [(scope, source, calendar) for scope, source, calendar in retained
+                    if source.source_platform not in disabled]
+        return TaskLoad(tuple(calendar for _, _, calendar in retained), SearchSnapshot(
+            tuple(map_task(source, scope=scope) for scope, source, _ in retained), ("public", "personal"), 1000))
 
     async def get_connection_status(self, user: ClientUser) -> ConnectionStatus:
         backend_user = self._users.get(user.id)
