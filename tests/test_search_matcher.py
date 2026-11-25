@@ -32,7 +32,125 @@ def keys(records):
     return [record.key for record in records]
 
 
+def comparison_records():
+    return (
+        record(1, title="Thiện nguyện", training_points=0),
+        record(2, title="Thiện nguyện", training_points=4),
+        record(1, scope="personal", title="Thiện nguyện", training_points=5),
+        record(4, title="Thiện nguyện", training_points=7),
+        record(5, scope="personal", title="Thiện nguyện", training_points=None),
+    )
+
+
 class SearchMatcherTests(unittest.TestCase):
+    def test_every_point_comparison_phrase_unit_topic_and_normalization(self):
+        zero, four, five, seven = key(1), key(2), key(1, "personal"), key(4)
+        comparisons = (
+            (("5 {unit}", "bằng 5 {unit}"),
+             {"min_training_points": 5, "max_training_points": 5}, [five], [five]),
+            (("hơn 5 {unit}", "lớn hơn 5 {unit}", "trên 5 {unit}"),
+             {"min_training_points": 6}, [seven], [seven]),
+            (("ít hơn 5 {unit}", "nhỏ hơn 5 {unit}", "dưới 5 {unit}"),
+             {"max_training_points": 4}, [zero, four], [zero, four]),
+            (("từ 5 {unit}", "ít nhất 5 {unit}", "tối thiểu 5 {unit}", "5 {unit} trở lên"),
+             {"min_training_points": 5}, [five, seven], [five, seven]),
+            (("nhiều nhất 5 {unit}", "tối đa 5 {unit}", "5 {unit} trở xuống"),
+             {"max_training_points": 5}, [zero, four, five], [five, zero, four]),
+        )
+        records = comparison_records()
+        for phrases, bounds, eligible, hits in comparisons:
+            for phrase in phrases:
+                for unit in ("điểm", "điểm rèn luyện", "ĐRL"):
+                    for topic in ("", "thiện nguyện"):
+                        query = f"{topic} {phrase.format(unit=unit)}".strip()
+                        for variant in (query, query.upper(), unicodedata.normalize("NFD", query),
+                                        " \t" + "\t \n".join(query.split()) + "\n "):
+                            with self.subTest(query=variant):
+                                result = search_records(records, variant)
+                                self.assertEqual(result.topic, topic.upper() if variant == query.upper() else topic)
+                                self.assertEqual(keys(result.eligible_records), eligible)
+                                self.assertEqual(keys(result.hits), hits)
+                                self.assertEqual(dict(result.effective_filters), {
+                                    "types": ("class", "assignment", "event", "announcement"), **bounds,
+                                })
+
+    def test_comparisons_filter_nonliteral_candidates_and_preserve_event_inference(self):
+        records = (record(1, title="Unrelated", training_points=4),
+                   record(2, title="Thiện nguyện", training_points=4),
+                   record(3, title="Thiện nguyện", training_points=5))
+        result = search_records(records, "thiện nguyện ít hơn 5 điểm")
+        self.assertEqual(result.topic, "thiện nguyện")
+        self.assertEqual(keys(result.eligible_records), [key(1), key(2)])
+        self.assertEqual(keys(result.hits), [key(2)])
+        event = record(4, type="event", title="Thiện nguyện", training_points=5,
+                       training_point_category="Articles 3", estimated_hours=2)
+        result = search_records((*records, event), "sự kiện thiện nguyện dưới 6 ĐRL",
+                                filters={"types": ["event", "assignment"]})
+        self.assertEqual(result.topic, "thiện nguyện")
+        self.assertEqual(result.effective_filters["types"], ("event",))
+        self.assertEqual(keys(result.eligible_records), [key(4)])
+        self.assertEqual(keys(result.hits), [key(4)])
+        with self.assertRaises(SearchFilterError):
+            search_records(records, "sự kiện hơn 4 điểm", filters={"types": ["announcement"]})
+
+    def test_strict_and_inclusive_intersections_with_selected_bounds(self):
+        zero, four, five, seven = key(1), key(2), key(1, "personal"), key(4)
+        records = comparison_records()
+        for query, selected, effective, eligible, hits in (
+            ("hơn 4 điểm", {"max_training_points": 5},
+             {"min_training_points": 5, "max_training_points": 5}, [five], [five]),
+            ("ít hơn 5 điểm", {"min_training_points": 4},
+             {"min_training_points": 4, "max_training_points": 4}, [four], [four]),
+            ("từ 5 điểm", {"max_training_points": 5},
+             {"min_training_points": 5, "max_training_points": 5}, [five], [five]),
+            ("tối đa 5 điểm", {"min_training_points": 5},
+             {"min_training_points": 5, "max_training_points": 5}, [five], [five]),
+            ("5 điểm trở lên", {"min_training_points": 7},
+             {"min_training_points": 7}, [seven], [seven]),
+            ("5 điểm trở xuống", {"max_training_points": 4},
+             {"max_training_points": 4}, [zero, four], [zero, four]),
+            ("hơn 5 điểm", {"min_training_points": 5},
+             {"min_training_points": 6}, [seven], [seven]),
+            ("ít hơn 5 điểm", {"max_training_points": 5},
+             {"max_training_points": 4}, [zero, four], [zero, four]),
+        ):
+            with self.subTest(query=query, selected=selected):
+                original = deepcopy(selected)
+                result = search_records(records, query, filters=selected)
+                self.assertEqual(keys(result.eligible_records), eligible)
+                self.assertEqual(keys(result.hits), hits)
+                self.assertEqual(dict(result.effective_filters), {
+                    "types": ("class", "assignment", "event", "announcement"), **effective,
+                })
+                self.assertEqual(selected, original)
+        for query, selected in (
+            ("hơn 5 điểm", {"max_training_points": 5}),
+            ("ít hơn 5 điểm", {"min_training_points": 5}),
+            ("tối đa 5 điểm", {"min_training_points": 7}),
+        ):
+            with self.subTest(query=query), self.assertRaisesRegex(SearchFilterError, "Conflicting"):
+                search_records(records, query, filters=selected)
+
+    def test_point_domain_edges_are_not_clamped_and_unknown_points_never_qualify(self):
+        records = (*comparison_records(), record(6, title="Thiện nguyện", training_points=100))
+        zero, four, five, seven, hundred = key(1), key(2), key(1, "personal"), key(4), key(6)
+        for query, expected in (
+            ("ít hơn 1 điểm", [zero]), ("tối đa 0 điểm", [zero]), ("0 điểm", [zero]),
+            ("hơn 0 điểm", [five, four, seven, hundred]),
+            ("từ 0 điểm", [five, zero, four, seven, hundred]),
+            ("tối đa 100 điểm", [five, zero, four, seven, hundred]),
+            ("ít hơn 100 điểm", [five, zero, four, seven]),
+            ("hơn 99 điểm", [hundred]), ("từ 100 điểm", [hundred]),
+            ("100 điểm", [hundred]), ("bằng 000005 ĐRL", [five]),
+        ):
+            with self.subTest(query=query):
+                result = search_records(records, query)
+                self.assertEqual(keys(result.hits), expected)
+                self.assertNotIn(key(5, "personal"), keys(result.eligible_records))
+        for query in ("ít hơn 0 điểm", "hơn 100 điểm"):
+            with self.subTest(query=query), self.assertRaisesRegex(SearchFilterError, "Conflicting"):
+                search_records(records, query)
+
     def test_exact_minimum_points_topic_and_effective_filters(self):
         records = tuple(record(n, title="Thiện nguyện", training_points=points)
                         for n, points in ((1, 4), (2, 5), (3, 7), (4, None)))
@@ -173,8 +291,10 @@ class SearchMatcherTests(unittest.TestCase):
     def test_conflicts_unsupported_grammar_and_invalid_inputs(self):
         for query in (
             "không phải 5 điểm", "không có 5 điểm", "3-5 điểm", "2.5 điểm", "2,5 điểm",
-            "-5 điểm", "+5 điểm", "tối đa 5 điểm", "hơn 5 điểm", "ít nhất 5 điểm",
-            ">= 5 điểm", "từ 3 đến 5 điểm", "5 điểm trở lên", "5 điểm 5 đrl", "101 điểm",
+            "-5 điểm", "+5 điểm", ">= 5 điểm", "từ 3 đến 5 điểm", "5 điểm 5 đrl", "101 điểm",
+            "không hơn 5 điểm", "chẳng dưới 5 điểm", "chưa tối đa 5 điểm", "hơn -5 điểm",
+            "ít hơn 2.5 điểm", "tối đa +5 ĐRL", "5 điểm trở xuống 7 điểm", "từ 3–5 điểm",
+            "hơn 5 điểm trở lên", "từ 5 điểm trở xuống", "từ hơn 5 điểm", "5 điểm đến 7",
         ):
             with self.subTest(query=query), self.assertRaises(SearchFilterError):
                 search_records((), query)

@@ -278,6 +278,14 @@ def test_real_search_controls_and_ordering(page, ui_server, tmp_path):
     submit(page, "thiện nguyện từ 5 điểm")
     assert_keys(page, [PERSONAL, SEVEN])
     expect(page.get_by_text("At least 5 points", exact=True)).to_be_visible()
+    submit(page, "thiện nguyện ít hơn 5 điểm")
+    assert_keys(page, [PUBLIC])
+    expect(page.get_by_text("At most 4 points", exact=True)).to_be_visible()
+    submit(page, "thiện nguyện 5 điểm trở xuống")
+    assert_keys(page, [PERSONAL, PUBLIC])
+    expect(page.get_by_text("At most 5 points", exact=True)).to_be_visible()
+    submit(page, "thiện nguyện từ 5 điểm")
+    assert_keys(page, [PERSONAL, SEVEN])
     page.get_by_role("button", name="Notices", exact=True).click()
     expect(page.get_by_label("Query")).to_have_value("thiện nguyện từ 5 điểm")
     expect(page.get_by_text("No matching tasks", exact=True)).to_be_visible()
@@ -345,6 +353,23 @@ def test_real_search_controls_and_ordering(page, ui_server, tmp_path):
         assert meta["y"] + meta["height"] <= bounds["y"] + bounds["height"]
     page.screenshot(path=str(tmp_path / "search-desktop.png"), full_page=True)
     assert page.request.get(ui_server + "/test-state").json()["reads"] == before
+
+
+@pytest.mark.parametrize("query,selected,label", [
+    ("ít hơn 5 điểm", {}, "At most 4 points"),
+    ("tối đa 5 ĐRL", {}, "At most 5 points"),
+    ("hơn 5 điểm", {}, "At least 6 points"),
+    ("ít hơn 5 điểm", {"min_training_points": 4}, "Exactly 4 points"),
+    ("5 điểm trở xuống", {"max_training_points": 4}, "At most 4 points"),
+    ("hơn 4 điểm", {"max_training_points": 6}, "5–6 points"),
+    ("ít nhất 5 điểm", {"min_training_points": 7}, "At least 7 points"),
+])
+def test_point_labels_use_final_intersected_bounds(query, selected, label):
+    from academic_search import search_records
+    from client.components.filters import point_label
+
+    result = search_records((), query, filters=selected)
+    assert point_label(result.effective_filters) == label
 
 
 def test_narrow_layout_navigation_and_feedback(page, ui_server, tmp_path):

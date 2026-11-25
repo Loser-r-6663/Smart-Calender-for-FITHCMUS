@@ -12,16 +12,18 @@ from .records import SearchRecord
 VN_TZ = timezone(timedelta(hours=7))
 TASK_TYPES = ("class", "assignment", "event", "announcement")
 SORTS = ("best_match", "soonest_deadline", "latest_deadline", "title")
+POINT_PREFIX = r"lớn hơn|nhỏ hơn|ít hơn|nhiều nhất|ít nhất|tối thiểu|tối đa|hơn|trên|dưới|từ|bằng"
+POINT_SUFFIX = r"trở lên|trở xuống"
 POINTS = re.compile(
-    r"(?<!\w)(?:(?P<minimum>từ)\s+)?(?P<number>[0-9]+)\s+(?:điểm rèn luyện|đrl|điểm)(?!\w)", re.I
+    rf"(?<!\w)(?:(?P<prefix>{POINT_PREFIX})\s+)?(?P<number>[0-9]+)\s+"
+    rf"(?:điểm rèn luyện|đrl|điểm)(?!\w)(?:\s+(?P<suffix>{POINT_SUFFIX})(?!\w))?", re.I
 )
 EVENT = re.compile(r"(?<!\w)sự kiện(?!\w)", re.I)
 NEGATION = re.compile(r"(?<!\w)(?:không|chẳng|chưa)(?!\w)", re.I)
 UNSUPPORTED_PREFIX = re.compile(
-    r"(?:không(?: phải)?|chẳng(?: phải)?|chưa|tối đa|tối thiểu|ít nhất|nhiều nhất|"
-    r"hơn|trên|dưới|nhỏ hơn|lớn hơn|bằng|đến)\s*$", re.I
+    rf"(?<!\w)(?:không(?: phải)?|chẳng(?: phải)?|chưa|{POINT_PREFIX}|đến)\s*$", re.I
 )
-UNSUPPORTED_SUFFIX = re.compile(r"^\s*(?:trở lên|trở xuống|đến\s+[0-9]|[-–—]\s*[0-9])", re.I)
+UNSUPPORTED_SUFFIX = re.compile(rf"^\s*(?:{POINT_SUFFIX}|đến\s+[0-9]|[-–—]\s*[0-9])", re.I)
 
 
 class SearchFilterError(ValueError):
@@ -88,16 +90,22 @@ def _interpret(query, filters):
         return text
     match = matches[0]
     before, after = text[:match.start()], text[match.end():]
-    _require(not (NEGATION.search(text) or re.search(r"[0-9.,+\-–—<>=≤≥]\s*$", before)
+    _require(not ((match["prefix"] and match["suffix"])
+                  or NEGATION.search(text) or re.search(r"[0-9.,+\-–—<>=≤≥]\s*$", before)
                   or UNSUPPORTED_PREFIX.search(before) or UNSUPPORTED_SUFFIX.search(after)),
-             "Unsupported training-point expression; use N điểm or từ N điểm")
+             "Unsupported training-point expression; use one equality, strict, minimum, or maximum comparison")
     digits = match["number"].lstrip("0") or "0"
     _require(len(digits) <= 3 and int(digits) <= 100, "Training points exceed 100")
     number = int(digits)
-    filters["min_training_points"] = max(filters.get("min_training_points", 0), number)
-    if not match["minimum"]:
-        filters["max_training_points"] = min(filters.get("max_training_points", 100), number)
-    _require(filters["min_training_points"] <= filters.get("max_training_points", 100),
+    comparison = (match["prefix"] or match["suffix"] or "bằng").casefold()
+    # Integer points convert strict comparisons to inclusive bounds without clamping.
+    if comparison in ("bằng", "hơn", "lớn hơn", "trên", "từ", "ít nhất", "tối thiểu", "trở lên"):
+        minimum = number + (comparison in ("hơn", "lớn hơn", "trên"))
+        filters["min_training_points"] = max(filters.get("min_training_points", 0), minimum)
+    if comparison in ("bằng", "ít hơn", "nhỏ hơn", "dưới", "nhiều nhất", "tối đa", "trở xuống"):
+        maximum = number - (comparison in ("ít hơn", "nhỏ hơn", "dưới"))
+        filters["max_training_points"] = min(filters.get("max_training_points", 100), maximum)
+    _require(filters.get("min_training_points", 0) <= filters.get("max_training_points", 100),
              "Conflicting training-point constraints")
     spans = [(match.start(), match.end())]
     event_matches = list(EVENT.finditer(text))
