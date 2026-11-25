@@ -69,14 +69,7 @@ class PortalCrawler(PlaywrightCrawler):
                         lambda url: url.startswith(self.home_url),
                         timeout=30000
                     )
-            except Exception as exc:
-                current_url = page.url
-                page_text = page.locator("body").inner_text(timeout=3000)
-                browser.close()
-                raise AssertionError(
-                    "Portal login failed before reaching the timetable page "
-                    f"(current URL: {current_url}). Page text: {page_text[:1000]}"
-                ) from exc
+            except: raise AssertionError()
             
             if APP_ROLE == "SERVER":
                 self.state.update(context.storage_state())

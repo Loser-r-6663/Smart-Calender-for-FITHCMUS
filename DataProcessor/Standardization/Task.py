@@ -38,7 +38,7 @@ class Task(BaseTask):
         "Đoàn khoa - Liên chi hội khoa Địa chất",
         "Đoàn khoa - Liên chi hội khoa Vật lý",
         "Facebook Khoa Công nghệ thông tin",
-    ]
+    ] | None
     updated_at: datetime
     recurrence: bool = Field(default=False, description="Task có thời gian lặp lại hay không")
     status: Literal["scheduled", "proposed", "rejected"] = Field(

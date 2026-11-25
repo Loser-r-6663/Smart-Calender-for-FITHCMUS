@@ -13,7 +13,7 @@ from Database.auth import sign_in, sign_up
 from Database.Repository.user_repository import UserRepository
 from Database.Repository.task_repository import TaskRepository
 from Database.Repository.user_task_repository import UserTaskRepository
-from Database.Repository.local_task_repository import LocalTaskRepository
+from Database.Repository.user_task_state_repository import UserTaskStateRepository
 
 from Scheduler.scheduler import BranchAndBoundScheduler
 
@@ -84,34 +84,36 @@ class UserManager:
         public_tasks = database.get_tasks()
 
         database = UserTaskRepository(access_token=self.access_token, user_id=self.user.id)
-        personal_tasks = database.pop_tasks()
-        
-        tasks = public_tasks + personal_tasks
+        personal_tasks = database.get_tasks()
+
+        # Combine public and personal tasks, and retrieve their states from the database
+        extracted_tasks = public_tasks + personal_tasks
+        state_repository = UserTaskStateRepository(access_token=self.access_token, user_id=self.user.id)
+        task_states = state_repository.get_task_states(extracted_tasks)
+
+        # Create Task objects from extracted tasks and update their states if available
+        tasks: list[Task] = []
+        for extracted_task in extracted_tasks:
+            task = Task.from_extracted_task(extracted_task)
+            if task.id in task_states:
+                task = Task.model_validate({**task.model_dump(), **task_states[task.id]})
+            tasks.append(task)
+
         expired_tasks = Validator().filter_expired_tasks(tasks)
         tasks = [task for task in tasks if task not in expired_tasks]
-        
-        with LocalTaskRepository(self.user.id) as database:
-            tasks = [Task.from_extracted_task(task) for task in tasks]
-            retained_tasks = database.get_tasks()
-            tasks = Validator().deduplicate_task(tasks, retained_tasks)
-
-            new_tasks = [task for task in tasks if task not in retained_tasks]
-            database.save_tasks(new_tasks)
-        
         return tasks
 
-    def schedule_tasks(self):
-        tasks = self.get_tasks()
+    def schedule_tasks(self, tasks: list[Task]):
+        """Schedule tasks using the Branch and Bound algorithm."""
+        database = UserTaskStateRepository(access_token=self.access_token, user_id=self.user.id)
         
-        with LocalTaskRepository(self.user.id) as database:
-            scheduler = BranchAndBoundScheduler(database)
-            result = scheduler.schedule(tasks, initial_drl=self.user.training_points)
-            result.print_timetable()
-        
-        self.user.training_points.update(result.final_drl)
-        self.user_repo.update_user(self.user)
+        scheduler = BranchAndBoundScheduler(database)
+        result = scheduler.schedule(tasks, initial_drl=self.user.training_points)
+        result.print_timetable()
         return result
 
 
 if __name__ == "__main__":
-    UserManager().schedule_tasks()
+    user_manager = UserManager()
+    tasks = user_manager.get_tasks()
+    user_manager.schedule_tasks(tasks)

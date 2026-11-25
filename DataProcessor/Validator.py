@@ -43,10 +43,10 @@ class Validator:
                 retained.append(task)
         return retained
 
-    def filter_expired_tasks(self, tasks: list[ExtractedTask | Task]):
+    def filter_expired_tasks(self, tasks: list[Task]):
         """Return tasks that have expired as of reference_time (defaults to now)."""
         now = datetime.now(tz=VN_TZ)
-        expired: list[ExtractedTask | Task] = []
+        expired: list[Task] = []
         for task in tasks:
             if isinstance(task.deadline, datetime) and ExtractedTask._to_vn_time(task.deadline) < now:
                 expired.append(task)
