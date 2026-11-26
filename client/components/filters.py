@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import timedelta, timezone
 
-from nicegui import ui
+from nicegui import background_tasks, ui
 
-from academic_search import SearchFilterError
+from academic_search import SearchFilterError, search_records
 
 VN_TZ = timezone(timedelta(hours=7))
 WEEKDAYS = dict(zip(("T2", "T3", "T4", "T5", "T6", "T7", "CN"),
@@ -36,6 +36,12 @@ class SearchPanel:
         self.deadline_end = ""
         self.sort = "auto"
         self._result_buttons = {}
+        self._pending = False
+        self._preliminary_result = None
+        self._completed_mode = 'keyword'
+        self._request_generation = 0
+        self._requested_key = self._completed_key = None
+        self._requested_snapshot = self._completed_result = self._completed_error = None
 
         self._snapshot = controller.state.search_snapshot
         with ui.menu().props('persistent no-parent-event no-refocus target=false anchor="bottom right" self="top right"').classes("task-search-popover") as self.menu:
@@ -80,7 +86,7 @@ class SearchPanel:
             f'data-search-session="{self.controller.selection_session}"'
         ):
             with ui.row().classes("search-query-row w-full"):
-                self.query_input = ui.input("Query", placeholder="Title, course or Vietnamese keywords").bind_value(
+                self.query_input = ui.input("Search", placeholder="Search tasks...").bind_value(
                     self, "query"
                 ).props("outlined dense").classes("search-query").on("keydown.enter", self.submit)
                 ui.button("Search", icon="search", on_click=self.submit, color="positive").props("no-caps unelevated")
@@ -112,9 +118,11 @@ class SearchPanel:
 
     def update(self, field, value) -> None:
         setattr(self, field, value)
+        self._completed_key = None
         self.refresh_results()
 
     def clear(self, on_filter) -> None:
+        self._discard_results()
         self.query = ""
         self.course = None
         self.deadline_start = ""
@@ -132,6 +140,38 @@ class SearchPanel:
     def submit(self) -> None:
         self.submitted_query = self.query
         self.submitted = True
+        self._completed_key = None
+        self.refresh_results()
+
+    def _discard_results(self):
+        self._request_generation += 1
+        self._pending = False
+        self._preliminary_result = None
+        self._requested_key = self._completed_key = None
+        self._requested_snapshot = self._completed_result = self._completed_error = None
+
+    def _key(self):
+        return (self.controller.selection_session, id(self.controller.state.search_snapshot),
+                self.submitted_query, self.kind, self.course, self.deadline_start,
+                self.deadline_end, self.sort)
+
+    async def _compute(self, key, generation, filters):
+        if generation != self._request_generation or key != self._key() or not self.submitted:
+            return
+        result, error = None, None
+        try:
+            result = await self.controller.search_async(
+                key[2], filters=filters, sort=None if key[-1] == 'auto' else key[-1])
+        except SearchFilterError as failure:
+            error = str(failure)
+        if (generation != self._request_generation or key != self._key() or not self.submitted
+                or (result is None and error is None)):
+            return
+        self._pending = False
+        self._preliminary_result = None
+        self._completed_mode = 'hybrid' if self.controller.last_search_mode == 'hybrid' else 'fallback'
+        self._completed_key = key
+        self._completed_result, self._completed_error = result, error
         self.refresh_results()
 
     def select(self, key, session, opener) -> None:
@@ -140,7 +180,7 @@ class SearchPanel:
             self.refresh_results()
         for result_key, button in self._result_buttons.items():
             selected = result_key == self.controller.state.selected_search_key
-            button.props(f'aria-pressed="{str(selected).lower()}"')
+            button.props(f'aria-pressed="{str(selected).lower()}" data-search-request="{self._request_generation}"')
             button.classes(add="selected" if selected else "", remove="" if selected else "selected")
         if self.on_select is not None:
             self.on_select(opener if accepted else None)
@@ -154,15 +194,19 @@ class SearchPanel:
         self._result_buttons = {}
         state = self.controller.state
         if state.loading:
+            self._discard_results()
             ui.label("Loading tasks…").props('role=status')
             return
         if state.session_expired:
+            self._discard_results()
             ui.label("Session expired. Sign in again.").props('role=alert')
             return
         if state.error:
+            self._discard_results()
             ui.label("Could not load tasks. Try refreshing.").props('role=alert')
             return
         if not self.submitted:
+            self._discard_results()
             return
         filters = {}
         if self.kind != "all":
@@ -173,19 +217,52 @@ class SearchPanel:
             filters["deadline_start"] = self.deadline_start
         if self.deadline_end:
             filters["deadline_end"] = self.deadline_end
-        try:
-            result = self.controller.search(
-                self.submitted_query, filters=filters, sort=None if self.sort == "auto" else self.sort,
-            )
-        except SearchFilterError as error:
-            ui.label(str(error)).props('role=alert').classes("search-error")
+        key = self._key()
+        if self._completed_key != key:
+            if not self._pending or self._requested_key != key:
+                try:
+                    literal = search_records(state.search_snapshot.records, self.submitted_query,
+                        filters=filters, sort=None if self.sort == 'auto' else self.sort)
+                except SearchFilterError as error:
+                    self._discard_results()
+                    ui.label(str(error)).props('role=alert').classes('search-error')
+                    return
+                if not self.controller._hybrid_search.needs_semantic(literal):
+                    self._completed_result, self._completed_error = literal, None
+                    self._completed_mode, self._completed_key = 'keyword', key
+                    self._pending = False
+                    self.controller.search(self.submitted_query, filters=filters,
+                                           sort=None if self.sort == 'auto' else self.sort)
+                    self._render_result(literal)
+                    return
+                self._request_generation += 1
+                self._pending = True
+                self._preliminary_result = literal
+                self._requested_key = key
+                self._requested_snapshot = state.search_snapshot
+                self._completed_result = self._completed_error = None
+                background_tasks.create(self._compute(key, self._request_generation, filters))
+            self._render_result(self._preliminary_result, preliminary=True)
             return
-        points = point_label(result.effective_filters)
-        if points:
-            ui.label(points).classes("search-points").props('role=status')
-        ui.label(f"{len(result.hits)} tasks · {SORT_OPTIONS[result.sort]}").classes("search-count")
+        if self._completed_error is not None:
+            ui.label(self._completed_error).props('role=alert').classes('search-error')
+            return
+        self._render_result(self._completed_result)
+
+    def _render_result(self, result, preliminary=False):
+        state = self.controller.state
+        if preliminary:
+            ui.label('Searching…').classes('search-preliminary').props('role=status')
+        else:
+            if self._completed_mode == 'fallback':
+                ui.label('Search could not complete. Showing available results.' if result.hits
+                         else 'Search could not complete. Try again.').classes('search-error').props('role=alert')
+                if not result.hits:
+                    return
+            ui.label(f"{len(result.hits)} tasks · {SORT_OPTIONS[result.sort]}").classes("search-count")
         if not result.hits:
-            ui.label("No matching tasks").props('role=status')
+            if not preliminary:
+                ui.label('No matching tasks').props('role=status')
             return
         with ui.column().classes("search-results w-full"):
             for record in result.hits:
@@ -193,7 +270,7 @@ class SearchPanel:
                 with ui.button(on_click=lambda event, key=record.key, session=self.controller.selection_session:
                                self.select(key, session, event.sender), color="positive").props(
                     f'flat no-caps align=left data-search-key="{record.scope}:{record.id}" '
-                    f'aria-pressed="{str(selected).lower()}"'
+                    f'aria-pressed="{str(selected).lower()}" data-search-request="{self._request_generation}"'
                 ).classes(f"search-result {'selected' if selected else ''}") as button:
                     button.on('pointerdown.capture', js_handler="""event => {
                         const element = event.currentTarget;
@@ -221,11 +298,16 @@ class SearchPanel:
                             menu: element.closest('.task-search-popover')?.scrollTop || 0,
                             page: window.scrollY
                         };
+                        const menu = element.closest('.task-search-popover');
+                        menu.__detailAnchor = {key: element.dataset.searchKey,
+                            request: element.dataset.searchRequest, scroll: element.__searchScroll};
                     }""")
                     self._result_buttons[record.key] = button
                     with ui.column().classes("gap-1 items-start"):
                         ui.label(record.title).classes("search-result-title")
-                        ui.label(f"{TYPE_LABELS[record.type]} · {record_date(record)}").classes("search-result-meta")
+                        with ui.row().classes('search-result-meta items-center gap-2'):
+                            ui.label(TYPE_LABELS[record.type]).classes(f'type-badge solid-kind-{record.type}')
+                            ui.label(record_date(record))
                         if record.training_points is not None and record.training_points > 0:
                             ui.label(f"{record.training_points} training point" + ("s" if record.training_points != 1 else "")).classes("search-result-points")
 
@@ -237,19 +319,6 @@ SORT_OPTIONS = {
     "latest_deadline": "Latest deadline",
     "title": "Title A–Z",
 }
-
-
-def point_label(filters):
-    minimum, maximum = filters.get("min_training_points"), filters.get("max_training_points")
-    if minimum is not None and minimum == maximum:
-        return f"Exactly {minimum} points"
-    if minimum is not None and maximum is not None:
-        return f"{minimum}–{maximum} points"
-    if minimum is not None:
-        return f"At least {minimum} points"
-    if maximum is not None:
-        return f"At most {maximum} points"
-    return ""
 
 
 def record_date(record):

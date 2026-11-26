@@ -89,6 +89,7 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         user = ClientUser(**stored_user)
         controller = ClientController(backend, user)
+        preparation_gate = controller.defer_preparation()
         refresh_body = None
 
         async def load_month(month=None) -> None:
@@ -852,3 +853,9 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                 search_panel.clear(lambda _: body.refresh())
 
         ui.timer(0.1, invalidate_session_ui)
+        if preparation_gate is not None:
+            try:
+                await ui.context.client.connected()
+                await ui.run_javascript('return await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))', timeout=5)
+            finally:
+                preparation_gate.set()

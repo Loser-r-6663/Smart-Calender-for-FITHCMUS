@@ -579,7 +579,6 @@ body { margin: 0; }
 .search-query { flex: 1; min-width: 200px; }
 .search-controls { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .search-controls > * { min-width: 0; }
-.search-points { color: var(--positive-deep); font-weight: 700; margin-top: 12px; }
 .search-count { color: var(--ink-soft); font-size: 0.8rem; margin: 12px 0 8px; }
 .search-results { gap: 6px; max-height: 300px; overflow-y: auto; }
 .search-result { border: 1px solid var(--line); border-radius: var(--radius); flex: 0 0 auto; min-height: 76px; padding: 10px 14px; text-align: left; width: 100%; }

@@ -73,8 +73,10 @@ def main():
                       all_cases_seconds=elapsed, warm_first_case_seconds=warm)
         if args.output.name == "hybrid_repair_report.json":
             report["verification_kind"] = "Post-repair regression; held-out outcomes previously inspected"
+        if args.output.name == "hybrid_performance_report.json":
+            report["verification_kind"] = "Performance regression; frozen judgments and ranking settings unchanged"
         print(report["paraphrase_retrieval"], report["unrelated_queries"], report["correctness_violations"])
-    if args.output.resolve().parent != ROOT.resolve() or args.output.name not in ("hybrid_calibration.json", "hybrid_report.json", "hybrid_repair_report.json"):
+    if args.output.resolve().parent != ROOT.resolve() or args.output.name not in ("hybrid_calibration.json", "hybrid_report.json", "hybrid_repair_report.json", "hybrid_performance_report.json"):
         raise ValueError("Output must be a separate hybrid report in fixtures/search_semantic")
     args.output.write_bytes(render_report(report))
     print(json.dumps({k: v for k, v in report.items() if k not in ("cases", "trials")}, ensure_ascii=False))

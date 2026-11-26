@@ -33,12 +33,16 @@ Missing files/dependencies or inference failure preserve keyword results and
 ordering; diagnostics include exception type only. Remove the variable to
 disable semantics. No model weights belong in Git.
 
-The controller holds weights only, with no cached task/query vectors or results.
-Each call embeds only the current authorized, source-enabled, filtered snapshot.
-This intentionally avoids stale private caches across refresh/account changes.
-Inference is synchronous, so it has no background completion that could publish
-after a session change. Large snapshots may block UI processing during inference;
-further latency work is separate.
+See [PREPARATION.md](PREPARATION.md) for background passage preparation,
+preliminary keyword feedback and the current first-search measurements.
+The measurements below and in PERFORMANCE.md remain historical evidence.
+
+The controller retains weights and a bounded passage-vector cache for its current
+authorized session/snapshot. Query embeddings are not cached. Snapshot/source
+replacement, refresh, logout, expiry and account changes invalidate passage
+reuse. Inference runs off the UI loop; obsolete query/session completions cannot
+publish results or repopulate invalidated caches. See [PERFORMANCE.md](PERFORMANCE.md)
+for bounds, reproducible before/after measurements, costs and remaining slow paths.
 
 Reproduce calibration **before** evaluating held-out cases:
 

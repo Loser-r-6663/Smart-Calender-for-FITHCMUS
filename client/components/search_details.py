@@ -14,6 +14,7 @@ class SearchDetailsDialog:
         self.controller = controller
         self._session = None
         self._opener = None
+        self._opener_key = None
         self._rendered = None
         with ui.dialog().props('no-refocus') as self.dialog:
             with ui.card().classes('search-detail-dialog'):
@@ -29,6 +30,7 @@ class SearchDetailsDialog:
             return
         self._session = self.controller.selection_session
         self._opener = f'c{opener.id}'
+        self._opener_key = ':'.join(self.controller.state.selected_search_key)
         self._rendered = None
         self.dialog.open()
         self.sync()
@@ -71,13 +73,22 @@ class SearchDetailsDialog:
         if opener is None or self._session != self.controller.selection_session:
             return
         await ui.run_javascript(f'''
-            const element = document.getElementById({json.dumps(opener)});
+            const key = {json.dumps(self._opener_key)};
+            const element = document.getElementById({json.dumps(opener)}) ||
+                [...document.querySelectorAll('.search-result')].find(e => e.dataset.searchKey === key);
             if (element && element.checkVisibility()) {{
+                const menu = element.closest('.task-search-popover');
+                const anchor = menu?.__detailAnchor;
+                const saved = element.__searchScroll || (anchor?.key === key &&
+                    anchor.request === element.dataset.searchRequest ? anchor.scroll : null);
+                if (saved) {{
+                    element.closest('.search-results').scrollTop = saved.list;
+                    menu.scrollTop = saved.menu;
+                }}
                 const bounds = element.getBoundingClientRect();
                 const list = element.closest('.search-results')?.getBoundingClientRect();
                 if (list && bounds.bottom > Math.max(0, list.top)
                     && bounds.top < Math.min(innerHeight, list.bottom)) {{
-                    const saved = element.__searchScroll;
                     if (saved) {{
                         const restore = () => {{
                             element.closest('.search-results').scrollTop = saved.list;

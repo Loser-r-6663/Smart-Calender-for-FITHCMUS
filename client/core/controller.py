@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import calendar as month_calendar
+import asyncio
+from time import perf_counter
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from dataclasses import replace
-from academic_search import SearchSnapshot
+from academic_search import SearchSnapshot, search_records
 from academic_search.semantic import HybridSearch
 from client.core.backend import ClientBackend, SessionExpiredError
 from client.core.models import CalendarItem, ClientState, ClientUser
@@ -217,9 +219,28 @@ class ClientController:
         self._search_filters = {}
         self._search_sort = None
         self._hybrid_search = HybridSearch()
+        self._search_request = 0
+        self._search_lock = asyncio.Lock()
+        self._preparation_generation = 0
+        self._preparation_task = None
+        self._preparation_gate = None
+        self._preparation_waiting_for_ui = False
+        self._foreground_waiters = 0
+        self._foreground_idle = asyncio.Event()
+        self._foreground_idle.set()
+        self.preparation_status = {'state':'disabled'}
+        self.last_search_mode = 'keyword'
         self.backend.watch(self)
 
     def _clear_tasks(self) -> None:
+        if self._preparation_waiting_for_ui and self._preparation_task is not None:
+            self._preparation_task.cancel()
+            self._preparation_waiting_for_ui = False
+        self._preparation_generation += 1
+        self.preparation_status = {'state':'cancelled'}
+        self.last_search_mode = 'keyword'
+        self._search_request += 1
+        self._hybrid_search.clear_cache()
         self._loaded_tasks = None
         self.state.schedule = None
         self.state.items = []
@@ -286,6 +307,7 @@ class ClientController:
             if selected_search_key is not None:
                 if loaded.snapshot.get_task(selected_search_key) is not None:
                     self.state.selected_search_key = selected_search_key
+            self._start_preparation(loaded.snapshot, user)
         except SessionExpiredError:
             if generation == self._generation and self.state.user is user:
                 self.backend.logout(user)
@@ -297,6 +319,50 @@ class ClientController:
         finally:
             if generation == self._generation:
                 self.state.loading = False
+
+    def defer_preparation(self):
+        """Allow a UI to release background setup after its first paint."""
+        if self._hybrid_search.enabled:
+            self._preparation_gate = asyncio.Event()
+        return self._preparation_gate
+
+    def _start_preparation(self, snapshot, user):
+        if not self._hybrid_search.enabled:
+            self.preparation_status = {'state':'disabled'}
+            return
+        generation = self._preparation_generation
+        epoch = self._hybrid_search.begin_preparation(snapshot.records, cache_token=snapshot)
+        started = perf_counter()
+        self.preparation_status = dict(state='pending',cached=0,total=len(snapshot.records),duration_ms=0)
+        self._preparation_waiting_for_ui = self._preparation_gate is not None and not self._preparation_gate.is_set()
+        self._preparation_task = asyncio.create_task(self._prepare_snapshot(snapshot,user,generation,epoch,started))
+
+    async def _prepare_snapshot(self, snapshot, user, generation, epoch, started):
+        def current():
+            return (generation == self._preparation_generation and self.state.user is user
+                    and self.state.search_snapshot is snapshot and not self.state.session_expired)
+        if self._preparation_gate is not None:
+            await self._preparation_gate.wait()
+        if not current():
+            return
+        self._preparation_waiting_for_ui = False
+        start = 0
+        while current():
+            await self._foreground_idle.wait()
+            async with self._search_lock:
+                if not current():
+                    return
+                if self._foreground_waiters:
+                    continue
+                status = await asyncio.to_thread(self._hybrid_search.prepare_batch, snapshot.records,
+                    cache_token=snapshot, expected_epoch=epoch, start=start, batch_size=16)
+            if not current():
+                return
+            self.preparation_status = dict(status,duration_ms=(perf_counter()-started)*1000)
+            if status['state'] != 'running':
+                return
+            start = status['next_index']
+            await asyncio.sleep(0)
 
     def show_month(self, month: date) -> None:
         self.state.visible_month = month.replace(day=1)
@@ -313,16 +379,51 @@ class ClientController:
         self.select_date(self.state.selected_date)
 
     def search(self, query: str, *, filters=None, sort=None):
+        self._search_request += 1
         self.state.search_query = query
         self._search_filters = {} if filters is None else dict(filters)
         self._search_sort = sort
         return self.search_results
 
+    async def search_async(self, query: str, *, filters=None, sort=None):
+        self._search_request += 1
+        request = self._search_request
+        self.state.search_query = query
+        self._search_filters = {} if filters is None else dict(filters)
+        self._search_sort = sort
+        snapshot, user = self.state.search_snapshot, self.state.user
+        session = self._selection_session
+
+        def current():
+            return (request == self._search_request and session == self._selection_session
+                    and self.state.search_snapshot is snapshot and self.state.user is user
+                    and not self.state.session_expired)
+
+        filters = self._search_filters
+        search_records(snapshot.records, query, filters=filters, sort=sort)
+        self._foreground_waiters += 1
+        self._foreground_idle.clear()
+        try:
+            async with self._search_lock:
+                if not current():
+                    return None
+                epoch = self._hybrid_search.begin_preparation(snapshot.records,cache_token=snapshot)
+                result = await asyncio.to_thread(self._hybrid_search, snapshot.records, query,
+                    filters=filters, sort=sort, cache_token=snapshot, expected_epoch=epoch)
+                if current():
+                    self.last_search_mode = self._hybrid_search.last_mode
+        finally:
+            self._foreground_waiters -= 1
+            if not self._foreground_waiters:
+                self._foreground_idle.set()
+        return result if current() else None
+
     @property
     def search_results(self):
         filters = dict(self._search_filters)
         return self._hybrid_search(self.state.search_snapshot.records, self.state.search_query,
-                                   filters=filters, sort=self._search_sort)
+                                   filters=filters, sort=self._search_sort,
+                                   cache_token=self.state.search_snapshot)
 
     @property
     def selected_search_record(self):
