@@ -49,7 +49,9 @@ class SearchPanel:
         self.menu.on('hide', self.restore_focus)
 
     def render(self, *, on_filter, on_view) -> None:
-        with ui.button(on_click=self.toggle_menu).props('outline no-caps aria-label="Search tasks"').classes("compact-search-trigger") as self.trigger:
+        with ui.button(on_click=self.toggle_menu).props(
+            f'outline no-caps aria-label="Search tasks" data-search-session="{self.controller.selection_session}"'
+        ).classes("compact-search-trigger") as self.trigger:
             ui.icon("search")
             ui.label("Search tasks")
             ui.space()
@@ -74,7 +76,9 @@ class SearchPanel:
 
     @ui.refreshable
     def form(self):
-        with ui.element("section").classes("loaded-search"):
+        with ui.element("section").classes("loaded-search").props(
+            f'data-search-session="{self.controller.selection_session}"'
+        ):
             with ui.row().classes("search-query-row w-full"):
                 self.query_input = ui.input("Query", placeholder="Title, course or Vietnamese keywords").bind_value(
                     self, "query"
@@ -121,6 +125,7 @@ class SearchPanel:
         self.submitted_query = ""
         self.kind = "all"
         self.controller.search("")
+        self._snapshot = self.controller.state.search_snapshot
         self.form.refresh()
         on_filter(self.controller.state.filters.kind)
 
@@ -190,7 +195,7 @@ class SearchPanel:
                     f'flat no-caps align=left data-search-key="{record.scope}:{record.id}" '
                     f'aria-pressed="{str(selected).lower()}"'
                 ).classes(f"search-result {'selected' if selected else ''}") as button:
-                    button.on('focus.capture', js_handler="""event => {
+                    button.on('pointerdown.capture', js_handler="""event => {
                         const element = event.currentTarget;
                         element.__searchScroll = {
                             list: element.closest('.search-results')?.scrollTop || 0,
@@ -201,6 +206,7 @@ class SearchPanel:
                     button.on('keydown.capture', js_handler="""event => {
                         if (event.key !== 'Enter' && event.key !== ' ') return;
                         const element = event.currentTarget;
+                        element.dataset.detailRestored = 'false';
                         element.__searchScroll = {
                             list: element.closest('.search-results')?.scrollTop || 0,
                             menu: element.closest('.task-search-popover')?.scrollTop || 0,
@@ -209,6 +215,7 @@ class SearchPanel:
                     }""")
                     button.on('click.capture', js_handler="""event => {
                         const element = event.currentTarget;
+                        element.dataset.detailRestored = 'false';
                         if (!element.__searchScroll) element.__searchScroll = {
                             list: element.closest('.search-results')?.scrollTop || 0,
                             menu: element.closest('.task-search-popover')?.scrollTop || 0,

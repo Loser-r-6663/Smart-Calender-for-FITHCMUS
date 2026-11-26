@@ -6,7 +6,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from dataclasses import replace
-from academic_search import SearchSnapshot, search_records
+from academic_search import SearchSnapshot
+from academic_search.semantic import HybridSearch
 from client.core.backend import ClientBackend, SessionExpiredError
 from client.core.models import CalendarItem, ClientState, ClientUser
 
@@ -215,6 +216,7 @@ class ClientController:
         self._loaded_tasks = None
         self._search_filters = {}
         self._search_sort = None
+        self._hybrid_search = HybridSearch()
         self.backend.watch(self)
 
     def _clear_tasks(self) -> None:
@@ -319,8 +321,8 @@ class ClientController:
     @property
     def search_results(self):
         filters = dict(self._search_filters)
-        return search_records(self.state.search_snapshot.records, self.state.search_query,
-                              filters=filters, sort=self._search_sort)
+        return self._hybrid_search(self.state.search_snapshot.records, self.state.search_query,
+                                   filters=filters, sort=self._search_sort)
 
     @property
     def selected_search_record(self):

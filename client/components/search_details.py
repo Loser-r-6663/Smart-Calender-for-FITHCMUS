@@ -78,7 +78,6 @@ class SearchDetailsDialog:
                 if (list && bounds.bottom > Math.max(0, list.top)
                     && bounds.top < Math.min(innerHeight, list.bottom)) {{
                     const saved = element.__searchScroll;
-                    element.focus({{preventScroll: true}});
                     if (saved) {{
                         const restore = () => {{
                             element.closest('.search-results').scrollTop = saved.list;
@@ -86,9 +85,12 @@ class SearchDetailsDialog:
                             window.scrollTo({{top: saved.page, behavior: 'instant'}});
                         }};
                         restore();
-                        requestAnimationFrame(restore);
-                        delete element.__searchScroll;
+                        await new Promise(requestAnimationFrame);
+                        restore();
                     }}
+                    element.focus({{preventScroll: true}});
+                    delete element.__searchScroll;
+                    element.dataset.detailRestored = 'true';
                 }}
             }}
         ''')

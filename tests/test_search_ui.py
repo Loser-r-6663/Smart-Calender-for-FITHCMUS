@@ -575,6 +575,8 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
 
 @pytest.mark.parametrize("transition", ["account", "logout", "expiry"])
 def test_stale_browser_selection_clears_private_panel(page, ui_server, transition):
+    old_session = page.locator('.loaded-search').get_attribute('data-search-session')
+    old_trigger = page.get_by_role('button', name='Search tasks', exact=True).get_attribute('id')
     page.locator(f'[data-search-key="{PERSONAL}"]').click()
     expect(page.locator(".search-detail-dialog .detail-title")).to_have_text("Beta drive")
     reads = page.request.get(ui_server + "/test-state").json()["reads"]
@@ -587,6 +589,8 @@ def test_stale_browser_selection_clears_private_panel(page, ui_server, transitio
     expect(page.locator(".search-detail-dialog .source-link")).to_have_count(0)
     assert page.request.get(ui_server + "/test-state").json()["reads"] == reads
     if transition == "account":
+        expect(page.get_by_role('button', name='Search tasks', exact=True)).not_to_have_attribute('data-search-session', old_session)
+        expect(page.get_by_role('button', name='Search tasks', exact=True)).not_to_have_attribute('id', old_trigger)
         submit(page, "")
         page.locator(f'[data-search-key="{PERSONAL}"]').click()
         expect(page.locator(".search-detail-dialog .detail-title")).to_have_text("Other account task")
@@ -615,16 +619,28 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
     dialog = page.locator(".search-detail-dialog")
     list_id = page.locator(".search-results").get_attribute("id")
     result_id = result.get_attribute("id")
+    result.evaluate("""element => {
+        const capture = event => {
+            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+            window.activationScroll = {page: scrollY,
+                list: element.closest('.search-results').scrollTop,
+                menu: element.closest('.task-search-popover').scrollTop};
+        };
+        element.addEventListener('pointerdown', capture, true);
+        element.addEventListener('keydown', capture, true);
+    }""")
     for keyboard in (False, True):
         result.evaluate("element => element.scrollIntoView({block: 'center'})")
         result.evaluate("element => element.focus({preventScroll: true})")
-        before = page.evaluate("({page: scrollY, list: document.querySelector('.search-results').scrollTop})")
+        before = page.evaluate("({page: scrollY, list: document.querySelector('.search-results').scrollTop, menu: document.querySelector('.task-search-popover').scrollTop})")
         assert before["page"] >= 0
         assert before["list"] > 0
         if keyboard:
             result.press("Enter")
         else:
             result.click()
+        before = page.evaluate("window.activationScroll")
+        assert before["list"] > 0
         expect(dialog).to_be_visible()
         expect(dialog.get_by_role("heading", name="Task details")).to_be_visible()
         expect(dialog.locator(".detail-title")).to_have_text("Off-month report")
@@ -644,9 +660,11 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
         else:
             close_details(page)
         expect(result).to_be_focused()
-        after = page.evaluate("({page: scrollY, list: document.querySelector('.search-results').scrollTop})")
+        expect(result).to_have_attribute('data-detail-restored', 'true')
+        after = page.evaluate("({page: scrollY, list: document.querySelector('.search-results').scrollTop, menu: document.querySelector('.task-search-popover').scrollTop})")
         assert abs(after["page"] - before["page"]) <= 1
-        assert abs(after["list"] - before["list"]) <= 1
+        assert abs(after["list"] - before["list"]) <= 1, (keyboard, before, after)
+        assert abs(after["menu"] - before["menu"]) <= 1
         assert page.locator(".search-results").get_attribute("id") == list_id
         assert result.get_attribute("id") == result_id
         expect(page.get_by_label("Query")).to_have_value("shared topic")
