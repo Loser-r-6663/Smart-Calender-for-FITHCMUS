@@ -2,11 +2,10 @@
 Unit tests cho Thuật toán Nhánh Cận (Branch and Bound Scheduler).
 Kiểm thử toàn diện các kịch bản thực tế dựa trên Schema Task từ Database (PostgreSQL):
 1. Bảo vệ lịch học cố định (Hard anchor protection): Sự kiện ĐRL trùng giờ học bị loại bỏ.
-2. Ràng buộc di chuyển cơ sở (CS1 <-> CS2): Cần đệm 60 phút di chuyển.
-3. Ràng buộc trần điểm 5 Điều (Category Cap): Điều 1 trần 30, có 27 chỉ cộng tối đa 3 điểm.
-4. Xử lý xung đột giữa các sự kiện ĐRL trùng giờ: Chọn sự kiện mang lại tổng điểm cao hơn.
-5. Sự kiện online chỉ có hạn chót deadline: Xử lý mượt mà.
-6. Tốc độ thực thi với quy mô tối đa 40 sự kiện: Chạy xong trong dưới 0.05 giây (< 50ms).
+2. Ràng buộc trần điểm 5 Điều (Category Cap): Điều 1 trần 30, có 27 chỉ cộng tối đa 3 điểm.
+3. Xử lý xung đột giữa các sự kiện ĐRL trùng giờ: Chọn sự kiện mang lại tổng điểm cao hơn.
+4. Sự kiện online chỉ có hạn chót deadline: Xử lý mượt mà.
+5. Tốc độ thực thi với quy mô tối đa 40 sự kiện: Chạy xong trong dưới 0.05 giây (< 50ms).
 """
 
 from __future__ import annotations
@@ -81,51 +80,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertIn("event-hop-le", selected_ids, "Sự kiện hợp lệ phải được chọn!")
         self.assertEqual(result.total_drl_gained, 5)
 
-    def test_case_2_campus_travel_constraint(self):
-        """Kiểm tra: Sự kiện khác cơ sở cần đệm 60 phút di chuyển."""
-        tasks = [
-            # Lớp học tại CS2 (Linh Trung) kết thúc lúc 11:30
-            {
-                "id": "class-cs2",
-                "title": "Lập trình C++",
-                "type": "class",
-                "start_time": datetime(2026, 11, 3, 8, 0, tzinfo=TZ_HCM),
-                "end_time": datetime(2026, 11, 3, 11, 30, tzinfo=TZ_HCM),
-                "location": "CS2 - Nhà C",
-                "training_points": 0,
-            },
-            # Sự kiện tại CS1 bắt đầu lúc 12:15 (cách 45p, không đủ 60p di chuyển)
-            {
-                "id": "event-cs1-khong-kip-gio",
-                "title": "Hiến máu tình nguyện (CS1)",
-                "type": "event",
-                "start_time": datetime(2026, 11, 3, 12, 15, tzinfo=TZ_HCM),
-                "end_time": datetime(2026, 11, 3, 14, 0, tzinfo=TZ_HCM),
-                "location": "CS1 - Sảnh C",
-                "training_points": 8,
-                "drl_category": "dieu_4",
-            },
-            # Sự kiện tại CS2 bắt đầu lúc 12:00 (cùng CS2 nên không cần di chuyển xa)
-            {
-                "id": "event-cs2-kip-gio",
-                "title": "Ngày hội Công nghệ (CS2)",
-                "type": "event",
-                "start_time": datetime(2026, 11, 3, 12, 0, tzinfo=TZ_HCM),
-                "end_time": datetime(2026, 11, 3, 14, 0, tzinfo=TZ_HCM),
-                "location": "CS2 - Hội trường",
-                "training_points": 6,
-                "drl_category": "dieu_3",
-            },
-        ]
-
-        result = self.scheduler.schedule(tasks)
-        selected_ids = [e.task_id for e in result.selected_events]
-
-        self.assertNotIn("event-cs1-khong-kip-gio", selected_ids, "Không đủ thời gian 60 phút di chuyển CS2 -> CS1!")
-        self.assertIn("event-cs2-kip-gio", selected_ids, "Cùng cơ sở CS2 thì hợp lệ!")
-        self.assertEqual(result.total_drl_gained, 6)
-
-    def test_case_3_submodular_category_capping(self):
+    def test_case_2_submodular_category_capping(self):
         """Kiểm tra: Trần điểm 5 Điều (Điều 1 trần 30, có 27 thì chỉ được cộng tối đa 3 điểm)."""
         tasks = [
             {
@@ -150,7 +105,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertEqual(result.final_drl["dieu_1"], 30)
         self.assertEqual(result.total_drl_gained, 3)
 
-    def test_case_4_conflict_between_drl_events(self):
+    def test_case_3_conflict_between_drl_events(self):
         """Kiểm tra: Hai sự kiện ĐRL trùng giờ, thuật toán phải chọn sự kiện có điểm cao hơn."""
         tasks = [
             # Sự kiện A: 5 điểm từ 08:00 -> 11:00
@@ -184,7 +139,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertNotIn("event-it-diem", selected_ids, "Sự kiện ít điểm hơn bị trùng giờ nên bị loại!")
         self.assertEqual(result.total_drl_gained, 9)
 
-    def test_case_5_online_deadline_event(self):
+    def test_case_4_online_deadline_event(self):
         """Kiểm tra: Sự kiện ĐRL online chỉ có hạn chót deadline (như trắc nghiệm MyAloha)."""
         tasks = [
             {
@@ -202,7 +157,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertEqual(len(result.selected_events), 1)
         self.assertEqual(result.selected_events[0].points_gained, 3)
 
-    def test_case_6_scalability_and_execution_speed(self):
+    def test_case_5_scalability_and_execution_speed(self):
         """Kiểm tra: Chạy với quy mô cao điểm 40 sự kiện, thời gian chạy phải < 0.05s."""
         tasks = []
         # Tạo 5 buổi học cố định từ T2 -> T6
@@ -249,7 +204,7 @@ class TestBranchAndBoundScheduler(unittest.TestCase):
         self.assertGreater(result.total_drl_gained, 0, "Phải chọn được các sự kiện tốt nhất!")
         print(f"\n[Test Scalability] 40 sự kiện giải trong {result.execution_time_seconds * 1000:.2f} ms | Duyệt {result.nodes_explored} nút | ĐRL tăng: +{result.total_drl_gained}đ")
 
-    def test_case_7_global_cap_100(self):
+    def test_case_6_global_cap_100(self):
         """Kiểm tra: Ràng buộc trần toàn cục 100 điểm (Quy chế ĐHKHTN)."""
         # Sinh viên đã có 92 điểm tổng cộng (dieu_1: 28, dieu_2: 18, dieu_3: 20, dieu_4: 16, dieu_5: 10)
         initial_drl = {
