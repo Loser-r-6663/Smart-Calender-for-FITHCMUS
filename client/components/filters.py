@@ -116,9 +116,6 @@ class SearchPanel:
         if state.error:
             ui.label("Could not load tasks. Try refreshing.").props('role=alert')
             return
-        if state.filters.kind == "personal":
-            ui.label("Personal tasks are available in Calendar and Schedule.").props("role=status")
-            return
         filters = {}
         if self.course:
             filters["course"] = self.course

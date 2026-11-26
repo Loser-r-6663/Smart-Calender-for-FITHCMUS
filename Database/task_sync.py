@@ -1,4 +1,4 @@
-"""Shared source ingestion for authenticated UI and scheduler sessions."""
+"""Legacy SQLite ingestion utility, unused by the Supabase client and scheduler."""
 
 import os
 

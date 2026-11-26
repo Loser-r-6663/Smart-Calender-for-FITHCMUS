@@ -19,7 +19,7 @@ class SearchAuthenticationError(SearchLoadError):
 class SearchSnapshot:
     records: tuple[SearchRecord, ...]
     loaded_scopes: tuple[Scope, ...]
-    row_limit: int
+    row_limit: int | None = None
 
     @property
     def row_limits(self):
@@ -36,19 +36,20 @@ def load_snapshot(
     public_key: str,
     access_token: str | None = None,
     user_id: str | None = None,
-    limit: int = 100,
+    limit: int | None = None,
 ) -> SearchSnapshot:
     """Load public tasks and, with a token and authenticated user.id, personal tasks.
 
     Supply the public client key and the session pair returned by authentication.
-    Each call produces a new snapshot for that session.
+    Each call produces a new snapshot for that session. A None limit reads
+    every page; a positive limit explicitly bounds each repository.
     """
     if not isinstance(supabase_url, str) or not supabase_url.strip():
         raise ValueError("An explicit Supabase URL is required")
     if not isinstance(public_key, str) or not public_key.strip():
         raise ValueError("An explicit Supabase public client key is required")
-    if type(limit) is not int or limit <= 0:
-        raise ValueError("limit must be a positive integer")
+    if limit is not None and (type(limit) is not int or limit <= 0):
+        raise ValueError("limit must be a positive integer or None")
     signed_in = access_token is not None or user_id is not None
     if signed_in:
         if (not isinstance(access_token, str) or not access_token.strip()

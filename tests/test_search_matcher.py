@@ -71,7 +71,7 @@ class SearchMatcherTests(unittest.TestCase):
                                 self.assertEqual(keys(result.eligible_records), eligible)
                                 self.assertEqual(keys(result.hits), hits)
                                 self.assertEqual(dict(result.effective_filters), {
-                                    "types": ("class", "assignment", "event", "announcement"), **bounds,
+                                    "types": ("class", "assignment", "event", "announcement", "personal"), **bounds,
                                 })
 
     def test_comparisons_filter_nonliteral_candidates_and_preserve_event_inference(self):
@@ -120,7 +120,7 @@ class SearchMatcherTests(unittest.TestCase):
                 self.assertEqual(keys(result.eligible_records), eligible)
                 self.assertEqual(keys(result.hits), hits)
                 self.assertEqual(dict(result.effective_filters), {
-                    "types": ("class", "assignment", "event", "announcement"), **effective,
+                    "types": ("class", "assignment", "event", "announcement", "personal"), **effective,
                 })
                 self.assertEqual(selected, original)
         for query, selected in (
@@ -167,7 +167,7 @@ class SearchMatcherTests(unittest.TestCase):
                 self.assertEqual(keys(result.hits), expected)
                 self.assertEqual(keys(result.eligible_records), expected)
                 self.assertEqual(dict(result.effective_filters), {
-                    "types": ("class", "assignment", "event", "announcement"), **bounds,
+                    "types": ("class", "assignment", "event", "announcement", "personal"), **bounds,
                 })
                 self.assertEqual(result.topic, topic)
 
@@ -308,7 +308,7 @@ class SearchMatcherTests(unittest.TestCase):
             ("", {"deadline_end": "2026-02-30"}),
             ("", {"deadline_start": datetime(2026, 11, 23)}),
             ("", {"min_training_points": True}),
-            ("", {"types": ["personal"]}),
+            ("", {"types": ["meeting"]}),
             ("", {"types": []}),
             ("", {"unknown": True}),
         ):
@@ -322,3 +322,12 @@ class SearchMatcherTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_personal_type_filter_does_not_treat_every_private_task_as_personal():
+    personal = map_task(task(type="personal", title="Owner planning"), scope="personal")
+    assignment = map_task(task(id="99999999-9999-4999-8999-999999999999", type="assignment", title="Owner coursework"), scope="personal")
+    records = (personal, assignment)
+    assert search_records(records, "planning", filters={"types":["personal"]}).hits == (personal,)
+    assert search_records(records, "", filters={"types":["assignment"]}).hits == (assignment,)
+    assert search_records(records, "coursework", filters={"types":["personal"]}).hits == ()

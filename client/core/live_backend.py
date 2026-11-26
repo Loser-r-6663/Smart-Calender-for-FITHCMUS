@@ -137,11 +137,17 @@ class LiveBackend(ClientBackend):
         return SyncResult(ok=True, message="Password changed")
 
     async def get_tasks(self, user: ClientUser) -> list[Any]:
+        tasks, _, _ = await self._read_tasks(user)
+        return tasks
+
+    async def _read_tasks(self, user: ClientUser):
         from DataProcessor.Standardization.Task import Task
         from Database.Repository.task_repository import TaskRepository
         from Database.Repository.user_task_repository import UserTaskRepository
 
         access_token = self._access_tokens.get(user.id)
+        if access_token is not None and (not access_token or not user.id):
+            raise SessionExpiredError("Session expired. Sign in again.")
         public_tasks = list(await asyncio.to_thread(TaskRepository().get_tasks, None))
         if access_token is None:
             personal_tasks: list[Any] = []
@@ -158,17 +164,27 @@ class LiveBackend(ClientBackend):
 
         if self._access_tokens.get(user.id) != access_token:
             raise SessionExpiredError("Session changed. Sign in again.")
-        self._original_groups[user.id] = (("public", public_tasks), ("personal", personal_tasks))
+        groups = (("public", public_tasks), ("personal", personal_tasks))
+        seen = set()
+        for scope, originals in groups:
+            for original in originals:
+                task_id = original.get("id") if isinstance(original, dict) else getattr(original, "id", None)
+                if task_id is not None:
+                    if task_id in seen:
+                        raise ValueError("Task UUIDs must be unique across public and personal originals")
+                    seen.add(task_id)
+                owner = original.get("user_id") if isinstance(original, dict) else getattr(original, "user_id", None)
+                if scope == "personal" and owner not in (None, user.id):
+                    raise ValueError("Personal task belongs to another owner")
         raw_combined = public_tasks + personal_tasks
-        disabled = await self.get_disabled_sources(user)
-
         if not raw_combined or not all(_has_id_and_type(t) for t in raw_combined):
-            return [task for task in raw_combined if _source_platform(task) not in disabled]
+            disabled = await self.get_disabled_sources(user)
+            return [task for task in raw_combined if _source_platform(task) not in disabled], groups, disabled
 
-        self._public_tasks_by_id[user.id] = {
+        public_by_id = {
             str(getattr(t, "id", None) or t["id"]): t for t in public_tasks
         }
-        self._personal_tasks_by_id[user.id] = {
+        personal_by_id = {
             str(getattr(t, "id", None) or t["id"]): t for t in personal_tasks
         }
 
@@ -185,6 +201,7 @@ class LiveBackend(ClientBackend):
                     raise
                 logger.warning("Could not load user_task_state for %s", user.id)
 
+        disabled = await self.get_disabled_sources(user)
         if self._access_tokens.get(user.id) != access_token:
             raise SessionExpiredError("Session changed. Sign in again.")
         merged: list[Task] = []
@@ -198,8 +215,11 @@ class LiveBackend(ClientBackend):
             if (task.source_platform or "Custom") not in disabled:
                 merged.append(task)
 
+        self._original_groups[user.id] = groups
+        self._public_tasks_by_id[user.id] = public_by_id
+        self._personal_tasks_by_id[user.id] = personal_by_id
         self._merged_tasks_by_id[user.id] = merged_map
-        return merged
+        return merged, groups, disabled
 
     async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
         return await self._save_custom_task(user, task)
@@ -409,9 +429,7 @@ class LiveBackend(ClientBackend):
         points = task.training_points
         est_hours = task.estimated_hours
 
-        if not strict_db and kind == "personal":
-            kind = "event"
-        elif strict_db and kind == "event":
+        if strict_db and kind == "event":
             # Ensure compatibility with strict user_task event constraints on Supabase
             if points is None and source_platform is None:
                 kind = "personal"
@@ -817,21 +835,21 @@ class LiveBackend(ClientBackend):
     async def load_tasks(self, user):
         from Database.Repository.task_repository import TaskRepository
         if user is None:
-            public = await asyncio.to_thread(TaskRepository().get_tasks, 1000)
+            public = await asyncio.to_thread(TaskRepository().get_tasks, None)
             from client.core.backend import task_load
             return task_load((("public", public),), set())
         token = self._access_tokens.get(user.id)
         if not token or not user.id:
             raise SessionExpiredError("Session expired. Sign in again.")
         try:
-            tasks = await self.get_tasks(user)
+            tasks, groups, disabled = await self._read_tasks(user)
         except HTTPError as error:
             if error.response is not None and error.response.status_code in (401, 403):
                 raise SessionExpiredError("Session expired. Sign in again.") from error
             raise
         if self._access_tokens.get(user.id) != token:
             raise SessionExpiredError("Session changed. Sign in again.")
-        return bridge_task_load(self._original_groups[user.id], tasks, await self.get_disabled_sources(user))
+        return bridge_task_load(groups, tasks, disabled)
 
     def logout(self, user):
         super().logout(user)

@@ -23,7 +23,7 @@ MONTH = date(2026, 11, 1)
 def install_reads(monkeypatch):
     calls = []
     public = task(title="Off-month public", deadline="2027-01-12T08:00:00+07:00")
-    personal = task(title="Private undated", source_platform="Moodle")
+    personal = task(id="33333333-3333-4333-8333-333333333333", title="Private undated", source_platform="Moodle")
     weekly = task(id="22222222-2222-4222-8222-222222222222",
                   title="Weekly class", type="class", source_platform="Portal",
                   start_time={"day": "T2", "time": "08:00:00"})
@@ -58,15 +58,15 @@ def test_one_live_load_serves_calendar_search_and_scoped_details(monkeypatch):
         ]
         snapshot = controller.state.search_snapshot
         assert snapshot.loaded_scopes == ("public", "personal")
-        assert dict(snapshot.row_limits) == {"public": 1000, "personal": 1000}
+        assert dict(snapshot.row_limits) == {"public": None, "personal": None}
         assert [item.day for item in controller.state.items] == [
             date(2026, 10, 26), *[date(2026, 11, n) for n in (2, 9, 16, 23, 30)],
         ]
         assert controller.state.visible_month == MONTH
         assert [r.key for r in controller.search("off-month").hits] == [("public", TASK_ID)]
         controller.set_query("undated")
-        assert [r.key for r in controller.search_results.hits] == [("personal", TASK_ID)]
-        controller.state.selected_search_key = ("personal", TASK_ID)
+        assert [r.key for r in controller.search_results.hits] == [("personal", "33333333-3333-4333-8333-333333333333")]
+        controller.state.selected_search_key = ("personal", "33333333-3333-4333-8333-333333333333")
         assert controller.selected_search_record.title == "Private undated"
         controller.set_query("")
         assert len(controller.search_results.hits) == 3
@@ -100,7 +100,7 @@ def test_mock_contract_stable_keys_source_filters_and_personal_visibility():
         await controller.load_month()
         assert all(r.publisher != "Portal" for r in controller.state.search_snapshot.records)
         assert all(item.source != "Portal" for item in controller.state.items)
-        assert dict(controller.state.search_snapshot.row_limits) == {"public": 1000, "personal": 1000}
+        assert dict(controller.state.search_snapshot.row_limits) == {"public": None, "personal": None}
         new_user = await backend.register("new-user", "password123")
         controller.set_user(new_user)
         await controller.load_month(MONTH)

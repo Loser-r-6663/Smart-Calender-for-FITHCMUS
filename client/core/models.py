@@ -152,5 +152,5 @@ class ClientState:
     loading: bool = False
     error: str | None = None
     session_expired: bool = False
-    search_snapshot: SearchSnapshot = field(default_factory=lambda: SearchSnapshot((), (), 1000))
+    search_snapshot: SearchSnapshot = field(default_factory=lambda: SearchSnapshot((), (), None))
     selected_search_key: tuple[str, str] | None = None

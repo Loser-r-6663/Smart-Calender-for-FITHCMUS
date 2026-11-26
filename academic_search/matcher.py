@@ -10,7 +10,7 @@ from types import MappingProxyType
 from .records import SearchRecord
 
 VN_TZ = timezone(timedelta(hours=7))
-TASK_TYPES = ("class", "assignment", "event", "announcement")
+TASK_TYPES = ("class", "assignment", "event", "announcement", "personal")
 SORTS = ("best_match", "soonest_deadline", "latest_deadline", "title")
 POINT_PREFIX = r"lớn hơn|nhiều hơn|nhỏ hơn|bé hơn|ít hơn|nhiều nhất|ít nhất|tối thiểu|tối đa|hơn|trên|dưới|từ|bằng"
 POINT_SUFFIX = r"trở lên|trở xuống"

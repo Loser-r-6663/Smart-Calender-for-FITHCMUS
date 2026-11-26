@@ -35,7 +35,7 @@ class TaskLoad:
     calendar_keys: tuple[tuple[str, str], ...] | None = None
 
 
-def task_load(groups, disabled, limit=1000):
+def task_load(groups, disabled, limit=None):
     tasks, records = [], []
     for scope, group in groups:
         for task in group[:limit]:
@@ -171,14 +171,15 @@ class ClientBackend(ABC):
 
 
 
-def bridge_task_load(groups, calendar_tasks, disabled, limit=1000):
+def bridge_task_load(groups, calendar_tasks, disabled, limit=None):
+    """Pair original scoped Search facts with overlaid Calendar tasks."""
     originals = [(scope, source) for scope, group in groups for source in group
                  if source.source_platform not in disabled]
     if len(originals) != len(calendar_tasks):
         raise ValueError("Calendar tasks and original source rows are not aligned")
     records = tuple(map_task(source, scope=scope) for scope, group in groups
                     for source in group[:limit]
-                    if source.source_platform not in disabled and source.type != "personal")
+                    if source.source_platform not in disabled)
     return TaskLoad(tuple(calendar_tasks),
                     SearchSnapshot(records, tuple(scope for scope, _ in groups), limit),
                     tuple((scope, source.id) for scope, source in originals))

@@ -140,3 +140,13 @@ class SearchRecordTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_personal_type_preserves_optional_original_fields():
+    original = task(type="personal", title="Custom appointment", source_platform=None, source_url="",
+                    deadline=None, registration_start=None, registration_end=None)
+    record = map_task(original, scope="personal")
+    assert record.type == "personal" and record.key == ("personal", original.id)
+    assert record.publisher is None and record.source_url == ""
+    assert record.training_points is None and record.deadline is None
+    assert record.registration_start is None and record.registration_end is None

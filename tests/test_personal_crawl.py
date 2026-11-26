@@ -325,12 +325,16 @@ def test_processing_failures_have_safe_stage_diagnostics(personal_crawl_environm
 
 
 @pytest.mark.parametrize("moodle", ["disabled", "fetch", "parse"])
-def test_backend_crawl_then_sqlite_refresh_exposes_new_owner_task(personal_crawl_environment, monkeypatch, moodle):
+def test_backend_crawl_then_supabase_refresh_exposes_new_owner_task(personal_crawl_environment, monkeypatch, moodle):
     from client.core.live_backend import LiveBackend
     from client.core.models import ClientUser
-    from Database.Repository.local_task_repository import LocalTaskRepository
+    from client.core.controller import ClientController
+    from datetime import date
 
     env = personal_crawl_environment
+    states = {}
+    monkeypatch.setattr("Database.Repository.user_task_state_repository.UserTaskStateRepository.get_task_states", lambda *a: states)
+    monkeypatch.setattr("sqlite3.connect", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("UI opened SQLite")))
     monkeypatch.setattr("Database.Repository.task_repository.TaskRepository.get_tasks", lambda *a, **kw: [])
 
     async def scenario():
@@ -350,9 +354,16 @@ def test_backend_crawl_then_sqlite_refresh_exposes_new_owner_task(personal_crawl
         loaded = await backend.load_tasks(user)
         assert [(record.scope, str(record.id), record.title) for record in loaded.snapshot.records] == [
             ("personal", "11111111-1111-4111-8111-111111111111", "New fictional Portal task")]
-        with LocalTaskRepository(user.id) as store:
-            assert len(store.get_verified_tasks()) == 1
-        assert env.reads == [1000, 1000]
+        assert loaded.snapshot.row_limit is None
+        assert env.reads == [1000, None]
+        controller = ClientController(backend, user)
+        await controller.load_month(date(2026, 11, 1))
+        record = controller.search("New fictional Portal task").hits[0]
+        states[record.id] = {"status": "scheduled", "recurrence": False, "compulsory": True, "flexible": False}
+        await controller.load_month()
+        assert controller.select_search_record(record.key, session=controller.selection_session)
+        assert controller.selected_search_record == record
+        assert len(env.stored) == 1
         again = await backend.sync(user)
         assert again.ok == (moodle == "disabled")
         assert "0 new" in again.message

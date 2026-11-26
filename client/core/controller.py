@@ -221,7 +221,7 @@ class ClientController:
         self._loaded_tasks = None
         self.state.schedule = None
         self.state.items = []
-        self.state.search_snapshot = SearchSnapshot((), (), 1000)
+        self.state.search_snapshot = SearchSnapshot((), (), None)
         self.state.selected_item_id = None
         self.state.selected_search_key = None
 

@@ -1,4 +1,4 @@
-"""Offline compatibility of FE calendar state and bounded original Search records."""
+"""Offline compatibility of FE calendar state and complete original Search records."""
 
 import asyncio
 from datetime import date
@@ -18,10 +18,10 @@ B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 MONTH = date(2026, 11, 1)
 
 
-def test_bridge_keeps_all_calendar_rows_but_bounds_search_and_reuses_originals(monkeypatch):
+def test_bridge_keeps_all_calendar_rows_and_search_originals(monkeypatch):
     public = [task(id=str(UUID(int=n + 1, version=4)), title=f"Public {n}",
                    deadline="2026-11-26T09:00:00+07:00") for n in range(1001)]
-    personal = task(id=public[0].id, user_id=A, title="Private original", source_platform="Moodle")
+    personal = task(id="aaaaaaaa-2222-4222-8222-222222222222", user_id=A, title="Private original", source_platform="Moodle")
     calls = []
 
     def public_read(repo, limit):
@@ -51,17 +51,17 @@ def test_bridge_keeps_all_calendar_rows_but_bounds_search_and_reuses_originals(m
                          ("state", A, 1002, "Bearer fictional-a")]
         loaded = controller._loaded_tasks
         assert len(loaded.tasks) == len(loaded.calendar_keys) == 1002
-        assert len(loaded.snapshot.records) == 1001
-        assert dict(loaded.snapshot.row_limits) == {"public": 1000, "personal": 1000}
+        assert len(loaded.snapshot.records) == 1002
+        assert dict(loaded.snapshot.row_limits) == {"public": None, "personal": None}
         assert loaded.tasks[1000].status == "rejected"
         assert loaded.tasks[0].title == public[0].title
         assert loaded.snapshot.get_task(("public", public[0].id)).title == "Public 0"
-        assert loaded.snapshot.get_task(("personal", public[0].id)).title == "Private original"
-        assert loaded.snapshot.get_task(("public", public[-1].id)) is None
+        assert loaded.snapshot.get_task(("personal", personal.id)).title == "Private original"
+        assert loaded.snapshot.get_task(("public", public[-1].id)).title == "Public 1000"
         assert len(controller.state.items) == 1001
         assert len(controller.active_items) == 1000
-        assert controller.search("Private original").hits[0].key == ("personal", public[0].id)
-        assert controller.select_search_record(("personal", public[0].id), session=controller.selection_session)
+        assert controller.search("Private original").hits[0].key == ("personal", personal.id)
+        assert controller.select_search_record(("personal", personal.id), session=controller.selection_session)
         assert controller.selected_search_record.source_url == personal.source_url
         controller.search("", sort="title")
         controller.show_month(date(2026, 12, 1))
@@ -80,7 +80,7 @@ def test_mock_personal_tasks_stay_in_calendar_and_undated_tasks_in_agenda():
         await controller.load_month(MONTH)
         assert controller.state.error is None
         assert any(item.title == "Personal appointment" for item in controller.state.items)
-        assert controller.search("Personal appointment").hits == ()
+        assert controller.search("Personal appointment").hits[0].type == "personal"
         assert controller.search("Undated custom assignment").hits
         controller.search("")
         controller.set_view("agenda")
@@ -96,7 +96,7 @@ def test_late_overlay_read_cannot_repopulate_logout_caches_or_replace_account_b(
     entered, release = threading.Event(), threading.Event()
     monkeypatch.setattr("Database.Repository.task_repository.TaskRepository.get_tasks", lambda *a: [task(title="Public")])
     monkeypatch.setattr("Database.Repository.user_task_repository.UserTaskRepository.get_tasks",
-                        lambda repo, limit: [task(title=f"Private {repo.user_id}", source_platform="Moodle", user_id=repo.user_id)])
+                        lambda repo, limit: [task(id="cccccccc-cccc-4ccc-8ccc-cccccccccccc", title=f"Private {repo.user_id}", source_platform="Moodle", user_id=repo.user_id)])
 
     def state_read(repo, rows):
         if repo.user_id == A:

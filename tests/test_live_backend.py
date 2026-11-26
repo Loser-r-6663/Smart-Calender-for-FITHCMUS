@@ -28,7 +28,7 @@ def test_live_backend_uses_supabase_auth_and_personal_task_repository(
     )
     monkeypatch.setattr(
         "Database.Repository.user_task_repository.UserTaskRepository.get_tasks",
-        lambda self, limit=100: [task(title="Personal", source_platform="Portal")],
+        lambda self, limit=100: [task(id="22222222-2222-4222-8222-222222222222", title="Personal", source_platform="Portal")],
     )
 
     async def scenario() -> None:

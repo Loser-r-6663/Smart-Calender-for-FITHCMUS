@@ -27,8 +27,8 @@ class SearchRecord:
     title: str
     description: str | None
     course: str | None
-    type: Literal["class", "assignment", "announcement", "event"]
-    publisher: str
+    type: Literal["class", "assignment", "announcement", "event", "personal"]
+    publisher: str | None
     source_url: str
     training_points: int | None
     deadline: datetime | None

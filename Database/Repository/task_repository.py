@@ -173,6 +173,7 @@ class TaskRepository(BaseSupabaseClient):
         page_size = 1000
         rows: list[dict] = []
         offset = 0
+        seen = set()
         while limit is None or len(rows) < limit:
             request_limit = (
                 page_size
@@ -191,6 +192,14 @@ class TaskRepository(BaseSupabaseClient):
             )
             self._raise(response)
             page = response.json()
+            if not isinstance(page, list):
+                raise ValueError("Task response must contain a page of rows")
+            for row in page:
+                if not isinstance(row, dict) or not row.get("id"):
+                    raise ValueError("Task rows require an ID")
+                if row["id"] in seen:
+                    raise ValueError("Duplicate task UUID in paginated response")
+                seen.add(row["id"])
             rows.extend(page)
             if len(page) < request_limit:
                 break

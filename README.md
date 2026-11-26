@@ -55,7 +55,7 @@ the corresponding consumers.
   scheduler. It reads original Supabase tasks without consuming them and stores
   per-user scheduling fields in `user_task_state`.
 
-### Calendar, task management and bounded Search
+### Calendar, task management and Search snapshots
 
 The merged live client uses FE's paginated `get_tasks(None)` reads for public and
 owner/token-bound personal repositories. Calendar and scheduling apply the
@@ -65,33 +65,48 @@ The supplied SQL is in `Database/Repository/user_task.sql` and
 `custom_task_migration.sql`; no live schema changes were applied during merge
 verification. Public client configuration and server-only secrets remain separate.
 
-The compatibility bridge builds Search records from the same already-loaded
-originals, before calendar occurrence expansion. Search retains a limit of
-1,000 originals per repository; this bound does not truncate FE's calendar data.
-New `personal` task types remain available in Calendar/Agenda and scheduling,
-while Search keeps its existing class, assignment, event and announcement types.
-Source preferences apply to both views. Search selection uses `(scope, UUID)`
-and opens the existing read-only dialog without another task request. Query,
-filter, sort and month-navigation interactions reuse the loaded data.
+Calendar and Search share one completed authorized refresh. Original task reads
+paginate in stable `id.asc` order, 1,000 rows per page through exhaustion, with
+no total Search cap. Guests read public tasks only; personal pages use the
+current session token and authenticated owner ID with the public client key.
+A failed later page is a read error and never publishes a partial snapshot.
+Snapshot `row_limit=None` means no requested total limit, including successful
+empty scopes. Source preferences apply to both views.
+
+Search records preserve original facts before scheduling overlays and calendar
+occurrence expansion. Search supports class, assignment, event, announcement
+and personal types. The Personal filter selects the stored type; private
+assignments still appear under Assignments. Search selection uses `(scope, UUID)`
+and opens the original details without another task request. Query, filter,
+sort and month navigation reuse the loaded snapshot.
+
+The implementation assumes UUIDs are globally unique across public and personal
+originals, as an application decision supplied by the user, without separate
+confirmation from the database owner. Repeated IDs and cross-source collisions
+fail before an ambiguous `user_task_state` overlay is applied. In-memory mock
+fixtures still support scoped UUID collisions independently. No schema change
+or stored scope field is introduced.
 
 Original facts remain separate from scheduling flags. The original task tables
 are not consumed by the incoming FE scheduler. The personal-crawl wrapper adds
 owner-scoped tasks without deleting expired rows or invoking scheduling itself;
 the FE calendar refresh also refreshes an already-open weekly schedule.
 
-Complete paginated Search coverage, the UUID/overlay-collision contract and its
-acceptance checks remain subsequent work. The frozen keyword baseline can be
-reproduced with `python -m fixtures.search_semantic.run_keyword --check`.
+The frozen keyword baseline can be reproduced with
+`python -m fixtures.search_semantic.run_keyword --check`. Its corpus, judgments,
+splits and per-query results are unchanged; the reviewed matcher fingerprint
+update for the additional personal type is recorded in the fixture README.
 
 ### Existing SQLite utilities
 
 The old owner-store utilities and migration tests remain in the repository for
 review of the earlier retention contract. The active merged client and
 `UserManager` no longer read or write those stores. Existing files are not
-migrated or deleted automatically. Tests asserting application ingestion,
-consumption acknowledgements or Search visibility from that retired SQLite
-path remain visible failures until the replacement contract is verified; see
-the merge handoff in the external roadmap.
+migrated or deleted automatically. Independent legacy utility tests remain.
+Active application coverage now exercises Supabase originals, scheduling
+overlays, page failures, owner isolation, source preferences and snapshot reuse;
+the retired application SQLite ingestion/rollback/consumption assertions have
+been replaced or removed. No SQLite store is opened by the active Search path.
 
 For offline verification, use the project environment and disable dotenv loading:
 

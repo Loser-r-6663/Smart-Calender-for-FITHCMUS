@@ -38,3 +38,14 @@ Measured on 25 November 2026 with project Python 3.12.14 on `search-supabase-ui`
 No unrelated query returned a hit: **0 / 4 overall**. There were zero visibility, point-filter, strict-boundary, or control violations. The three exact controls, eight visibility checks, eight point controls and one combined structured-filter case passed. Empty paraphrase results remain in the report as baseline evidence.
 
 Generation and verification ran in separate Python processes with identical frozen inputs; a second run matched every per-query key order and aggregate byte-for-byte. The regression tests additionally generate reports in two independent processes and compare them. No model, embedding dependency, database, crawler or server is needed. Later retrieval evaluation can reuse `load_inputs()`, `visible_records()` and `evaluate(matcher=...)` against the same task objects and cases; expected answers must not be derived from model output.
+
+The Supabase snapshot refactor adds the stored `personal` task type to the
+matcher's accepted type set. It does not change the frozen corpus, judgments,
+splits, matching or ordering. The matcher fingerprint was reviewed and updated
+only after comparing every other report field for exact equality:
+
+- Previous: `8abb07e4fdecebd0f220ef8bbef496431363176d7558320638dd611dffd834b2`
+- Current: `04eddf344b8ce8273a00c7a555e46187cfb4961176faede3bfad0b6eb57380cb`
+
+The tuning 1/3, held-out 0/4, unrelated 0/4 and zero correctness violations
+remain unchanged. The source guard continues to reject any unreviewed change.

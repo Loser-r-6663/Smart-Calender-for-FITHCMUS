@@ -592,3 +592,53 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
         expect(page.locator(".selected-date")).to_have_text(selected_date)
         assert_keys(page, [SEVEN, PERSONAL, NOTICE, OFF_MONTH, WEEKLY, PUBLIC])
         assert page.request.get(ui_server + "/test-state").json()["reads"] == reads
+
+
+def test_personal_and_assignments_controls_open_original_scoped_details(tmp_path):
+    tasks = fictional_tasks()
+    tasks[1].update(type="assignment", training_points=None, training_point_category=None)
+    custom = {**tasks[3], "id":"77777777-7777-4777-8777-777777777777", "user_id":"demo-user",
+        "title":"Owner custom appointment", "description":"Private planning", "type":"personal",
+        "source_platform":"Custom", "source_url":"https://example.invalid/custom"}
+    tasks.append(custom)
+    custom_key = "personal:" + custom["id"]
+    with serve_ui(tmp_path, tasks=tasks) as url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="msedge", headless=True)
+        try:
+            page = browser.new_page(viewport={"width":1280,"height":900})
+            page.route("**/*",lambda route: route.continue_() if route.request.url.startswith(url) else route.abort())
+            page.goto(url+"/start")
+            expect(page.locator(".search-result")).to_have_count(7)
+            before = page.request.get(url+"/test-state").json()["reads"]
+            page.get_by_role("button",name="Personal",exact=True).click()
+            submit(page,"Owner custom")
+            assert_keys(page,[custom_key])
+            page.locator(f'[data-search-key="{custom_key}"]').click()
+            expect(page.locator(".search-detail-dialog .detail-title")).to_have_text(custom["title"])
+            expect(page.locator(".search-detail-dialog .type-badge")).to_have_text("Personal")
+            expect(page.locator(".search-detail-dialog .detail-scope")).to_have_text("Personal")
+            expect(page.locator(".search-detail-dialog .source-link")).to_have_attribute("href",custom["source_url"])
+            close_details(page)
+            page.locator(".search-query-row").get_by_role("button",name="Clear",exact=True).click()
+            expect(page.locator(".search-result")).to_have_count(7)
+            page.get_by_role("button",name="Assignments",exact=True).click()
+            submit(page,"Beta")
+            assert_keys(page,[PERSONAL])
+            page.locator(f'[data-search-key="{PERSONAL}"]').click()
+            expect(page.locator(".search-detail-dialog .type-badge")).to_have_text("Assignment")
+            expect(page.locator(".search-detail-dialog .detail-scope")).to_have_text("Personal")
+            close_details(page)
+            page.locator(".search-query-row").get_by_role("button",name="Clear",exact=True).click()
+            expect(page.locator(".search-result")).to_have_count(7)
+            page.get_by_role("button",name="Personal",exact=True).click()
+            assert_keys(page,[custom_key])
+            page.locator(f'[data-search-key="{custom_key}"]').click()
+            expect(page.locator(".search-detail-dialog")).to_be_visible()
+            page.request.post(url+"/session/account")
+            expect(page.locator(".search-detail-dialog")).not_to_be_visible()
+            assert page.locator('.search-detail-dialog .source-link').count() == 0
+            page.locator(f'[data-search-key="{custom_key}"]').click()
+            expect(page.locator(".search-detail-dialog")).not_to_be_visible()
+            assert page.request.get(url+"/test-state").json()["reads"] == before
+        finally:
+            browser.close()
