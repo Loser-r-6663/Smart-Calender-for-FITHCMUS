@@ -1,3 +1,5 @@
+from test_search_ui import close_search
+from test_search_ui import open_search
 """Actual NiceGUI open/Sync through paginated Supabase originals, without SQLite."""
 
 import pytest
@@ -104,7 +106,10 @@ def test_actual_open_sync_original_details_and_month_navigation_reuse_snapshot(p
     first = state()
     assert first['reads'] == 2
     old_id = page.locator('.search-results').get_attribute('id')
+    close_search(page)
     page.get_by_role('button',name='Run personal crawl',exact=True).click()
+    expect(page.get_by_text('Personal calendar refreshed:',exact=False)).to_be_visible()
+    open_search(page)
     expect(page.locator('.search-results')).not_to_have_attribute('id',old_id)
     expect(page.get_by_text('7 tasks · Soonest deadline',exact=True)).to_be_visible()
     after = state()
@@ -128,10 +133,20 @@ def test_actual_open_sync_original_details_and_month_navigation_reuse_snapshot(p
     expect(page.locator('.search-detail-dialog .detail-title')).to_have_text('Beta drive')
     expect(page.locator('.search-detail-dialog').get_by_text('Deadline: 01 Jan 2000, 09:00 (Vietnam)',exact=True)).to_be_visible()
     close_details(page)
+    previous_query_id = page.get_by_label("Query", exact=True).get_attribute("id")
     page.locator('.search-query-row').get_by_role('button',name='Clear',exact=True).click()
+    expect(page.get_by_label("Query", exact=True)).not_to_have_attribute("id", previous_query_id)
+    page.get_by_label("Query", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
+    page.get_by_label("Query", exact=True).press("Enter")
     expect(page.locator('.search-result')).to_have_count(7)
     for month in ('December 2026','January 2027'):
+        close_search(page)
+        old_trigger = page.get_by_role("button", name="Search tasks", exact=True).get_attribute("id")
         page.locator('.month-controls button').nth(1).click()
+        expect(page.get_by_role("button", name="Search tasks", exact=True)).not_to_have_attribute("id", old_trigger)
+        page.wait_for_timeout(200)
+        open_search(page)
         expect(page.locator('.month-label')).to_have_text(month)
     expect(page.locator('.event-pill').filter(has_text='Off-month report')).to_be_visible()
     page.locator(f'[data-search-key="{OFF_MONTH}"]').click()
@@ -143,6 +158,10 @@ def test_actual_open_sync_original_details_and_month_navigation_reuse_snapshot(p
     assert last["reads"] == after["reads"] and last["counts"] == after["counts"]
     assert last['counts'] == {'sqlite':0, 'crawls':1, 'deletes':0, 'schedules':0}
     page.goto(ui_server+'/calendar')
+    open_search(page)
+    page.get_by_label("Query", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
+    page.get_by_label("Query", exact=True).press("Enter")
     expect(page.locator('.search-result')).to_have_count(7)
     reopened = state()
     assert reopened['reads'] == 6 and reopened['counts'] == last['counts']

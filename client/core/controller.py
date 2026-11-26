@@ -231,6 +231,7 @@ class ClientController:
         self._schedule_generation += 1
         self._clear_tasks()
         self.state.user = user
+        self.state.search_query = ""
         self.state.filters.query = ""
         self.state.filters.kind = "all"
         self._search_filters = {}
@@ -281,7 +282,6 @@ class ClientController:
             self.state.search_snapshot = loaded.snapshot
             self.show_month(self.state.visible_month)
             if selected_search_key is not None:
-                self.state.selected_item_id = None
                 if loaded.snapshot.get_task(selected_search_key) is not None:
                     self.state.selected_search_key = selected_search_key
         except SessionExpiredError:
@@ -308,11 +308,10 @@ class ClientController:
             for item in TaskMapper.map_range(task, start, end)
             if item.day is not None and start <= item.day <= end
         ]
-        if self.state.selected_search_key is None:
-            self.select_date(self.state.selected_date)
+        self.select_date(self.state.selected_date)
 
     def search(self, query: str, *, filters=None, sort=None):
-        self.state.filters.query = query
+        self.state.search_query = query
         self._search_filters = {} if filters is None else dict(filters)
         self._search_sort = sort
         return self.search_results
@@ -320,11 +319,7 @@ class ClientController:
     @property
     def search_results(self):
         filters = dict(self._search_filters)
-        if self.state.filters.kind != "all":
-            kind = self.state.filters.kind
-            selected = filters.get("types", (kind,))
-            filters["types"] = [kind] if kind in selected else []
-        return search_records(self.state.search_snapshot.records, self.state.filters.query,
+        return search_records(self.state.search_snapshot.records, self.state.search_query,
                               filters=filters, sort=self._search_sort)
 
     @property
@@ -340,17 +335,14 @@ class ClientController:
                 or self.state.search_snapshot.get_task(key) is None):
             return False
         self.state.selected_search_key = key
-        self.state.selected_item_id = None
         return True
 
     def select_date(self, selected: date) -> None:
-        self.state.selected_search_key = None
         self.state.selected_date = selected
         day_items = self.items_for_date(selected)
         self.state.selected_item_id = day_items[0].id if day_items else None
 
     def select_item(self, item_id: str) -> None:
-        self.state.selected_search_key = None
         self.state.selected_item_id = item_id
 
     @property
@@ -413,8 +405,6 @@ class ClientController:
 
     @property
     def selected_item(self) -> CalendarItem | None:
-        if self.state.selected_search_key is not None:
-            return None
         target = self.state.selected_item_id
         if not target:
             return None
@@ -434,8 +424,7 @@ class ClientController:
         self.select_date(self.state.selected_date)
 
     def set_query(self, query: str) -> None:
-        self.state.filters.query = query
-        self.select_date(self.state.selected_date)
+        self.search(query)
 
     def set_view(self, view: str) -> None:
         self.state.view = view

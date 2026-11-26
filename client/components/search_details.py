@@ -77,7 +77,18 @@ class SearchDetailsDialog:
                 const list = element.closest('.search-results')?.getBoundingClientRect();
                 if (list && bounds.bottom > Math.max(0, list.top)
                     && bounds.top < Math.min(innerHeight, list.bottom)) {{
+                    const saved = element.__searchScroll;
                     element.focus({{preventScroll: true}});
+                    if (saved) {{
+                        const restore = () => {{
+                            element.closest('.search-results').scrollTop = saved.list;
+                            element.closest('.task-search-popover').scrollTop = saved.menu;
+                            window.scrollTo({{top: saved.page, behavior: 'instant'}});
+                        }};
+                        restore();
+                        requestAnimationFrame(restore);
+                        delete element.__searchScroll;
+                    }}
                 }}
             }}
         ''')

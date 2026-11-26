@@ -153,4 +153,5 @@ class ClientState:
     error: str | None = None
     session_expired: bool = False
     search_snapshot: SearchSnapshot = field(default_factory=lambda: SearchSnapshot((), (), None))
+    search_query: str = ""
     selected_search_key: tuple[str, str] | None = None

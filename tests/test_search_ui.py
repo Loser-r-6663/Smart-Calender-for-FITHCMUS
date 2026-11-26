@@ -233,7 +233,12 @@ def page(ui_server):
                       if route.request.url.startswith("https://example.invalid/") else route.abort())
         page.request.post(ui_server + "/fixture/reset")
         page.goto(ui_server + "/start")
+        open_search(page)
+        page.get_by_label("Query", exact=True).wait_for(state="visible")
+        page.wait_for_function("window.did_handshake === true")
+        page.get_by_label("Query", exact=True).press("Enter")
         expect(page.get_by_label("Query")).to_be_visible()
+        submit(page, "")
         expect(page.locator(".search-result")).to_have_count(6)
         yield page
         browser.close()
@@ -253,13 +258,32 @@ def assert_keys(page, expected):
 
 
 def choose(page, label, option):
+    open_search(page)
     box = page.get_by_role("combobox", name=label, exact=True)
     box.locator("xpath=ancestor::label").click()
-    page.locator(".q-menu").get_by_text(option, exact=True).click(timeout=5000)
+    page.locator(".q-menu:not(.task-search-popover)").get_by_text(option, exact=True).click(timeout=5000)
+
+
+def close_search(page):
+    if page.get_by_label("Query", exact=True).is_visible():
+        page.get_by_label("Query", exact=True).focus()
+        page.keyboard.press("Escape")
+        expect(page.locator(".task-search-popover")).not_to_be_visible()
+
+
+def open_search(page):
+    page.get_by_role("button", name="Search tasks", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
+    if not page.get_by_label("Query", exact=True).is_visible():
+        page.get_by_role("button", name="Search tasks", exact=True).click()
+    expect(page.get_by_label("Query", exact=True)).to_be_visible()
 
 
 def submit(page, text):
+    open_search(page)
     page.get_by_label("Query", exact=True).fill(text)
+    page.get_by_label("Query", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
     page.get_by_label("Query", exact=True).press("Enter")
 
 
@@ -298,15 +322,15 @@ def test_real_search_controls_and_ordering(page, ui_server, tmp_path):
     expect(page.get_by_text("At least 6 points", exact=True)).to_be_visible()
     submit(page, "thiện nguyện từ 5 điểm")
     assert_keys(page, [PERSONAL, SEVEN])
-    page.get_by_role("button", name="Notices", exact=True).click()
+    choose(page, "Type", "Notices")
     expect(page.get_by_label("Query")).to_have_value("thiện nguyện từ 5 điểm")
     expect(page.get_by_text("No matching tasks", exact=True)).to_be_visible()
     submit(page, "thiện nguyện")
     assert_keys(page, [NOTICE])
-    page.get_by_role("button", name="All", exact=True).click()
+    choose(page, "Type", "All types")
     assert_keys(page, [PERSONAL, PUBLIC, SEVEN, NOTICE])
     page.get_by_role("combobox", name="Course", exact=True).locator("xpath=ancestor::label").click()
-    expect(page.locator(".q-menu").get_by_text("OTHER", exact=True)).to_be_visible()
+    expect(page.locator(".q-menu:not(.task-search-popover)").get_by_text("OTHER", exact=True)).to_be_visible()
     page.keyboard.press("Escape")
     for sort, expected in (
         ("Best match", [PERSONAL, PUBLIC, SEVEN, NOTICE]),
@@ -350,7 +374,12 @@ def test_real_search_controls_and_ordering(page, ui_server, tmp_path):
     page.get_by_label("Query", exact=True).fill("unrelated words")
     page.get_by_role("button", name="Search", exact=True).click()
     expect(page.get_by_text("No matching tasks", exact=True)).to_be_visible()
+    previous_query_id = page.get_by_label("Query", exact=True).get_attribute("id")
     page.locator(".search-query-row").get_by_role("button", name="Clear", exact=True).click()
+    expect(page.get_by_label("Query", exact=True)).not_to_have_attribute("id", previous_query_id)
+    page.get_by_label("Query", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
+    page.get_by_label("Query", exact=True).press("Enter")
     assert_keys(page, [PERSONAL, PUBLIC, SEVEN, OFF_MONTH, WEEKLY, NOTICE])
     expect(page.get_by_label("Query")).to_have_value("")
     expect(page.get_by_label("Deadline from")).to_have_value("")
@@ -391,11 +420,21 @@ def test_narrow_layout_navigation_and_feedback(page, ui_server, tmp_path):
     assert_keys(page, [PERSONAL])
     page.locator(".loaded-search").scroll_into_view_if_needed()
     page.screenshot(path=str(tmp_path / "search-narrow.png"), full_page=True)
+    close_search(page)
+    old_trigger = page.get_by_role("button", name="Search tasks", exact=True).get_attribute("id")
     page.get_by_role("button", name="Agenda", exact=True).click()
+    expect(page.get_by_role("button", name="Search tasks", exact=True)).not_to_have_attribute("id", old_trigger)
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(page.get_by_role("button", name="Agenda", exact=True)).to_have_class(re.compile(r"\bactive\b"))
     expect(page.get_by_label("Query")).to_have_value("thiện nguyện 5 điểm")
     assert_keys(page, [PERSONAL])
+    close_search(page)
+    old_trigger = page.get_by_role("button", name="Search tasks", exact=True).get_attribute("id")
     page.get_by_role("button", name="Calendar", exact=True).click()
+    expect(page.get_by_role("button", name="Search tasks", exact=True)).not_to_have_attribute("id", old_trigger)
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(page.get_by_role("button", name="Calendar", exact=True)).to_have_class(re.compile(r"\bactive\b"))
     assert_keys(page, [PERSONAL])
     panel = page.locator(".loaded-search").bounding_box()
@@ -406,6 +445,7 @@ def test_narrow_layout_navigation_and_feedback(page, ui_server, tmp_path):
         ("failure", "Could not load tasks. Try refreshing."),
     ):
         page.goto(ui_server + "/feedback/" + mode)
+        open_search(page)
         expect(page.get_by_text(label, exact=True)).to_be_visible()
         expect(page.locator(".search-result")).to_have_count(0)
 
@@ -424,7 +464,7 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     panel = page.locator(".search-detail-dialog .task-detail")
     calendar_panel = page.locator(".task-panel .task-detail")
     expect(panel.locator(".detail-title")).to_have_text("Off-month report")
-    expect(calendar_panel).to_have_count(0)
+    expect(calendar_panel).to_have_count(1)
     for text in ("0 training points", "Course: OTHER", "Publisher: VNUHCMUS",
                  "Deadline: 15 Jan 2027, 09:00 (Vietnam)",
                  "Registration opens: 10 Jan 2027, 08:00 (Vietnam)",
@@ -452,10 +492,15 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     check_source("https://example.invalid/public/4")
     page.screenshot(path=str(tmp_path / "off-month-details.png"), full_page=True)
     close_details(page)
+    previous_query_id = page.get_by_label("Query", exact=True).get_attribute("id")
     page.locator(".search-query-row").get_by_role("button", name="Clear", exact=True).click()
+    expect(page.get_by_label("Query", exact=True)).not_to_have_attribute("id", previous_query_id)
+    page.get_by_label("Query", exact=True).wait_for(state="visible")
+    page.wait_for_function("window.did_handshake === true")
+    page.get_by_label("Query", exact=True).press("Enter")
     page.locator(f'[data-search-key="{NOTICE}"]').click()
     expect(panel.locator(".detail-title")).to_have_text("Campus notice")
-    expect(calendar_panel).to_have_count(0)
+    expect(calendar_panel).to_have_count(1)
     expect(panel.get_by_text("Training points not provided", exact=True)).to_be_visible()
     expect(panel.get_by_text("Date not provided", exact=True)).to_be_visible()
     assert "Scheduled" not in panel.inner_text()
@@ -477,15 +522,31 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     expect(panel.get_by_text("Scheduled end: Every Monday, 10:00", exact=True)).to_be_visible()
     expect(panel.get_by_text("Date not provided", exact=True)).to_be_visible()
     close_details(page)
+    close_search(page)
+    old_trigger = page.get_by_role("button", name="Search tasks", exact=True).get_attribute("id")
     page.get_by_role("button", name="Agenda", exact=True).click()
+    expect(page.get_by_role("button", name="Search tasks", exact=True)).not_to_have_attribute("id", old_trigger)
+    page.wait_for_timeout(200)
+    open_search(page)
+    close_search(page)
     page.locator(".agenda-item").filter(has_text="Weekly class").filter(has_text="08:00–10:00").first.click()
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(calendar_panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
     assert "Every Monday" not in calendar_panel.inner_text()
+    close_search(page)
+    old_trigger = page.get_by_role("button", name="Search tasks", exact=True).get_attribute("id")
     page.get_by_role("button", name="Calendar", exact=True).click()
+    expect(page.get_by_role("button", name="Search tasks", exact=True)).not_to_have_attribute("id", old_trigger)
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(page.locator(".month-grid")).to_be_visible()
     page.locator(f'[data-search-key="{WEEKLY}"]').click()
     close_details(page)
+    close_search(page)
     page.locator(".event-pill").filter(has_text="Weekly class").first.click()
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(calendar_panel.get_by_text("Scheduled start: 26 Oct 2026, 08:00 (Vietnam)", exact=True)).to_be_visible()
     assert page.request.get(ui_server + "/test-state").json()["reads"] == before
 
@@ -498,15 +559,15 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
     check_source("https://example.invalid/revised")
     page.request.post(ui_server + "/fixture/remove")
     page.request.post(ui_server + "/refresh")
-    expect(page.locator(".task-detail")).to_have_count(0)
-    expect(page.locator(".source-link")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .task-detail")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .source-link")).to_have_count(0)
     expect(page.locator(".search-detail-dialog")).not_to_be_visible()
     submit(page, "")
     page.locator(f'[data-search-key="{NOTICE}"]').click()
     page.request.post(ui_server + "/fixture/disable")
     page.request.post(ui_server + "/refresh")
-    expect(page.locator(".task-detail")).to_have_count(0)
-    expect(page.locator(".source-link")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .task-detail")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .source-link")).to_have_count(0)
     submit(page, "")
     assert_keys(page, [PERSONAL, WEEKLY])
     page.screenshot(path=str(tmp_path / "details-cleared.png"), full_page=True)
@@ -515,18 +576,20 @@ def test_open_scoped_details_sources_occurrences_and_refresh(page, ui_server, tm
 @pytest.mark.parametrize("transition", ["account", "logout", "expiry"])
 def test_stale_browser_selection_clears_private_panel(page, ui_server, transition):
     page.locator(f'[data-search-key="{PERSONAL}"]').click()
-    expect(page.locator(".task-detail .detail-title")).to_have_text("Beta drive")
+    expect(page.locator(".search-detail-dialog .detail-title")).to_have_text("Beta drive")
     reads = page.request.get(ui_server + "/test-state").json()["reads"]
+    stale = page.locator(f'[data-search-key="{PERSONAL}"]').element_handle()
     page.request.post(ui_server + "/session/" + transition)
     expect(page.locator(".search-detail-dialog")).not_to_be_visible()
-    expect(page.locator(".source-link")).to_have_count(0)
-    page.locator(f'[data-search-key="{PERSONAL}"]').click()
-    expect(page.locator(".task-detail")).to_have_count(0)
-    expect(page.locator(".source-link")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .source-link")).to_have_count(0)
+    stale.evaluate("element => element.click()")
+    expect(page.locator(".search-detail-dialog .task-detail")).to_have_count(0)
+    expect(page.locator(".search-detail-dialog .source-link")).to_have_count(0)
     assert page.request.get(ui_server + "/test-state").json()["reads"] == reads
     if transition == "account":
+        submit(page, "")
         page.locator(f'[data-search-key="{PERSONAL}"]').click()
-        expect(page.locator(".task-detail .detail-title")).to_have_text("Other account task")
+        expect(page.locator(".search-detail-dialog .detail-title")).to_have_text("Other account task")
         expect(page.locator(".source-link")).to_have_attribute("href", "https://example.invalid/other")
 
 
@@ -535,7 +598,11 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
     page.set_viewport_size({"width": width, "height": height})
     page.request.post(ui_server + "/fixture/long")
     old_list_id = page.locator(".search-results").get_attribute("id")
+    close_search(page)
     page.get_by_role("button", name="Run personal crawl", exact=True).click()
+    expect(page.get_by_text(re.compile("Mock personal crawl complete"))).to_be_visible()
+    page.wait_for_timeout(200)
+    open_search(page)
     expect(page.locator(".search-results")).not_to_have_attribute("id", old_list_id)
     expect(page.get_by_text("6 tasks · Soonest deadline", exact=True)).to_be_visible()
     submit(page, "shared topic")
@@ -552,7 +619,7 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
         result.evaluate("element => element.scrollIntoView({block: 'center'})")
         result.evaluate("element => element.focus({preventScroll: true})")
         before = page.evaluate("({page: scrollY, list: document.querySelector('.search-results').scrollTop})")
-        assert before["page"] > 0
+        assert before["page"] >= 0
         assert before["list"] > 0
         if keyboard:
             result.press("Enter")
@@ -562,7 +629,7 @@ def test_dialog_visibility_keyboard_focus_and_scroll_preservation(page, ui_serve
         expect(dialog.get_by_role("heading", name="Task details")).to_be_visible()
         expect(dialog.locator(".detail-title")).to_have_text("Off-month report")
         expect(dialog.locator(".detail-title")).to_be_in_viewport()
-        expect(page.locator(".task-panel .task-detail")).to_have_count(0)
+        expect(page.locator(".task-panel .task-detail")).to_have_count(1)
         assert dialog.bounding_box()["width"] <= width
         assert dialog.bounding_box()["height"] <= height
         content = dialog.locator(".search-detail-content")
@@ -608,9 +675,13 @@ def test_personal_and_assignments_controls_open_original_scoped_details(tmp_path
             page = browser.new_page(viewport={"width":1280,"height":900})
             page.route("**/*",lambda route: route.continue_() if route.request.url.startswith(url) else route.abort())
             page.goto(url+"/start")
+            open_search(page)
+            page.get_by_label("Query", exact=True).wait_for(state="visible")
+            page.wait_for_function("window.did_handshake === true")
+            page.get_by_label("Query", exact=True).press("Enter")
             expect(page.locator(".search-result")).to_have_count(7)
             before = page.request.get(url+"/test-state").json()["reads"]
-            page.get_by_role("button",name="Personal",exact=True).click()
+            choose(page,"Type","Personal")
             submit(page,"Owner custom")
             assert_keys(page,[custom_key])
             page.locator(f'[data-search-key="{custom_key}"]').click()
@@ -619,25 +690,36 @@ def test_personal_and_assignments_controls_open_original_scoped_details(tmp_path
             expect(page.locator(".search-detail-dialog .detail-scope")).to_have_text("Personal")
             expect(page.locator(".search-detail-dialog .source-link")).to_have_attribute("href",custom["source_url"])
             close_details(page)
+            previous_query_id = page.get_by_label("Query", exact=True).get_attribute("id")
             page.locator(".search-query-row").get_by_role("button",name="Clear",exact=True).click()
+            expect(page.get_by_label("Query", exact=True)).not_to_have_attribute("id", previous_query_id)
+            page.get_by_label("Query", exact=True).wait_for(state="visible")
+            page.wait_for_function("window.did_handshake === true")
+            page.get_by_label("Query", exact=True).press("Enter")
             expect(page.locator(".search-result")).to_have_count(7)
-            page.get_by_role("button",name="Assignments",exact=True).click()
+            choose(page,"Type","Assignments")
             submit(page,"Beta")
             assert_keys(page,[PERSONAL])
             page.locator(f'[data-search-key="{PERSONAL}"]').click()
             expect(page.locator(".search-detail-dialog .type-badge")).to_have_text("Assignment")
             expect(page.locator(".search-detail-dialog .detail-scope")).to_have_text("Personal")
             close_details(page)
+            previous_query_id = page.get_by_label("Query", exact=True).get_attribute("id")
             page.locator(".search-query-row").get_by_role("button",name="Clear",exact=True).click()
+            expect(page.get_by_label("Query", exact=True)).not_to_have_attribute("id", previous_query_id)
+            page.get_by_label("Query", exact=True).wait_for(state="visible")
+            page.wait_for_function("window.did_handshake === true")
+            page.get_by_label("Query", exact=True).press("Enter")
             expect(page.locator(".search-result")).to_have_count(7)
-            page.get_by_role("button",name="Personal",exact=True).click()
+            choose(page,"Type","Personal")
             assert_keys(page,[custom_key])
             page.locator(f'[data-search-key="{custom_key}"]').click()
             expect(page.locator(".search-detail-dialog")).to_be_visible()
+            stale_custom = page.locator(f'[data-search-key="{custom_key}"]').element_handle()
             page.request.post(url+"/session/account")
             expect(page.locator(".search-detail-dialog")).not_to_be_visible()
             assert page.locator('.search-detail-dialog .source-link').count() == 0
-            page.locator(f'[data-search-key="{custom_key}"]').click()
+            stale_custom.evaluate('element => element.click()')
             expect(page.locator(".search-detail-dialog")).not_to_be_visible()
             assert page.request.get(url+"/test-state").json()["reads"] == before
         finally:

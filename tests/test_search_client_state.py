@@ -133,7 +133,8 @@ def test_scoped_selection_revalidates_current_facts_without_reading_or_changing_
         assert backend.load_tasks.await_count == 1
         assert controller.state.search_snapshot is loaded.snapshot
         assert public.deadline.isoformat() == "2027-01-12T08:00:00+07:00"
-        assert controller.state.filters.query == "Public"
+        assert controller.state.search_query == "Public"
+        assert controller.state.filters.query == ""
         assert controller._search_filters == {"course": "CSC10004"}
         assert controller._search_sort == "title"
 

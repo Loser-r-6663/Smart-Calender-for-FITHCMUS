@@ -7,7 +7,7 @@ from nicegui import app, ui
 
 from client.components.agenda import render_agenda
 from client.components.calendar import render_calendar
-from client.components.filters import SearchPanel
+from client.components.filters import SearchPanel, render_calendar_filters
 from client.components.search_details import SearchDetailsDialog
 from client.components.header import render_header
 from client.components.schedule_view import ARTICLE_LABELS, render_schedule_view
@@ -126,19 +126,19 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         def select_date(selected: date) -> None:
             controller.select_date(selected)
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def select_calendar_item(selected: date, item_id: str) -> None:
             controller.select_date(selected)
             controller.select_item(item_id)
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def select_item(item_id: str) -> None:
             controller.select_item(item_id)
             selected = controller.selected_item
             if selected and selected.day:
                 controller.state.selected_date = selected.day
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def apply_filter(kind: str) -> None:
             controller.set_filter(kind)
@@ -711,6 +711,35 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
         search_panel = SearchPanel(controller, on_select=open_search_details)
 
         @ui.refreshable
+        def calendar_content():
+            with ui.element("div").classes("calendar-layout"):
+                with ui.element("div").classes("calendar-content"):
+                    if controller.state.view == "calendar":
+                        render_calendar(
+                            controller,
+                            on_select_date=select_date,
+                            on_select_item=select_calendar_item,
+                        )
+                    elif controller.state.view == "schedule":
+                        render_schedule_view(
+                            controller,
+                            on_run_schedule=run_auto_schedule,
+                            on_shift_week=shift_schedule_week,
+                            on_this_week=reset_schedule_this_week,
+                            on_open_drl_dialog=open_drl_dialog,
+                            on_select_item=select_item,
+                            on_edit_task=open_edit_task_dialog,
+                            on_remove_from_schedule=remove_task_from_schedule,
+                            on_restore_to_schedule=restore_task_to_schedule,
+                            on_pin_to_schedule=pin_task_to_schedule,
+                            on_delete_task=open_delete_task_dialog,
+                            on_switch_tab=switch_schedule_tab,
+                        )
+                    else:
+                        render_agenda(controller, on_select_item=select_item)
+                task_panel()
+
+        @ui.refreshable
         def body() -> None:
             items = controller.filtered_items
             counts = {
@@ -803,39 +832,23 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                                 on_click=open_create_task_dialog,
                             ).props("unelevated no-caps color=positive")
 
-                    search_panel.render(on_filter=apply_filter, on_view=set_view)
+                    render_calendar_filters(controller, apply_filter, set_view, search_panel, lambda _: _safe_refresh(body))
 
                     if controller.state.error:
                         with ui.element("div").classes("error-banner"):
                             ui.icon("error_outline")
                             ui.label(controller.state.error)
 
-                    with ui.element("div").classes("calendar-layout"):
-                        with ui.element("div").classes("calendar-content"):
-                            if controller.state.view == "calendar":
-                                render_calendar(
-                                    controller,
-                                    on_select_date=select_date,
-                                    on_select_item=select_calendar_item,
-                                )
-                            elif controller.state.view == "schedule":
-                                render_schedule_view(
-                                    controller,
-                                    on_run_schedule=run_auto_schedule,
-                                    on_shift_week=shift_schedule_week,
-                                    on_this_week=reset_schedule_this_week,
-                                    on_open_drl_dialog=open_drl_dialog,
-                                    on_select_item=select_item,
-                                    on_edit_task=open_edit_task_dialog,
-                                    on_remove_from_schedule=remove_task_from_schedule,
-                                    on_restore_to_schedule=restore_task_to_schedule,
-                                    on_pin_to_schedule=pin_task_to_schedule,
-                                    on_delete_task=open_delete_task_dialog,
-                                    on_switch_tab=switch_schedule_tab,
-                                )
-                            else:
-                                render_agenda(controller, on_select_item=select_item)
-                        task_panel()
+                    calendar_content()
 
         refresh_body = body.refresh
         body()
+        selection_session = controller.selection_session
+
+        def invalidate_session_ui():
+            nonlocal selection_session
+            if controller.selection_session != selection_session:
+                selection_session = controller.selection_session
+                search_panel.clear(lambda _: body.refresh())
+
+        ui.timer(0.1, invalidate_session_ui)
