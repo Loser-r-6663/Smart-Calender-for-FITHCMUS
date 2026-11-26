@@ -1,2 +1,1 @@
 """Reusable NiceGUI components."""
-

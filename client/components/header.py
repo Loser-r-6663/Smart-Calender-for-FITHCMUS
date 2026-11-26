@@ -47,4 +47,3 @@ def render_header(
                     ui.menu_item("Settings", on_click=lambda: ui.navigate.to("/settings"))
                     ui.separator()
                     ui.menu_item("Log out", on_click=on_logout)
-

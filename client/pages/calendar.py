@@ -7,7 +7,8 @@ from nicegui import app, ui
 
 from client.components.agenda import render_agenda
 from client.components.calendar import render_calendar
-from client.components.filters import render_filters
+from client.components.filters import SearchPanel, render_calendar_filters
+from client.components.search_details import SearchDetailsDialog
 from client.components.header import render_header
 from client.components.schedule_view import ARTICLE_LABELS, render_schedule_view
 from client.components.task_panel import render_task_panel
@@ -88,11 +89,25 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         user = ClientUser(**stored_user)
         controller = ClientController(backend, user)
-        await controller.load_month()
+        preparation_gate = controller.defer_preparation()
+        refresh_body = None
+
+        async def load_month(month=None) -> None:
+            controller.state.loading = True
+            if refresh_body is not None:
+                refresh_body()
+            await controller.load_month(month)
+            if controller.state.session_expired:
+                app.storage.user.clear()
+                ui.navigate.to("/login")
+
+        await load_month()
+        if controller.state.session_expired:
+            return
         ui.page_title("Calendar · Smart Calendar")
 
         async def _refresh_data_and_schedule() -> None:
-            await controller.load_month()
+            await load_month()
             if (
                 controller.state.view == "schedule"
                 or controller.state.schedule is not None
@@ -101,6 +116,7 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
             _safe_refresh(body)
 
         def logout() -> None:
+            controller.logout()
             app.storage.user.clear()
             ui.navigate.to("/login")
 
@@ -111,19 +127,19 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
         def select_date(selected: date) -> None:
             controller.select_date(selected)
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def select_calendar_item(selected: date, item_id: str) -> None:
             controller.select_date(selected)
             controller.select_item(item_id)
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def select_item(item_id: str) -> None:
             controller.select_item(item_id)
             selected = controller.selected_item
             if selected and selected.day:
                 controller.state.selected_date = selected.day
-            _safe_refresh(body)
+            _safe_refresh(calendar_content)
 
         def apply_filter(kind: str) -> None:
             controller.set_filter(kind)
@@ -188,13 +204,13 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
         async def change_month(offset: int) -> None:
             month = _shift_month(controller.state.visible_month, offset)
             controller.state.selected_date = month
-            await controller.load_month(month)
+            controller.show_month(month)
             _safe_refresh(body)
 
         async def go_today() -> None:
             today = date.today()
             controller.state.selected_date = today
-            await controller.load_month(today.replace(day=1))
+            controller.show_month(today.replace(day=1))
             _safe_refresh(body)
 
         render_header(
@@ -677,6 +693,53 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
             )
             delete_task_dialog.open()
 
+        search_details = SearchDetailsDialog(controller)
+
+        @ui.refreshable
+        def task_panel() -> None:
+            render_task_panel(
+                controller, on_select_item=select_item,
+                on_edit_task=open_edit_task_dialog,
+                on_remove_from_schedule=remove_task_from_schedule,
+                on_restore_to_schedule=restore_task_to_schedule,
+                on_delete_task=open_delete_task_dialog,
+            )
+
+        def open_search_details(opener) -> None:
+            task_panel.refresh()
+            search_details.open(opener)
+
+        search_panel = SearchPanel(controller, on_select=open_search_details)
+
+        @ui.refreshable
+        def calendar_content():
+            with ui.element("div").classes("calendar-layout"):
+                with ui.element("div").classes("calendar-content"):
+                    if controller.state.view == "calendar":
+                        render_calendar(
+                            controller,
+                            on_select_date=select_date,
+                            on_select_item=select_calendar_item,
+                        )
+                    elif controller.state.view == "schedule":
+                        render_schedule_view(
+                            controller,
+                            on_run_schedule=run_auto_schedule,
+                            on_shift_week=shift_schedule_week,
+                            on_this_week=reset_schedule_this_week,
+                            on_open_drl_dialog=open_drl_dialog,
+                            on_select_item=select_item,
+                            on_edit_task=open_edit_task_dialog,
+                            on_remove_from_schedule=remove_task_from_schedule,
+                            on_restore_to_schedule=restore_task_to_schedule,
+                            on_pin_to_schedule=pin_task_to_schedule,
+                            on_delete_task=open_delete_task_dialog,
+                            on_switch_tab=switch_schedule_tab,
+                        )
+                    else:
+                        render_agenda(controller, on_select_item=select_item)
+                task_panel()
+
         @ui.refreshable
         def body() -> None:
             items = controller.filtered_items
@@ -770,51 +833,29 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                                 on_click=open_create_task_dialog,
                             ).props("unelevated no-caps color=positive")
 
-                    render_filters(
-                        controller.state,
-                        controller.active_items,
-                        on_filter=apply_filter,
-                        on_view=set_view,
-                        on_search_result=select_item,
-                    )
+                    render_calendar_filters(controller, apply_filter, set_view, search_panel, lambda _: _safe_refresh(body))
 
                     if controller.state.error:
                         with ui.element("div").classes("error-banner"):
                             ui.icon("error_outline")
                             ui.label(controller.state.error)
 
-                    with ui.element("div").classes("calendar-layout"):
-                        with ui.element("div").classes("calendar-content"):
-                            if controller.state.view == "calendar":
-                                render_calendar(
-                                    controller,
-                                    on_select_date=select_date,
-                                    on_select_item=select_calendar_item,
-                                )
-                            elif controller.state.view == "schedule":
-                                render_schedule_view(
-                                    controller,
-                                    on_run_schedule=run_auto_schedule,
-                                    on_shift_week=shift_schedule_week,
-                                    on_this_week=reset_schedule_this_week,
-                                    on_open_drl_dialog=open_drl_dialog,
-                                    on_select_item=select_item,
-                                    on_edit_task=open_edit_task_dialog,
-                                    on_remove_from_schedule=remove_task_from_schedule,
-                                    on_restore_to_schedule=restore_task_to_schedule,
-                                    on_pin_to_schedule=pin_task_to_schedule,
-                                    on_delete_task=open_delete_task_dialog,
-                                    on_switch_tab=switch_schedule_tab,
-                                )
-                            else:
-                                render_agenda(controller, on_select_item=select_item)
-                        render_task_panel(
-                            controller,
-                            on_select_item=select_item,
-                            on_edit_task=open_edit_task_dialog,
-                            on_remove_from_schedule=remove_task_from_schedule,
-                            on_restore_to_schedule=restore_task_to_schedule,
-                            on_delete_task=open_delete_task_dialog,
-                        )
+                    calendar_content()
 
+        refresh_body = body.refresh
         body()
+        selection_session = controller.selection_session
+
+        def invalidate_session_ui():
+            nonlocal selection_session
+            if controller.selection_session != selection_session:
+                selection_session = controller.selection_session
+                search_panel.clear(lambda _: body.refresh())
+
+        ui.timer(0.1, invalidate_session_ui)
+        if preparation_gate is not None:
+            try:
+                await ui.context.client.connected()
+                await ui.run_javascript('return await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))', timeout=5)
+            finally:
+                preparation_gate.set()

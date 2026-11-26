@@ -24,7 +24,7 @@ class UserManager:
         self.access_token: str
         self.user_repo: UserRepository
         self.get_user()
-    
+
     def update_portal_account(self):
         """Update the user's portal account information if it's missing."""
         if not (self.user.portal_username and self.user.portal_password):
@@ -40,7 +40,7 @@ class UserManager:
                 with portal.load_engine() as crawler:
                     portal.crawler = crawler
                     portal.authenticate()
-                
+
                 self.user.portal_status = True
                 if portal.state:
                     self.user.portal_session = json.dumps(portal.state)
@@ -55,7 +55,7 @@ class UserManager:
                 with moodle.load_engine() as crawler:
                     moodle.crawler = crawler
                     moodle.authenticate()
-                    
+
                 self.user.moodle_status = True
                 if moodle.state:
                     self.user.moodle_session = json.dumps(moodle.state)
@@ -69,12 +69,12 @@ class UserManager:
     def get_user(self):
         username = input("Username: ") # NOTE: your_email@gmail.com
         password = input("Password: ") # NOTE: at least 6 characters
-        
+
         try:
             self.access_token, self.user = sign_up(username, password)
         except:
             self.access_token, self.user = sign_in(username, password)
-        
+
         self.user_repo = UserRepository(access_token=self.access_token)
         self.update_portal_account()
         self.update_local_session()
@@ -106,7 +106,7 @@ class UserManager:
     def schedule_tasks(self, tasks: list[Task]):
         """Schedule tasks using the Branch and Bound algorithm."""
         database = UserTaskStateRepository(access_token=self.access_token, user_id=self.user.id)
-        
+
         scheduler = BranchAndBoundScheduler(database)
         result = scheduler.schedule(tasks, initial_drl=self.user.training_points)
         result.print_timetable()

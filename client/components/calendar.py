@@ -60,4 +60,3 @@ def render_calendar(
                                         )
                         if len(day_items) > 3:
                             ui.label(f"+{len(day_items) - 3} more").classes("more-events")
-

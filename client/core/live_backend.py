@@ -8,7 +8,7 @@ from typing import Any
 
 from requests import HTTPError, RequestException
 
-from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
+from client.core.backend import AuthenticationError, ClientBackend, RegistrationError, SessionExpiredError, bridge_task_load
 from client.core.models import (
     ClientUser,
     ConnectionStatus,
@@ -43,6 +43,7 @@ class LiveBackend(ClientBackend):
     """Adapter over Supabase repositories (`tasks`, `user_task`, `user_task_state`)."""
 
     def __init__(self) -> None:
+        self._original_groups = {}
         self._users: dict[str, Any] = {}
         self._access_tokens: dict[str, str] = {}
         self._crawl_locks: dict[str, asyncio.Lock] = {}
@@ -136,12 +137,18 @@ class LiveBackend(ClientBackend):
         return SyncResult(ok=True, message="Password changed")
 
     async def get_tasks(self, user: ClientUser) -> list[Any]:
+        tasks, _, _ = await self._read_tasks(user)
+        return tasks
+
+    async def _read_tasks(self, user: ClientUser):
         from DataProcessor.Standardization.Task import Task
         from Database.Repository.task_repository import TaskRepository
         from Database.Repository.user_task_repository import UserTaskRepository
 
-        public_tasks = list(await asyncio.to_thread(TaskRepository().get_tasks, None))
         access_token = self._access_tokens.get(user.id)
+        if access_token is not None and (not access_token or not user.id):
+            raise SessionExpiredError("Session expired. Sign in again.")
+        public_tasks = list(await asyncio.to_thread(TaskRepository().get_tasks, None))
         if access_token is None:
             personal_tasks: list[Any] = []
         else:
@@ -155,16 +162,29 @@ class LiveBackend(ClientBackend):
                 )
             )
 
+        if self._access_tokens.get(user.id) != access_token:
+            raise SessionExpiredError("Session changed. Sign in again.")
+        groups = (("public", public_tasks), ("personal", personal_tasks))
+        seen = set()
+        for scope, originals in groups:
+            for original in originals:
+                task_id = original.get("id") if isinstance(original, dict) else getattr(original, "id", None)
+                if task_id is not None:
+                    if task_id in seen:
+                        raise ValueError("Task UUIDs must be unique across public and personal originals")
+                    seen.add(task_id)
+                owner = original.get("user_id") if isinstance(original, dict) else getattr(original, "user_id", None)
+                if scope == "personal" and owner not in (None, user.id):
+                    raise ValueError("Personal task belongs to another owner")
         raw_combined = public_tasks + personal_tasks
-        disabled = await self.get_disabled_sources(user)
-
         if not raw_combined or not all(_has_id_and_type(t) for t in raw_combined):
-            return [task for task in raw_combined if _source_platform(task) not in disabled]
+            disabled = await self.get_disabled_sources(user)
+            return [task for task in raw_combined if _source_platform(task) not in disabled], groups, disabled
 
-        self._public_tasks_by_id[user.id] = {
+        public_by_id = {
             str(getattr(t, "id", None) or t["id"]): t for t in public_tasks
         }
-        self._personal_tasks_by_id[user.id] = {
+        personal_by_id = {
             str(getattr(t, "id", None) or t["id"]): t for t in personal_tasks
         }
 
@@ -176,9 +196,14 @@ class LiveBackend(ClientBackend):
                     state_repo.get_task_states,
                     raw_combined,
                 )
-            except (HTTPError, RequestException, ValueError):
+            except (HTTPError, RequestException, ValueError) as error:
+                if isinstance(error, HTTPError) and error.response is not None and error.response.status_code in (401, 403):
+                    raise
                 logger.warning("Could not load user_task_state for %s", user.id)
 
+        disabled = await self.get_disabled_sources(user)
+        if self._access_tokens.get(user.id) != access_token:
+            raise SessionExpiredError("Session changed. Sign in again.")
         merged: list[Task] = []
         merged_map: dict[str, Task] = {}
         for rec in raw_combined:
@@ -190,8 +215,11 @@ class LiveBackend(ClientBackend):
             if (task.source_platform or "Custom") not in disabled:
                 merged.append(task)
 
+        self._original_groups[user.id] = groups
+        self._public_tasks_by_id[user.id] = public_by_id
+        self._personal_tasks_by_id[user.id] = personal_by_id
         self._merged_tasks_by_id[user.id] = merged_map
-        return merged
+        return merged, groups, disabled
 
     async def create_task(self, user: ClientUser, task: TaskDraft) -> SyncResult:
         return await self._save_custom_task(user, task)
@@ -401,9 +429,7 @@ class LiveBackend(ClientBackend):
         points = task.training_points
         est_hours = task.estimated_hours
 
-        if not strict_db and kind == "personal":
-            kind = "event"
-        elif strict_db and kind == "event":
+        if strict_db and kind == "event":
             # Ensure compatibility with strict user_task event constraints on Supabase
             if points is None and source_platform is None:
                 kind = "personal"
@@ -730,7 +756,7 @@ class LiveBackend(ClientBackend):
         self._disabled_sources[user.id] = set() if enabled else set(ALL_SOURCE_NAMES)
 
     async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
-        from client.core.personal_crawl import run_personal_crawl
+        from client.core.personal_crawl import PersonalCrawlError, log_crawl_failure, run_personal_crawl
 
         backend_user = self._users.get(user.id)
         access_token = self._access_tokens.get(user.id)
@@ -774,15 +800,29 @@ class LiveBackend(ClientBackend):
 
         async with lock:
             try:
-                new_count, total_count = await asyncio.to_thread(
+                result = await asyncio.to_thread(
                     run_personal_crawl,
                     backend_user,
                     access_token,
                     enabled_personal_sources,
                 )
-            except Exception:
-                logger.exception("Personal crawl failed for user %s", user.id)
-                return SyncResult(ok=False, message="Personal crawl failed")
+            except PersonalCrawlError as error:
+                return SyncResult(ok=False, message=str(error))
+            except Exception as error:
+                log_crawl_failure("personal", "initialization", error)
+                return SyncResult(ok=False, message=(
+                    "Personal crawl could not start. Check terminal diagnostics, "
+                    "reconnect Portal/Moodle in Settings, then retry."
+                ))
+
+        new_count, total_count = result
+        failed_sources = getattr(result, "failed_sources", ())
+        if failed_sources:
+            return SyncResult(ok=False, message=(
+                f"Personal crawl partially completed: {new_count} new, {total_count} stored. "
+                f"{', '.join(failed_sources)} failed; reconnect the source in Settings "
+                "and retry. Check terminal diagnostics."
+            ))
 
         return SyncResult(
             ok=True,
@@ -791,3 +831,30 @@ class LiveBackend(ClientBackend):
                 f"{total_count} stored"
             ),
         )
+
+    async def load_tasks(self, user):
+        from Database.Repository.task_repository import TaskRepository
+        if user is None:
+            public = await asyncio.to_thread(TaskRepository().get_tasks, None)
+            from client.core.backend import task_load
+            return task_load((("public", public),), set())
+        token = self._access_tokens.get(user.id)
+        if not token or not user.id:
+            raise SessionExpiredError("Session expired. Sign in again.")
+        try:
+            tasks, groups, disabled = await self._read_tasks(user)
+        except HTTPError as error:
+            if error.response is not None and error.response.status_code in (401, 403):
+                raise SessionExpiredError("Session expired. Sign in again.") from error
+            raise
+        if self._access_tokens.get(user.id) != token:
+            raise SessionExpiredError("Session changed. Sign in again.")
+        return bridge_task_load(groups, tasks, disabled)
+
+    def logout(self, user):
+        super().logout(user)
+        self._users.pop(user.id, None)
+        self._access_tokens.pop(user.id, None)
+        for cache in (self._original_groups, self._personal_tasks_by_id,
+                      self._public_tasks_by_id, self._merged_tasks_by_id):
+            cache.pop(user.id, None)

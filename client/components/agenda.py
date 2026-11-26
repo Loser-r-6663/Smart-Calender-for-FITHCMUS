@@ -62,4 +62,3 @@ def render_agenda(
                         with ui.column().classes("gap-0 items-start"):
                             ui.label(item.title).classes("agenda-title")
                             ui.label(item.source or "Announcement").classes("agenda-meta")
-

@@ -3,6 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date
 from typing import Any
+from dataclasses import dataclass
+from weakref import WeakSet
+from academic_search import SearchSnapshot, map_task
 
 from client.core.models import (
     ClientUser,
@@ -19,6 +22,27 @@ class AuthenticationError(ValueError):
 
 class RegistrationError(ValueError):
     pass
+
+
+class SessionExpiredError(AuthenticationError):
+    pass
+
+
+@dataclass(frozen=True)
+class TaskLoad:
+    tasks: tuple[Any, ...]
+    snapshot: SearchSnapshot
+    calendar_keys: tuple[tuple[str, str], ...] | None = None
+
+
+def task_load(groups, disabled, limit=None):
+    tasks, records = [], []
+    for scope, group in groups:
+        for task in group[:limit]:
+            if task.source_platform not in disabled:
+                tasks.append(task)
+                records.append(map_task(task, scope=scope))
+    return TaskLoad(tuple(tasks), SearchSnapshot(tuple(records), tuple(scope for scope, _ in groups), limit))
 
 
 class ClientBackend(ABC):
@@ -127,3 +151,35 @@ class ClientBackend(ABC):
     @abstractmethod
     async def sync(self, user: ClientUser, scope: str = "all") -> SyncResult:
         raise NotImplementedError
+
+    @abstractmethod
+    async def load_tasks(self, user: ClientUser) -> TaskLoad:
+        """Read once and retain scope before calendar occurrence expansion."""
+        raise NotImplementedError
+
+    def watch(self, controller) -> None:
+        if not hasattr(self, "_controllers"):
+            self._controllers = WeakSet()
+        self._controllers.add(controller)
+
+    def logout(self, user: ClientUser) -> None:
+        for controller in tuple(getattr(self, "_controllers", ())):
+            if controller.state.user is not None and controller.state.user.id == user.id:
+                controller.set_user(None)
+
+
+
+
+
+def bridge_task_load(groups, calendar_tasks, disabled, limit=None):
+    """Pair original scoped Search facts with overlaid Calendar tasks."""
+    originals = [(scope, source) for scope, group in groups for source in group
+                 if source.source_platform not in disabled]
+    if len(originals) != len(calendar_tasks):
+        raise ValueError("Calendar tasks and original source rows are not aligned")
+    records = tuple(map_task(source, scope=scope) for scope, group in groups
+                    for source in group[:limit]
+                    if source.source_platform not in disabled)
+    return TaskLoad(tuple(calendar_tasks),
+                    SearchSnapshot(records, tuple(scope for scope, _ in groups), limit),
+                    tuple((scope, source.id) for scope, source in originals))

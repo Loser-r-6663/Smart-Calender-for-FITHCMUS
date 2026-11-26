@@ -1,3 +1,5 @@
+> The integrated app uses the loaded, scoped Search controls and read-only detail dialog described in README.md. This guide covers the FE task-management and scheduling flows.
+
 # Hướng dẫn sử dụng Client
 
 Tài liệu này hướng dẫn cài đặt và chạy giao diện NiceGUI trong thư mục `client/`.

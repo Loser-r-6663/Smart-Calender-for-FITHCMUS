@@ -1,0 +1,676 @@
+{
+  "version": 1,
+  "authored_on": "2026-11-25",
+  "cases": [
+    {
+      "id": "T-P01",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "hạn cuối đóng học phí",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      ],
+      "rationale": "Chuyển khoản tiền chương trình đào tạo là nghĩa vụ học phí; mốc ba mươi tháng mười một là hạn chót. Tiền phòng ở bản ghi 2 không phải học phí.",
+      "zero_literal_overlap": true,
+      "point_rule": null
+    },
+    {
+      "id": "T-P02",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "tìm chỗ làm lập trình",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        ]
+      ],
+      "rationale": "Thực tập phát triển phần mềm cung cấp vị trí làm việc lập trình.",
+      "zero_literal_overlap": true,
+      "point_rule": null
+    },
+    {
+      "id": "T-P03",
+      "split": "tuning",
+      "kind": "paraphrase",
+      "query": "hiến máu cứu người",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ]
+      ],
+      "rationale": "Giọt hồng và hiến máu trong mô tả nói về cùng hoạt động cứu người.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-P01",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "học bổng",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "Quỹ trợ cấp thành tích sinh viên là học bổng, không phải khoản vay.",
+      "zero_literal_overlap": true,
+      "point_rule": null
+    },
+    {
+      "id": "H-P02",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "luyện nói ngoại ngữ",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "44444444-4444-4444-8444-444444444444"
+        ]
+      ],
+      "rationale": "English Conversation Club tổ chức thực hành nói với sinh viên quốc tế.",
+      "zero_literal_overlap": true,
+      "point_rule": null
+    },
+    {
+      "id": "H-P03",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "giữ gìn thiên nhiên",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ],
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ]
+      ],
+      "rationale": "Trồng cây phục hồi rừng và dọn rác bờ sông đều giúp gìn giữ thiên nhiên; cả hai là đáp án liên quan.",
+      "zero_literal_overlap": true,
+      "point_rule": null
+    },
+    {
+      "id": "H-P04",
+      "split": "held-out",
+      "kind": "paraphrase",
+      "query": "chuẩn bị thi toán",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        ]
+      ],
+      "rationale": "Đạo hàm và tích phân là kiến thức toán; lịch ôn tập chuẩn bị cho kiểm tra.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-X01",
+      "split": "tuning",
+      "kind": "exact_control",
+      "query": "Thời điểm hoàn tất nghĩa vụ tài chính",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      ],
+      "rationale": "Tiêu đề đầy đủ đúng nguyên văn bản ghi 1.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-X01",
+      "split": "held-out",
+      "kind": "exact_control",
+      "query": "CSC10006",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "Mã chỉ xuất hiện ở trường course của bài báo cáo tài khoản A.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-X02",
+      "split": "held-out",
+      "kind": "exact_control",
+      "query": "Quỹ tài trợ sinh viên xuất sắc",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "Tiêu đề công khai phải được tìm độc lập với bài riêng cùng UUID.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-V01",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Khách không được xem báo cáo riêng của A.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-V02",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "A được xem báo cáo riêng của mình.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-V01",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "B không được xem báo cáo A dù UUID bài riêng của B trùng.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-V02",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "B được tìm bài khảo sát riêng của mình.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-V03",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "A không được tìm bài riêng B.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-V04",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "khảo sát riêng",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Khách không được tìm bài riêng B.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-V03",
+      "split": "tuning",
+      "kind": "visibility",
+      "query": "Báo cáo thực hành cơ sở dữ liệu",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": [
+          "Moodle"
+        ]
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Tắt Moodle loại bài báo cáo khỏi tập đã tải của A.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-V05",
+      "split": "held-out",
+      "kind": "visibility",
+      "query": "Quỹ tài trợ sinh viên xuất sắc",
+      "viewer": "account_b",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "33333333-3333-4333-8333-333333333333"
+        ]
+      ],
+      "rationale": "B vẫn thấy thông báo công khai cùng UUID với bài riêng của mình.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-F01",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "rationale": "A có duy nhất hoạt động hỗ trợ cộng đồng đúng năm điểm.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "eq",
+        "value": 5
+      }
+    },
+    {
+      "id": "T-F02",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "rationale": "Năm và bảy điểm đều đạt tối thiểu năm.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "ge",
+        "value": 5
+      }
+    },
+    {
+      "id": "H-F01",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "nhiều hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "rationale": "Bảy lớn hơn năm; bản ghi hỗ trợ cộng đồng đúng năm phải bị loại.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "gt",
+        "value": 5
+      }
+    },
+    {
+      "id": "H-F02",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "bé hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "44444444-4444-4444-8444-444444444444"
+        ],
+        [
+          "public",
+          "55555555-5555-4555-8555-555555555555"
+        ],
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "99999999-9999-4999-8999-999999999999"
+        ]
+      ],
+      "rationale": "Các hoạt động không và bốn điểm đạt nhỏ hơn năm; năm điểm và chưa biết đều không đạt.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "lt",
+        "value": 5
+      }
+    },
+    {
+      "id": "T-F03",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "thiện nguyện 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ]
+      ],
+      "rationale": "Chủ đề thiện nguyện và đúng năm điểm cùng áp dụng.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "eq",
+        "value": 5
+      }
+    },
+    {
+      "id": "T-F04",
+      "split": "tuning",
+      "kind": "point_filter",
+      "query": "thiện nguyện từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "personal",
+          "88888888-8888-4888-8888-888888888888"
+        ],
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "rationale": "Chủ đề thiện nguyện với tối thiểu năm gồm đúng năm và bảy.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "ge",
+        "value": 5
+      }
+    },
+    {
+      "id": "H-F03",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "thiện nguyện nhiều hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "rationale": "Hỗ trợ cộng đồng khớp chủ đề mạnh nhưng chỉ năm điểm nên không hợp lệ.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "gt",
+        "value": 5
+      }
+    },
+    {
+      "id": "H-F04",
+      "split": "held-out",
+      "kind": "point_filter",
+      "query": "thiện nguyện bé hơn 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "77777777-7777-4777-8777-777777777777"
+        ],
+        [
+          "public",
+          "99999999-9999-4999-8999-999999999999"
+        ]
+      ],
+      "rationale": "Chỉ thiện nguyện không hoặc bốn điểm; hiến máu và English Club không khớp chủ đề.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "lt",
+        "value": 5
+      }
+    },
+    {
+      "id": "H-S01",
+      "split": "held-out",
+      "kind": "structured_filter",
+      "query": "thiện nguyện từ 5 điểm",
+      "viewer": "account_a",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {
+        "types": [
+          "event"
+        ],
+        "course": "COMMUNITY",
+        "deadline_start": "2026-11-26",
+        "deadline_end": "2026-11-27"
+      },
+      "sort": null,
+      "expected_relevant_keys": [
+        [
+          "public",
+          "66666666-6666-4666-8666-666666666666"
+        ]
+      ],
+      "rationale": "Kết hợp loại, học phần, ngày địa phương và điểm: năm điểm ngày 25 bị loại; bốn điểm ngày 26 bị loại.",
+      "zero_literal_overlap": false,
+      "point_rule": {
+        "operator": "ge",
+        "value": 5
+      }
+    },
+    {
+      "id": "T-U01",
+      "split": "tuning",
+      "kind": "unrelated",
+      "query": "động cơ tên lửa sao Hỏa",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Không có nhiệm vụ về động cơ tên lửa hay sao Hỏa.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "T-U02",
+      "split": "tuning",
+      "kind": "unrelated",
+      "query": "công thức nấu phở",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Không có nhiệm vụ nấu ăn.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-U01",
+      "split": "held-out",
+      "kind": "unrelated",
+      "query": "khủng long kỷ Jura",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Không có nhiệm vụ cổ sinh vật.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    },
+    {
+      "id": "H-U02",
+      "split": "held-out",
+      "kind": "unrelated",
+      "query": "dự báo bão ngoài biển",
+      "viewer": "guest",
+      "source_preferences": {
+        "disabled_sources": []
+      },
+      "filters": {},
+      "sort": null,
+      "expected_relevant_keys": [],
+      "rationale": "Không có nhiệm vụ dự báo khí tượng.",
+      "zero_literal_overlap": false,
+      "point_rule": null
+    }
+  ]
+}

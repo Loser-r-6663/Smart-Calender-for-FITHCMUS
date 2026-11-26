@@ -10,4 +10,3 @@ def apply_theme() -> None:
         positive="#347a62",
         negative="#a34343",
     )
-

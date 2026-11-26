@@ -20,4 +20,3 @@ ENV CLIENT_MODE=live \
 EXPOSE 8080
 
 CMD ["python", "-m", "client.main"]
-

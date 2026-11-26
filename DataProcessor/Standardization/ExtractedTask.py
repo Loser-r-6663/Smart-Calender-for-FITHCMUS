@@ -80,7 +80,7 @@ class ExtractedTask(BaseTask):
     updated_at: datetime = Field(
         description="Thời điểm trích xuất dữ liệu này"
     )
-    
+
     @model_validator(mode="after")
     def check_event_requires_training_points(self):
         if self.type == "event" and self.source_platform not in (None, "Custom"):
@@ -92,7 +92,7 @@ class ExtractedTask(BaseTask):
             elif self.training_point_category is not None:
                 raise ValueError("training_point_category phải là None khi training_points = 0.")
         return self
-    
+
     @model_validator(mode="after")
     def check_event_requires_estimated_hours(self):
         if (
@@ -102,18 +102,18 @@ class ExtractedTask(BaseTask):
         ):
             raise ValueError("estimated_hours phải được cung cấp cho các nhiệm vụ khi type là 'event'.")
         return self
-    
+
     @model_validator(mode="after")
     def check_assignment_estimated_hours(self):
         if self.type == "assignment" and self.estimated_hours is not None and self.estimated_hours <= 0:
             raise ValueError("Khi type là 'assignment'. Nếu thiếu thông tin để tính estimated_hours, chia thành 2 trường hợp, ngắn hạn thì estimated_hours = 1-4, dài hạn thì estimated_hours = None")
         return self
-    
+
     @field_validator("deadline", "registration_start", "registration_end", mode="after")
     @classmethod
     def ensure_vn_tz(cls, v: datetime | None):
         return cls._to_vn_time(v)
-    
+
     @staticmethod
     def _to_vn_time(val: str | datetime | None) -> datetime | None:
         if not val:
@@ -123,7 +123,7 @@ class ExtractedTask(BaseTask):
         else:
             dt = val
         return dt.astimezone(VN_TZ)
-    
+
     @classmethod
     def from_raw_task(cls, raw_task: RawTask) -> "ExtractedTask":
         """Create an ExtractedTask instance from a RawTask instance."""
@@ -135,7 +135,7 @@ class ExtractedTask(BaseTask):
                 location_obj = Location(**raw_task.location)
             else:
                 location_obj = Location(room=str(raw_task.location))
-        
+
         return cls(
             title=raw_task.title or "",
             type=raw_task.type or "class",

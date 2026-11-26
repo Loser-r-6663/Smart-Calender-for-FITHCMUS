@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from academic_search import SearchSnapshot
 from datetime import date, datetime, time
 from typing import Literal
 
@@ -66,6 +67,7 @@ class CalendarItem:
     task_id: str
     title: str
     kind: str
+    scope: str | None = None
     start: datetime | None = None
     end: datetime | None = None
     deadline: datetime | None = None
@@ -149,3 +151,7 @@ class ClientState:
     schedule_week_offset: int = 0
     loading: bool = False
     error: str | None = None
+    session_expired: bool = False
+    search_snapshot: SearchSnapshot = field(default_factory=lambda: SearchSnapshot((), (), None))
+    search_query: str = ""
+    selected_search_key: tuple[str, str] | None = None

@@ -31,4 +31,3 @@ class AppConfig:
             ),
             reload=os.getenv("CLIENT_RELOAD", "0") == "1",
         )
-

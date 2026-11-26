@@ -43,4 +43,3 @@ def test_training_points_respect_month_and_source_preferences() -> None:
         assert controller.training_points_this_month == 8
 
     asyncio.run(scenario())
-

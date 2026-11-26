@@ -1,6 +1,5 @@
 from datetime import date
 
-from Database.Repository.task_repository import TaskRepository
 from client.core.controller import TaskMapper
 
 
@@ -59,48 +58,25 @@ def test_maps_deadline_and_undated_notice() -> None:
     assert notice.day is None
 
 
-def test_maps_exact_database_datetime_values() -> None:
-    task = TaskRepository.row_to_task(
-        {
-            "id": "db-event",
-            "title": "Database event",
-            "type": "event",
-            "start_at": "2026-11-23T14:00:00+07:00",
-            "end_at": "2026-11-23T16:00:00+07:00",
-            "training_points": 5,
-            "training_point_category": "Articles 1",
-            "estimated_hours": 2,
-            "source_url": "https://example.com",
-            "source_platform": "Portal",
-            "updated_at": "2026-11-23T12:00:00+07:00",
-        }
-    )
+def test_maps_repository_date_day_time_objects() -> None:
+    from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 
-    items = TaskMapper.map_range(task, date(2026, 11, 1), date(2026, 11, 30))
-
-    assert len(items) == 1
-    assert items[0].day == date(2026, 11, 23)
-    assert items[0].time_label == "14:00–16:00"
-
-
-def test_expands_weekly_database_datetime_values() -> None:
-    task = TaskRepository.row_to_task(
-        {
-            "id": "db-class",
-            "title": "Database weekly class",
-            "type": "class",
-            "start_weekly_day": "T2",
-            "start_weekly_time": "08:00:00",
-            "end_weekly_day": "T2",
-            "end_weekly_time": "10:00:00",
-            "source_url": "https://example.com",
-            "source_platform": "Portal",
-            "updated_at": "2026-11-23T12:00:00+07:00",
-        }
-    )
-
-    items = TaskMapper.map_range(task, date(2026, 11, 1), date(2026, 11, 30))
-
+    common = {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "title": "Weekly class",
+        "type": "class",
+        "source_platform": "Portal",
+        "source_url": "https://example.invalid/class",
+        "updated_at": "2026-11-23T09:00:00+07:00",
+    }
+    weekly = ExtractedTask(**common, start_time={"day": "T2", "time": "08:00:00"},
+                           end_time={"day": "T2", "time": "10:00:00"})
+    absolute = ExtractedTask(**common, start_time={"date": "2026-11-23", "time": "08:00:00"},
+                             end_time={"date": "2026-11-23", "time": "10:00:00"})
+    items = TaskMapper.map_range(weekly, date(2026, 11, 1), date(2026, 11, 30))
     assert [item.day.day for item in items] == [2, 9, 16, 23, 30]
     assert all(item.time_label == "08:00–10:00" for item in items)
-
+    exact = TaskMapper.map_range(absolute, date(2026, 11, 1), date(2026, 11, 30))
+    assert len(exact) == 1
+    assert exact[0].day == date(2026, 11, 23)
+    assert exact[0].time_label == "08:00–10:00"

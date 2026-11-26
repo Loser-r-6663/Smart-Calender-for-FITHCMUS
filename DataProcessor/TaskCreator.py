@@ -14,9 +14,6 @@ from DataProcessor.Crawler.HCMUSCrawler import HCMUSCrawler
 from DataProcessor.Crawler.OSACrawler import OSACrawler
 from DataProcessor.Crawler.FBCrawlers import *
 
-from DataProcessor.Parser.Parser import Parser
-
-
 class TaskCreator():
     def __init__(self, user: User | None = None):
         if os.environ.get("APP_ROLE") != "SERVER":
@@ -67,6 +64,8 @@ class TaskCreator():
             if task.platform == "Portal":
                 tasks = [ExtractedTask.from_raw_task(task)]
             else:
+                from DataProcessor.Parser.Parser import Parser
+
                 tasks = [
                     t.update(
                         source_url=task.link,

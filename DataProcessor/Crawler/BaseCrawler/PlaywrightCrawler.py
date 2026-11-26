@@ -68,16 +68,19 @@ class PlaywrightCrawler(BaseCrawler):
             headless = headless,
             args=["--disable-blink-features=AutomationControlled"]
         )
-        context = browser.new_context(
-            user_agent=USER_AGENT,
-            viewport={"width": 1366, "height": 768},
-            locale="vi-VN",
-            timezone_id="Asia/Ho_Chi_Minh",
-            storage_state=storage_state
-        )
-        page = context.new_page()
-        
-        page.goto(url, wait_until='domcontentloaded')
+        try:
+            context = browser.new_context(
+                user_agent=USER_AGENT,
+                viewport={"width": 1366, "height": 768},
+                locale="vi-VN",
+                timezone_id="Asia/Ho_Chi_Minh",
+                storage_state=storage_state
+            )
+            page = context.new_page()
+            page.goto(url, wait_until='domcontentloaded')
+        except Exception:
+            browser.close()
+            raise
         return page, context, browser
     
     def browse_page(self, page: Page):

@@ -5,10 +5,11 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import uuid4, UUID, NAMESPACE_URL, uuid5
+from DataProcessor.Standardization.ExtractedTask import ExtractedTask
 
 from DataProcessor.Standardization.Task import Task
-from client.core.backend import AuthenticationError, ClientBackend, RegistrationError
+from client.core.backend import AuthenticationError, ClientBackend, RegistrationError, bridge_task_load
 from client.core.models import (
     ClientUser,
     ConnectionStatus,
@@ -31,6 +32,8 @@ class MockBackend(ClientBackend):
         self.fixture_path = fixture_path or (
             Path(__file__).resolve().parents[1] / "fixtures" / "tasks.json"
         )
+        self._uses_demo_fixture = fixture_path is None
+        self._crawled_tasks: dict[str, list[dict[str, Any]]] = {}
         self._last_sync: datetime | None = None
         self._disabled_sources: dict[str, set[str]] = {}
         self._manual_tasks: dict[str, list[dict[str, Any]]] = {}
@@ -89,7 +92,9 @@ class MockBackend(ClientBackend):
                 for task in tasks
                 if task.get("source_platform") not in {"Portal", "Moodle"}
             ]
+        tasks.extend(self._crawled_tasks.get(user.id, []))
         tasks.extend(self._manual_tasks.get(user.id, []))
+        tasks = [task for task in tasks if not task.get("user_id") or task["user_id"] == user.id]
         deleted = self._deleted_ids.get(user.id, set())
         overrides = self._task_overrides.get(user.id, {})
         merged: list[dict[str, Any]] = []
@@ -377,6 +382,12 @@ class MockBackend(ClientBackend):
             task.get("source_platform") in enabled_personal_sources
             for task in tasks
         )
+        if self._uses_demo_fixture and user.id != "demo-user":
+            # The bundled demo rows are templates for each mock crawl owner.
+            self._crawled_tasks[user.id] = [
+                {**task, "user_id": user.id}
+                for task in tasks if task.get("user_id") == "demo-user"
+            ]
         self._awaiting_personal_crawl.discard(user.id)
         if "Portal" in enabled_personal_sources:
             self._portal_connected.add(user.id)
@@ -388,3 +399,28 @@ class MockBackend(ClientBackend):
                 "personal items available"
             ),
         )
+
+    async def load_tasks(self, user):
+        raw_tasks = await self.get_tasks(user)
+        groups = {"public": [], "personal": []}
+        calendar = {"public": [], "personal": []}
+        for raw in raw_tasks:
+            scope = "personal" if raw.get("user_id") else "public"
+            payload = dict(raw)
+            try:
+                UUID(payload["id"])
+            except ValueError:
+                payload["id"] = str(uuid5(NAMESPACE_URL, "smart-calendar-mock/" + payload["id"]))
+            for field in ("start_time", "end_time"):
+                value = payload.get(field)
+                if isinstance(value, str):
+                    instant = ExtractedTask._to_vn_time(value)
+                    payload[field] = {"date": instant.date(), "time": instant.time()}
+                elif isinstance(value, dict):
+                    payload[field] = {**value, "time": value.get("time", value.get("time_"))}
+            payload.setdefault("updated_at", datetime.now().astimezone())
+            groups[scope].append(ExtractedTask.model_validate(payload))
+            calendar[scope].append(payload)
+        scopes = ("public", "personal") if user.id not in self._awaiting_personal_crawl or groups["personal"] else ("public",)
+        return bridge_task_load(tuple((scope, groups[scope]) for scope in scopes),
+                                [task for scope in scopes for task in calendar[scope]], set())

@@ -8,6 +8,7 @@ from client.components.auth_intro import render_auth_intro
 from client.config import AppConfig
 from client.core.backend import AuthenticationError, ClientBackend
 from client.core.controller import ClientController
+from client.core.models import ClientUser
 from client.theme import apply_theme
 
 
@@ -48,6 +49,9 @@ def register_login_page(backend: ClientBackend, config: AppConfig) -> None:
                             return
                         login_button.props(add="loading disable")
                         try:
+                            previous = app.storage.user.pop("user", None)
+                            if previous:
+                                backend.logout(ClientUser(**previous))
                             user = await controller.login(username.value, password.value)
                             app.storage.user["user"] = asdict(user)
                             ui.navigate.to("/calendar")
@@ -73,4 +77,3 @@ def register_login_page(backend: ClientBackend, config: AppConfig) -> None:
                         with ui.element("div").classes("demo-note"):
                             ui.label("Demo account").classes("demo-title")
                             ui.label("student / demo").classes("demo-credentials")
-

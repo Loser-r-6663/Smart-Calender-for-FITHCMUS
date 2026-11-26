@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import calendar as month_calendar
+import asyncio
+from time import perf_counter
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from client.core.backend import ClientBackend
+from dataclasses import replace
+from academic_search import SearchSnapshot, search_records
+from academic_search.semantic import HybridSearch
+from client.core.backend import ClientBackend, SessionExpiredError
 from client.core.models import CalendarItem, ClientState, ClientUser
 
 
@@ -94,6 +99,17 @@ class TaskMapper:
         cls, record: Any, range_start: date, range_end: date
     ) -> list[CalendarItem]:
         task_id = str(_value(record, "id") or f"task-{id(record)}")
+        scheduled = _value(record, "scheduled_occurrences", [])
+        if scheduled:
+            occurrences = []
+            for occurrence in scheduled:
+                values = record.model_dump() if hasattr(record, "model_dump") else dict(record)
+                values.update(start_time=_value(occurrence, "start_time"), end_time=_value(occurrence, "end_time"),
+                              scheduled_occurrences=[])
+                for item in cls.map_range(values, range_start, range_end):
+                    occurrences.append(replace(item, id=f"{task_id}:{item.start.isoformat()}"))
+            return occurrences
+
         loc_label, room, campus = _location_fields(_value(record, "location"))
         raw_source = _value(record, "source_platform")
         is_personal = bool(
@@ -196,10 +212,70 @@ class ClientController:
     def __init__(self, backend: ClientBackend, user: ClientUser | None = None) -> None:
         self.backend = backend
         self.state = ClientState(user=user)
+        self._schedule_generation = 0
+        self._generation = 0
+        self._selection_session = 0
+        self._loaded_tasks = None
+        self._search_filters = {}
+        self._search_sort = None
+        self._hybrid_search = HybridSearch()
+        self._search_request = 0
+        self._search_lock = asyncio.Lock()
+        self._preparation_generation = 0
+        self._preparation_task = None
+        self._preparation_gate = None
+        self._preparation_waiting_for_ui = False
+        self._foreground_waiters = 0
+        self._foreground_idle = asyncio.Event()
+        self._foreground_idle.set()
+        self.preparation_status = {'state':'disabled'}
+        self.last_search_mode = 'keyword'
+        self.backend.watch(self)
+
+    def _clear_tasks(self) -> None:
+        if self._preparation_waiting_for_ui and self._preparation_task is not None:
+            self._preparation_task.cancel()
+            self._preparation_waiting_for_ui = False
+        self._preparation_generation += 1
+        self.preparation_status = {'state':'cancelled'}
+        self.last_search_mode = 'keyword'
+        self._search_request += 1
+        self._hybrid_search.clear_cache()
+        self._loaded_tasks = None
+        self.state.schedule = None
+        self.state.items = []
+        self.state.search_snapshot = SearchSnapshot((), (), None)
+        self.state.selected_item_id = None
+        self.state.selected_search_key = None
+
+    def set_user(self, user: ClientUser | None) -> None:
+        self._generation += 1
+        self._selection_session += 1
+        self._schedule_generation += 1
+        self._clear_tasks()
+        self.state.user = user
+        self.state.search_query = ""
+        self.state.filters.query = ""
+        self.state.filters.kind = "all"
+        self._search_filters = {}
+        self._search_sort = None
+        self.state.error = None
+        self.state.session_expired = False
+        self.state.loading = False
+
+    def logout(self) -> None:
+        if self.state.user is not None:
+            self.backend.logout(self.state.user)
+        else:
+            self.set_user(None)
 
     async def login(self, username: str, password: str) -> ClientUser:
+        self.logout()
+        generation = self._generation
         user = await self.backend.login(username, password)
-        self.state.user = user
+        if generation != self._generation:
+            raise SessionExpiredError("Session changed during sign in.")
+        self.set_user(user)
         return user
 
     @staticmethod
@@ -209,54 +285,160 @@ class ClientController:
         )
         return weeks[0][0], weeks[-1][-1]
 
-    def week_anchor_date(self) -> date:
-        return date.today() + timedelta(days=7 * self.state.schedule_week_offset)
-
     async def load_month(self, month: date | None = None) -> None:
         if self.state.user is None:
             return
         if month is not None:
             self.state.visible_month = month.replace(day=1)
-        start, end = self.month_bounds(self.state.visible_month)
+        self._generation += 1
+        generation = self._generation
+        user = self.state.user
         self.state.loading = True
         self.state.error = None
+        selected_search_key = self.state.selected_search_key
+        self._clear_tasks()
         try:
-            tasks = await self.backend.get_tasks(self.state.user)
-            self.state.items = [
-                item
-                for task in tasks
-                for item in TaskMapper.map_range(task, start, end)
-            ]
-            if self.state.selected_item_id is None:
-                self.select_date(self.state.selected_date)
+            loaded = await self.backend.load_tasks(user)
+            if generation != self._generation or self.state.user is not user:
+                return
+            self._loaded_tasks = loaded
+            self.state.search_snapshot = loaded.snapshot
+            self.show_month(self.state.visible_month)
+            if selected_search_key is not None:
+                if loaded.snapshot.get_task(selected_search_key) is not None:
+                    self.state.selected_search_key = selected_search_key
+            self._start_preparation(loaded.snapshot, user)
+        except SessionExpiredError:
+            if generation == self._generation and self.state.user is user:
+                self.backend.logout(user)
+                self.state.session_expired = True
+                self.state.error = "Session expired. Sign in again."
         except Exception as exc:
-            self.state.error = str(exc)
+            if generation == self._generation and self.state.user is user:
+                self.state.error = str(exc)
         finally:
-            self.state.loading = False
+            if generation == self._generation:
+                self.state.loading = False
 
-    async def load_schedule(self, week_offset: int | None = None) -> None:
-        if self.state.user is None:
+    def defer_preparation(self):
+        """Allow a UI to release background setup after its first paint."""
+        if self._hybrid_search.enabled:
+            self._preparation_gate = asyncio.Event()
+        return self._preparation_gate
+
+    def _start_preparation(self, snapshot, user):
+        if not self._hybrid_search.enabled:
+            self.preparation_status = {'state':'disabled'}
             return
-        if week_offset is not None:
-            self.state.schedule_week_offset = week_offset
-        self.state.loading = True
-        self.state.error = None
+        generation = self._preparation_generation
+        epoch = self._hybrid_search.begin_preparation(snapshot.records, cache_token=snapshot)
+        started = perf_counter()
+        self.preparation_status = dict(state='pending',cached=0,total=len(snapshot.records),duration_ms=0)
+        self._preparation_waiting_for_ui = self._preparation_gate is not None and not self._preparation_gate.is_set()
+        self._preparation_task = asyncio.create_task(self._prepare_snapshot(snapshot,user,generation,epoch,started))
+
+    async def _prepare_snapshot(self, snapshot, user, generation, epoch, started):
+        def current():
+            return (generation == self._preparation_generation and self.state.user is user
+                    and self.state.search_snapshot is snapshot and not self.state.session_expired)
+        if self._preparation_gate is not None:
+            await self._preparation_gate.wait()
+        if not current():
+            return
+        self._preparation_waiting_for_ui = False
+        start = 0
+        while current():
+            await self._foreground_idle.wait()
+            async with self._search_lock:
+                if not current():
+                    return
+                if self._foreground_waiters:
+                    continue
+                status = await asyncio.to_thread(self._hybrid_search.prepare_batch, snapshot.records,
+                    cache_token=snapshot, expected_epoch=epoch, start=start, batch_size=16)
+            if not current():
+                return
+            self.preparation_status = dict(status,duration_ms=(perf_counter()-started)*1000)
+            if status['state'] != 'running':
+                return
+            start = status['next_index']
+            await asyncio.sleep(0)
+
+    def show_month(self, month: date) -> None:
+        self.state.visible_month = month.replace(day=1)
+        if self._loaded_tasks is None:
+            return
+        start, end = self.month_bounds(self.state.visible_month)
+        self.state.items = [
+            replace(item, id=f"{key[0]}:{item.id}", scope=key[0], is_personal=key[0] == "personal")
+            for task, key in zip(self._loaded_tasks.tasks, self._loaded_tasks.calendar_keys or
+                                 tuple(record.key for record in self._loaded_tasks.snapshot.records))
+            for item in TaskMapper.map_range(task, start, end)
+            if item.day is not None and start <= item.day <= end
+        ]
+        self.select_date(self.state.selected_date)
+
+    def search(self, query: str, *, filters=None, sort=None):
+        self._search_request += 1
+        self.state.search_query = query
+        self._search_filters = {} if filters is None else dict(filters)
+        self._search_sort = sort
+        return self.search_results
+
+    async def search_async(self, query: str, *, filters=None, sort=None):
+        self._search_request += 1
+        request = self._search_request
+        self.state.search_query = query
+        self._search_filters = {} if filters is None else dict(filters)
+        self._search_sort = sort
+        snapshot, user = self.state.search_snapshot, self.state.user
+        session = self._selection_session
+
+        def current():
+            return (request == self._search_request and session == self._selection_session
+                    and self.state.search_snapshot is snapshot and self.state.user is user
+                    and not self.state.session_expired)
+
+        filters = self._search_filters
+        search_records(snapshot.records, query, filters=filters, sort=sort)
+        self._foreground_waiters += 1
+        self._foreground_idle.clear()
         try:
-            self.state.schedule = await self.backend.run_schedule(
-                self.state.user,
-                week_anchor=self.week_anchor_date(),
-            )
-            # Default to first non-empty review tab if current tab has 0 items
-            sched = self.state.schedule
-            if self.state.schedule_tab == "needs_info" and not sched.unschedulable:
-                if sched.unselected:
-                    self.state.schedule_tab = "suggestions"
-                elif sched.rejected_items:
-                    self.state.schedule_tab = "removed"
-        except Exception as exc:
-            self.state.error = str(exc)
+            async with self._search_lock:
+                if not current():
+                    return None
+                epoch = self._hybrid_search.begin_preparation(snapshot.records,cache_token=snapshot)
+                result = await asyncio.to_thread(self._hybrid_search, snapshot.records, query,
+                    filters=filters, sort=sort, cache_token=snapshot, expected_epoch=epoch)
+                if current():
+                    self.last_search_mode = self._hybrid_search.last_mode
         finally:
-            self.state.loading = False
+            self._foreground_waiters -= 1
+            if not self._foreground_waiters:
+                self._foreground_idle.set()
+        return result if current() else None
+
+    @property
+    def search_results(self):
+        filters = dict(self._search_filters)
+        return self._hybrid_search(self.state.search_snapshot.records, self.state.search_query,
+                                   filters=filters, sort=self._search_sort,
+                                   cache_token=self.state.search_snapshot)
+
+    @property
+    def selected_search_record(self):
+        return self.state.search_snapshot.get_task(self.state.selected_search_key)
+
+    @property
+    def selection_session(self) -> int:
+        return self._selection_session
+
+    def select_search_record(self, key, *, session: int) -> bool:
+        if (session != self._selection_session or self.state.user is None
+                or self.state.search_snapshot.get_task(key) is None):
+            return False
+        self.state.selected_search_key = key
+        return True
 
     def select_date(self, selected: date) -> None:
         self.state.selected_date = selected
@@ -265,11 +447,6 @@ class ClientController:
 
     def select_item(self, item_id: str) -> None:
         self.state.selected_item_id = item_id
-
-    @property
-    def active_items(self) -> list[CalendarItem]:
-        """Calendar/Agenda items excluding tasks explicitly removed from schedule."""
-        return [item for item in self.state.items if item.status != "rejected"]
 
     @property
     def filtered_items(self) -> list[CalendarItem]:
@@ -293,6 +470,12 @@ class ClientController:
 
     @property
     def training_points_this_month(self) -> int:
+        """Temporary client-side total until the backend scheduler is integrated.
+
+        This sums point-bearing events already loaded by the client. Replace it
+        with the scheduler's authoritative monthly result once that service is
+        merged into the active backend and exposed through ClientBackend.
+        """
         month = self.state.visible_month
         return sum(
             item.points or 0
@@ -302,7 +485,69 @@ class ClientController:
 
     @property
     def training_points_overall(self) -> int:
-        return sum(item.points or 0 for item in self._unique_point_events())
+        """Temporary client-side total until the backend scheduler is integrated.
+
+        This is an aggregate of loaded event records, not an optimized or
+        expected score. Replace it with the scheduler response when available.
+        """
+        return sum(record.training_points or 0 for record in self.state.search_snapshot.records
+                   if record.type == "event")
+
+    def _unique_point_events(self) -> list[CalendarItem]:
+        unique: dict[str, CalendarItem] = {}
+        for item in self.state.items:
+            if item.kind == "event" and item.points:
+                unique.setdefault(item.task_id, item)
+        return list(unique.values())
+
+    def items_for_date(self, selected: date) -> list[CalendarItem]:
+        return sorted(
+            [item for item in self.filtered_items if item.day == selected],
+            key=lambda item: item.start or item.deadline or datetime.max.replace(tzinfo=VN_TZ),
+        )
+
+    @property
+    def selected_item(self) -> CalendarItem | None:
+        target = self.state.selected_item_id
+        if not target:
+            return None
+        for item in self.filtered_items:
+            if item.id == target:
+                return item
+        for item in self._all_schedule_items():
+            if item.id == target:
+                return item
+        for item in self.state.items:
+            if item.id == target or item.task_id == target:
+                return item
+        return None
+
+    def set_filter(self, kind: str) -> None:
+        self.state.filters.kind = kind
+        self.select_date(self.state.selected_date)
+
+    def set_query(self, query: str) -> None:
+        self.search(query)
+
+    def set_view(self, view: str) -> None:
+        self.state.view = view
+
+    def week_anchor_date(self) -> date:
+        return date.today() + timedelta(days=7 * self.state.schedule_week_offset)
+
+    @property
+    def active_items(self) -> list[CalendarItem]:
+        """Calendar/Agenda items excluding tasks explicitly removed from schedule."""
+        items = list(self.state.items)
+        if self.state.view == "agenda" and self._loaded_tasks is not None:
+            start, end = self.month_bounds(self.state.visible_month)
+            keys = self._loaded_tasks.calendar_keys or tuple(r.key for r in self._loaded_tasks.snapshot.records)
+            items.extend(
+                replace(item, id=f"{key[0]}:{item.id}", scope=key[0], is_personal=key[0] == "personal")
+                for task, key in zip(self._loaded_tasks.tasks, keys)
+                for item in TaskMapper.map_range(task, start, end) if item.day is None
+            )
+        return [item for item in items if item.status != "rejected"]
 
     @property
     def scheduled_drl_total(self) -> int | None:
@@ -317,19 +562,6 @@ class ClientController:
         base = sum(self.state.schedule.initial_drl.values())
         final = sum(self.state.schedule.final_drl.values())
         return max(0, final - base)
-
-    def _unique_point_events(self) -> list[CalendarItem]:
-        unique: dict[str, CalendarItem] = {}
-        for item in self.active_items:
-            if item.kind == "event" and item.points:
-                unique.setdefault(item.task_id, item)
-        return list(unique.values())
-
-    def items_for_date(self, selected: date) -> list[CalendarItem]:
-        return sorted(
-            [item for item in self.filtered_items if item.day == selected],
-            key=lambda item: item.start or item.deadline or datetime.max.replace(tzinfo=VN_TZ),
-        )
 
     def find_item_by_task_id(self, task_id: str) -> CalendarItem | None:
         if self.state.schedule is not None:
@@ -356,32 +588,37 @@ class ClientController:
             *sched.rejected_items,
         ]
 
-    @property
-    def selected_item(self) -> CalendarItem | None:
-        target = self.state.selected_item_id
-        if not target:
-            return None
-        for item in self.filtered_items:
-            if item.id == target:
-                return item
-        for item in self._all_schedule_items():
-            if item.id == target:
-                return item
-        for item in self.state.items:
-            if item.id == target or item.task_id == target:
-                return item
-        return None
-
-    def set_filter(self, kind: str) -> None:
-        self.state.filters.kind = kind
-        self.select_date(self.state.selected_date)
-
-    def set_query(self, query: str) -> None:
-        self.state.filters.query = query
-        self.select_date(self.state.selected_date)
-
-    def set_view(self, view: str) -> None:
-        self.state.view = view
-
     def set_schedule_tab(self, tab: str) -> None:
         self.state.schedule_tab = tab
+
+    async def load_schedule(self, week_offset: int | None = None) -> None:
+        if self.state.user is None:
+            return
+        if week_offset is not None:
+            self.state.schedule_week_offset = week_offset
+        self._schedule_generation += 1
+        schedule_generation = self._schedule_generation
+        generation, user = self._generation, self.state.user
+        self.state.loading = True
+        self.state.error = None
+        try:
+            result = await self.backend.run_schedule(
+                self.state.user,
+                week_anchor=self.week_anchor_date(),
+            )
+            if generation != self._generation or schedule_generation != self._schedule_generation or self.state.user is not user:
+                return
+            self.state.schedule = result
+            # Select the first populated review tab.
+            sched = self.state.schedule
+            if self.state.schedule_tab == "needs_info" and not sched.unschedulable:
+                if sched.unselected:
+                    self.state.schedule_tab = "suggestions"
+                elif sched.rejected_items:
+                    self.state.schedule_tab = "removed"
+        except Exception as exc:
+            if generation == self._generation and self.state.user is user:
+                self.state.error = str(exc)
+        finally:
+            if generation == self._generation and schedule_generation == self._schedule_generation:
+                self.state.loading = False
