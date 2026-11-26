@@ -602,3 +602,259 @@ def test_user_task_state_repository_http_params_and_payload(monkeypatch) -> None
             "id": "in.(t-1)",
         },
     )
+
+
+def test_mock_schedule_pin_event_compulsory_overrides_conflict() -> None:
+    async def scenario() -> None:
+        backend = MockBackend()
+        controller = ClientController(backend)
+        user = await controller.login("student", "demo")
+
+        next_monday = _next_week_anchor()
+        event_day = next_monday + timedelta(days=2)
+
+        await backend.create_task(
+            user,
+            TaskDraft(
+                title="Low Point Event",
+                kind="event",
+                scheduled_date=event_day,
+                start_time=time(14, 0),
+                end_time=time(16, 0),
+                training_points=2,
+                training_point_category="Articles 3",
+                estimated_hours=2.0,
+            ),
+        )
+        await backend.create_task(
+            user,
+            TaskDraft(
+                title="High Point Event",
+                kind="event",
+                scheduled_date=event_day,
+                start_time=time(14, 0),
+                end_time=time(16, 0),
+                training_points=8,
+                training_point_category="Articles 3",
+                estimated_hours=2.0,
+            ),
+        )
+
+        await controller.load_month(next_monday)
+        await controller.load_schedule(week_offset=1)
+        sched = controller.state.schedule
+        assert sched is not None
+        low_item = next(
+            p.item for p in sched.unselected if p.item.title == "Low Point Event"
+        )
+
+        # Reject first, then pin (compulsory=True) -> auto-restores to proposed & pins
+        await backend.set_task_schedule_state(user, low_item.task_id, status="rejected")
+        pin_res = await backend.set_task_schedule_state(
+            user, low_item.task_id, status="proposed", compulsory=True
+        )
+        assert pin_res.ok is True
+
+        await controller.load_schedule(week_offset=1)
+        sched2 = controller.state.schedule
+        assert sched2 is not None
+        assert any(it.task_id == low_item.task_id for it in sched2.scheduled_items)
+        assert any(p.item.title == "High Point Event" for p in sched2.unselected)
+
+    asyncio.run(scenario())
+
+
+def test_schedule_conflict_unselected_and_global_100_cap() -> None:
+    from DataProcessor.Standardization.Task import Task
+    from client.core.schedule_service import build_schedule_view_data
+
+    next_monday = _next_week_anchor()
+    day1 = next_monday + timedelta(days=1)
+    day2 = next_monday + timedelta(days=2)
+    day3 = next_monday + timedelta(days=3)
+
+    low_ev = Task(
+        id="ev-low",
+        title="Workshop 3 pts",
+        type="event",
+        start_time=DateDayTime(date=day1, time=time(9, 0)),
+        end_time=DateDayTime(date=day1, time=time(11, 0)),
+        training_points=3,
+        training_point_category="Articles 4",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+    high_ev = Task(
+        id="ev-high",
+        title="Hackathon 5 pts",
+        type="event",
+        start_time=DateDayTime(date=day1, time=time(9, 30)),
+        end_time=DateDayTime(date=day1, time=time(11, 30)),
+        training_points=5,
+        training_point_category="Articles 4",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+    cap_ev = Task(
+        id="ev-cap-overflow",
+        title="Day 2 Event 5 pts",
+        type="event",
+        start_time=DateDayTime(date=day2, time=time(14, 0)),
+        end_time=DateDayTime(date=day2, time=time(16, 0)),
+        training_points=5,
+        training_point_category="Articles 4",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+
+    # 1. Conflict resolution: ev-high (5) + cap_ev (5) = 10 > ev-low (3) + cap_ev (5) = 8
+    sched = build_schedule_view_data(
+        [low_ev, high_ev, cap_ev],
+        initial_drl={"Articles 4": 0},
+        week_anchor=next_monday,
+    )
+    scheduled_ids = {it.task_id for it in sched.scheduled_items}
+    unselected_ids = {p.item.task_id: p.reason for p in sched.unselected}
+
+    assert "ev-high" in scheduled_ids
+    assert "ev-cap-overflow" in scheduled_ids
+    assert "ev-low" in unselected_ids
+    assert unselected_ids["ev-low"]
+
+    # 2. Global 100-point cap: initial = 95, only 1 of two 5-pt events fits
+    overflow_ev = Task(
+        id="ev-cap-overflow-2",
+        title="Extra 5 pts",
+        type="event",
+        start_time=DateDayTime(date=day3, time=time(14, 0)),
+        end_time=DateDayTime(date=day3, time=time(16, 0)),
+        training_points=5,
+        training_point_category="Articles 4",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+    initial_95 = {
+        "Articles 1": 25,
+        "Articles 2": 20,
+        "Articles 3": 25,
+        "Articles 4": 15,
+        "Articles 5": 10,
+    }
+    sched_cap = build_schedule_view_data(
+        [cap_ev, overflow_ev],
+        initial_drl=initial_95,
+        week_anchor=next_monday,
+    )
+    cap_scheduled = {it.task_id for it in sched_cap.scheduled_items}
+    cap_unselected = {p.item.task_id for p in sched_cap.unselected}
+
+    assert len(cap_scheduled) == 1
+    assert len(cap_unselected) == 1
+    assert sum(sched_cap.final_drl.values()) == 100
+
+
+def test_schedule_flexible_drl_event_allocates_daytime_slot_and_adds_points() -> None:
+    from DataProcessor.Standardization.Task import Task
+    from client.core.schedule_service import build_schedule_view_data
+
+    next_monday = _next_week_anchor()
+    flex_ev = Task(
+        id="flex-drl-1",
+        title="Online Civic Quiz",
+        type="event",
+        start_time=DateDayTime(date=next_monday, time=None),
+        deadline=datetime.combine(next_monday + timedelta(days=2), time(20, 0), tzinfo=VN_TZ),
+        estimated_hours=1.0,
+        training_points=4,
+        training_point_category="Articles 2",
+        flexible=True,
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+
+    sched = build_schedule_view_data([flex_ev], week_anchor=next_monday)
+    allocated = [it for it in sched.scheduled_items if it.task_id == "flex-drl-1"]
+    assert len(allocated) == 1
+    assert allocated[0].start is not None and allocated[0].end is not None
+    assert 8 <= allocated[0].start.hour < 21
+    assert sched.final_drl["Articles 2"] == 4
+
+
+def test_schedule_current_week_keeps_past_fixed_but_skips_past_events(
+    monkeypatch,
+) -> None:
+    from DataProcessor.Standardization.Task import Task
+    import client.core.schedule_service as sched_svc
+
+    # Freeze "now" to Wednesday 2026-11-04 12:00 (GMT+7)
+    frozen_now = datetime(2026, 11, 4, 12, 0, tzinfo=VN_TZ)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is not None:
+                return frozen_now.astimezone(tz)
+            return frozen_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(sched_svc, "datetime", FrozenDateTime)
+
+    past_class = Task(
+        id="past-mon-class",
+        title="Monday Morning Class",
+        type="class",
+        start_time=DateDayTime(date=date(2026, 11, 2), time=time(8, 0)),
+        end_time=DateDayTime(date=date(2026, 11, 2), time=time(10, 0)),
+        compulsory=True,
+        source_url="",
+        source_platform="Portal",
+    )
+    past_event = Task(
+        id="past-tue-event",
+        title="Tuesday Past Event",
+        type="event",
+        start_time=DateDayTime(date=date(2026, 11, 3), time=time(9, 0)),
+        end_time=DateDayTime(date=date(2026, 11, 3), time=time(11, 0)),
+        training_points=5,
+        training_point_category="Articles 1",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+    future_event = Task(
+        id="future-thu-event",
+        title="Thursday Future Event",
+        type="event",
+        start_time=DateDayTime(date=date(2026, 11, 5), time=time(14, 0)),
+        end_time=DateDayTime(date=date(2026, 11, 5), time=time(16, 0)),
+        training_points=5,
+        training_point_category="Articles 1",
+        source_url="",
+        source_platform="Phòng Công tác sinh viên",
+    )
+
+    sched = sched_svc.build_schedule_view_data(
+        [past_class, past_event, future_event],
+        week_anchor=date(2026, 11, 4),
+    )
+    scheduled_ids = {it.task_id for it in sched.scheduled_items}
+    assert "past-mon-class" in scheduled_ids
+    assert "past-tue-event" not in scheduled_ids
+    assert "future-thu-event" in scheduled_ids
+
+
+def test_mock_disabled_sources_excluded_from_schedule() -> None:
+    async def scenario() -> None:
+        backend = MockBackend()
+        controller = ClientController(backend)
+        user = await controller.login("student", "demo")
+
+        next_monday = _next_week_anchor()
+        await backend.set_source_enabled(user, "Portal", False)
+        assert "Portal" in await backend.get_disabled_sources(user)
+
+        await controller.load_month(next_monday)
+        await controller.load_schedule(week_offset=1)
+        sched = controller.state.schedule
+        assert sched is not None
+        assert all(it.source != "Portal" for it in sched.scheduled_items)
+
+    asyncio.run(scenario())
