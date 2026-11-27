@@ -1,0 +1,27 @@
+{
+  "tested_revision": "5ad961d44437b5d1681d280a777397b977d0a0a1",
+  "observed_utc": "2026-11-27T04:52:14.579713+00:00",
+  "mode": "read-only live public-client guest/A/B; actual NiceGUI",
+  "credentials_private": true,
+  "private_contents_or_identifiers_recorded": false,
+  "screenshots_or_traces": false,
+  "guest": {
+    "public_rows": 23,
+    "public_only": true,
+    "task_reads": 1
+  },
+  "browser": "158.0.4370.33",
+  "status": "blocked-or-failed",
+  "failed_stage": "A authentication and load",
+  "error_type": "TimeoutError",
+  "diagnostics": {
+    "ok": true,
+    "auth_failure_types": []
+  },
+  "session_cleanup": {
+    "local_auth_logout_statuses": [
+      204
+    ]
+  },
+  "temporary_browser_storage_removed": true
+}

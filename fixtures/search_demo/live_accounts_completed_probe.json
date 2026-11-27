@@ -1,0 +1,107 @@
+{
+  "tested_revision": "5ad961d44437b5d1681d280a777397b977d0a0a1",
+  "observed_utc": "2026-11-27T04:56:40.074510+00:00",
+  "mode": "read-only live public-client guest/A/B; actual NiceGUI",
+  "credentials_private": true,
+  "private_contents_or_identifiers_recorded": false,
+  "screenshots_or_traces": false,
+  "guest": {
+    "public_rows": 23,
+    "public_only": true,
+    "task_reads": 1
+  },
+  "browser": "158.0.4370.33",
+  "ui": {
+    "A": {
+      "public_exact_found": true,
+      "private_exact_found": true,
+      "original_details_and_source_match": true,
+      "extra_task_reads_query_and_details": 0,
+      "private_destination_followed": false,
+      "logout_started_with_private_dialog_open": true
+    },
+    "B": {
+      "public_exact_found": true,
+      "private_fixture": "unavailable",
+      "extra_task_reads_public_query": 0
+    }
+  },
+  "accounts": {
+    "A": {
+      "authenticated_identity_verified": true,
+      "owner_filter_and_token_verified": true,
+      "public_rows": 23,
+      "private_rows": 12,
+      "source_preferences": "all enabled",
+      "export_owner_rows": 12,
+      "export_only_count": 0,
+      "live_only_count": 0,
+      "public_result_consistent_with_guest": true,
+      "private_fixture_available": true,
+      "task_reads_after_load": 3,
+      "preparation_state": "pending",
+      "after_logout": {
+        "session_cleared": true,
+        "snapshot_empty": true,
+        "selection_empty": true,
+        "details_empty": true,
+        "stale_callback_rejected": true,
+        "cache_cleared": true,
+        "extra_task_reads": 0
+      },
+      "other_account_and_guest_cannot_search_or_resolve_same_key": true
+    },
+    "B": {
+      "authenticated_identity_verified": true,
+      "owner_filter_and_token_verified": true,
+      "public_rows": 23,
+      "private_rows": 0,
+      "source_preferences": "all enabled",
+      "export_owner_rows": 0,
+      "export_only_count": 0,
+      "live_only_count": 0,
+      "public_result_consistent_with_guest": true,
+      "private_fixture_available": false,
+      "task_reads_after_load": 5,
+      "preparation_state": "running",
+      "after_logout": {
+        "session_cleared": true,
+        "snapshot_empty": true,
+        "selection_empty": true,
+        "details_empty": true,
+        "stale_callback_rejected": true,
+        "cache_cleared": true,
+        "extra_task_reads": 0
+      }
+    }
+  },
+  "distinct_authenticated_owners": true,
+  "request_counts": {
+    "tasks_reads": 3,
+    "GET /rest/v1/tasks": 3,
+    "200 GET /rest/v1/tasks": 3,
+    "POST /auth/v1/token": 2,
+    "200 POST /auth/v1/token": 2,
+    "GET /rest/v1/users": 2,
+    "200 GET /rest/v1/users": 2,
+    "user_task_reads": 2,
+    "GET /rest/v1/user_task": 2,
+    "200 GET /rest/v1/user_task": 2,
+    "GET /rest/v1/user_task_state": 2,
+    "200 GET /rest/v1/user_task_state": 2,
+    "GET /auth/v1/user": 2,
+    "200 GET /auth/v1/user": 2
+  },
+  "private_data_recorded": false,
+  "guest_interface": "load_snapshot repository; Calendar requires sign-in",
+  "status": "passed",
+  "session_cleanup": {
+    "local_auth_logout_statuses": [
+      204,
+      204
+    ]
+  },
+  "temporary_browser_storage_removed": true,
+  "task_table_mutations": 0,
+  "reverse_direction_private_check": "not run: authenticated B has no private rows and no matching export rows; no fixture created"
+}

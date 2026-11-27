@@ -1,0 +1,92 @@
+{
+  "tested_revision": "5ad961d44437b5d1681d280a777397b977d0a0a1",
+  "observed_utc": "2026-11-27T05:01:04.009260+00:00",
+  "mode": "read-only live public-client guest/A/B; actual NiceGUI",
+  "credentials_private": true,
+  "private_contents_or_identifiers_recorded": false,
+  "screenshots_or_traces": false,
+  "guest": {
+    "public_rows": 23,
+    "public_only": true,
+    "task_reads": 1
+  },
+  "browser": "158.0.4370.33",
+  "ui": {
+    "A": {
+      "public_exact_found": true,
+      "private_exact_found": true,
+      "original_details_and_source_match": true,
+      "extra_task_reads_query_and_details": 0,
+      "private_destination_followed": false,
+      "logout_started_with_private_dialog_open": true
+    }
+  },
+  "status": "blocked-or-failed",
+  "failed_stage": "B calendar toolbar readiness",
+  "error_type": "TimeoutError",
+  "diagnostics": {
+    "ok": true,
+    "auth_failure_types": [],
+    "load_failure_types": [],
+    "counts": {
+      "tasks_reads": 3,
+      "GET /rest/v1/tasks": 3,
+      "200 GET /rest/v1/tasks": 3,
+      "POST /auth/v1/token": 2,
+      "200 POST /auth/v1/token": 2,
+      "GET /rest/v1/users": 2,
+      "200 GET /rest/v1/users": 2,
+      "user_task_reads": 2,
+      "GET /rest/v1/user_task": 2,
+      "200 GET /rest/v1/user_task": 2,
+      "GET /rest/v1/user_task_state": 2,
+      "200 GET /rest/v1/user_task_state": 2,
+      "GET /auth/v1/user": 1,
+      "200 GET /auth/v1/user": 1
+    },
+    "controllers": [
+      {
+        "has_user": false,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      },
+      {
+        "has_user": false,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      },
+      {
+        "has_user": false,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      },
+      {
+        "has_user": true,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      },
+      {
+        "has_user": true,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      }
+    ]
+  },
+  "session_cleanup": {
+    "local_auth_logout_statuses": [
+      204,
+      204
+    ]
+  },
+  "temporary_browser_storage_removed": true
+}

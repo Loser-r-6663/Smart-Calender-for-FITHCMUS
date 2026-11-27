@@ -1,0 +1,62 @@
+{
+  "tested_revision": "5ad961d44437b5d1681d280a777397b977d0a0a1",
+  "observed_utc": "2026-11-27T04:54:49.127250+00:00",
+  "mode": "read-only live public-client guest/A/B; actual NiceGUI",
+  "credentials_private": true,
+  "private_contents_or_identifiers_recorded": false,
+  "screenshots_or_traces": false,
+  "guest": {
+    "public_rows": 23,
+    "public_only": true,
+    "task_reads": 1
+  },
+  "browser": "158.0.4370.33",
+  "status": "blocked-or-failed",
+  "failed_stage": "A calendar socket readiness",
+  "error_type": "AssertionError",
+  "diagnostics": {
+    "ok": true,
+    "auth_failure_types": [],
+    "load_failure_types": [
+      {
+        "type": "AssertionError"
+      }
+    ],
+    "counts": {
+      "tasks_reads": 2,
+      "GET /rest/v1/tasks": 2,
+      "200 GET /rest/v1/tasks": 2,
+      "POST /auth/v1/token": 1,
+      "200 POST /auth/v1/token": 1,
+      "GET /rest/v1/users": 1,
+      "200 GET /rest/v1/users": 1,
+      "user_task_reads": 1,
+      "GET /rest/v1/user_task": 1,
+      "200 GET /rest/v1/user_task": 1,
+      "GET /rest/v1/user_task_state": 1,
+      "200 GET /rest/v1/user_task_state": 1
+    },
+    "controllers": [
+      {
+        "has_user": true,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      },
+      {
+        "has_user": true,
+        "loading": false,
+        "expired": false,
+        "error_present": false,
+        "records": 0
+      }
+    ]
+  },
+  "session_cleanup": {
+    "local_auth_logout_statuses": [
+      204
+    ]
+  },
+  "temporary_browser_storage_removed": true
+}

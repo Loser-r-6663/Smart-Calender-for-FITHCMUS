@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import subprocess
 import sys
 import tempfile
 from time import perf_counter
@@ -99,6 +100,7 @@ def main():
     parser.add_argument('--reference-archive',type=Path)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--sizes',type=int,nargs='+',default=[14,1008])
+    parser.add_argument('--warm-queries',action='store_true',help='Measure a different and repeated query after preparation')
     args=parser.parse_args()
     if args.reference_archive:
         if args.reference_dir: parser.error('Use only one reference source')
@@ -160,6 +162,30 @@ def main():
                     close_details(page)
                     expect(first).to_be_focused()
                     detail_reads=page.request.get(url+'/first/state').json()['reads']-detail_reads
+                    ordered_keys=page.locator('.search-result').evaluate_all("xs=>xs.map(x=>x.getAttribute('data-search-key'))")
+                    warm=[]
+                    if args.warm_queries and scenario=='prepared':
+                        for operation in ('different_query','repeat_query'):
+                            marker=scenario+'-'+operation
+                            page.locator('.search-query input').fill('tìm chỗ làm lập trình')
+                            prior=page.request.post(url+'/first/arm/'+marker).json()
+                            read_count=page.request.get(url+'/first/state').json()['reads']
+                            warm_started=perf_counter()
+                            page.locator('.search-query input').press('Enter')
+                            page.locator(f'[data-first-search="{marker}-final"]').wait_for(state='attached')
+                            page.evaluate('() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+                            visible_ms=(perf_counter()-warm_started)*1000
+                            latest=page.request.get(url+'/first/state').json()
+                            warm.append(dict(operation=operation,visible_ms=visible_ms,
+                                queries=latest['counts']['foreground_queries']-prior['foreground_queries'],
+                                passages=latest['counts']['foreground_passages']-prior['foreground_passages'],
+                                encode_ms=latest['counts']['foreground_encode_ms']-prior['foreground_encode_ms'],
+                                task_reads=latest['reads']-read_count,
+                                preparation_state=latest['preparation']['state'],
+                                ordered_keys=page.locator('.search-result').evaluate_all("xs=>xs.map(x=>x.getAttribute('data-search-key'))")))
+                            assert warm[-1]['passages']==warm[-1]['task_reads']==0
+                            assert warm[-1]['queries']==1
+                        assert warm[0]['ordered_keys']==warm[1]['ordered_keys']
                     rows.append(dict(size=size,scenario=scenario,calendar_ready_ms=ready,
                         preparation_at_submit=at_submit['preparation'],preparation_final=after['preparation'],
                         preliminary_ms=preliminary_ms,hybrid_visible_ms=final_ms,
@@ -170,8 +196,8 @@ def main():
                         background_encode_ms=after['counts']['preparation_encode_ms'],
                         model_startup_ms=after['counts']['model_startup_ms'],
                         detail_task_reads=detail_reads,
-                        ordered_keys=page.locator('.search-result').evaluate_all("xs=>xs.map(x=>x.getAttribute('data-search-key'))")))
-                    print({k:v for k,v in rows[-1].items() if k!='ordered_keys'},flush=True)
+                        warm_queries=warm,ordered_keys=ordered_keys))
+                    print({k:v for k,v in rows[-1].items() if k not in ('ordered_keys','warm_queries')},flush=True)
                 finally: browser.close()
             args.output.write_text(json.dumps({'rows':rows},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     sources={name:hashlib.sha256((args.reference_dir/(name+'.py') if args.reference_dir else Path(path)).read_bytes()).hexdigest()
@@ -179,6 +205,7 @@ def main():
     from academic_search.semantic import REVISION,CUTOFF
     args.output.write_text(json.dumps(dict(source_sha256=sources,reference_directory=str(args.reference_dir) if args.reference_dir else None,
         model_revision=REVISION,cutoff=CUTOFF,device='CPU / '+platform.processor(),python=sys.version,
+        tested_revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         trial_count=1,rows=rows),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 
 

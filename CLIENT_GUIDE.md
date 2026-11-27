@@ -1,4 +1,4 @@
-> The integrated app uses the loaded, scoped Search controls and read-only detail dialog described in README.md. This guide covers the FE task-management and scheduling flows.
+> The integrated app uses the loaded, scoped Search controls and read-only detail dialog described in README.md. Section 7 gives a reproducible Vietnamese Search demo alongside the FE task-management and scheduling flows.
 
 # Hướng dẫn sử dụng Client
 
@@ -182,3 +182,120 @@ Các test client và database repository nằm trong thư mục `tests/`.
 | Portal không lấy được dữ liệu | Kiểm tra mã sinh viên/mật khẩu, hoàn tất xác minh nếu được yêu cầu, rồi chạy crawl lại. |
 | Task hiển thị “No date” | Kiểm tra dữ liệu thời gian của task trong database và log lỗi khi tải task; task không có ngày/giờ có thể được xếp vào nhóm thông báo không ngày. |
 | Sau khi restart bị yêu cầu đăng nhập lại | Kiểm tra `CLIENT_STORAGE_SECRET` có bị đổi không. Dùng cùng secret để giữ phiên trình duyệt. |
+
+## 7. Demo Search trên bản tích hợp
+
+Bản kiểm tra: `FE-Client` tại `5ad961d44437b5d1681d280a777397b977d0a0a1`
+(FE `67fea68` + Search/P `2a4fe34`). Kết quả chi tiết và các kiểm tra chưa
+thực hiện nằm trong [biên bản demo](fixtures/search_demo/VERIFICATION.md).
+Phần này không yêu cầu crawl, Auto-schedule hay thay đổi dữ liệu thật.
+
+### Chuẩn bị dữ liệu giả lập cố định
+
+Từ thư mục gốc, dùng Python của dự án thay vì Python hệ thống thiếu dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-mockweb.txt
+$env:PYTHON_DOTENV_DISABLED = '1'
+Remove-Item Env:SEARCH_SEMANTIC_MODEL -ErrorAction SilentlyContinue
+$env:CLIENT_PORT = '8091'
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_demo.app
+```
+
+Mở cửa sổ riêng tư tại `http://127.0.0.1:8091/login`, đăng nhập `student` /
+`demo`. Đây là **mock**, gồm 15 bản ghi hư cấu trong
+`fixtures/search_demo/tasks.json`, không phải hai bản export. Giữ tất cả
+Information sources bật. Search và Calendar dùng cùng snapshot; bộ lọc và
+lựa chọn của hai phần độc lập. Không bấm crawl, tạo task hay lập lịch trong demo.
+
+1. **Tìm chính xác và mở nguồn.** Mở **Search tasks**; lúc đầu chưa có kết quả.
+   Nhập `Thời điểm hoàn tất nghĩa vụ tài chính`, nhấn Enter. Có một kết quả,
+   key `public:11111111-1111-4111-8111-111111111111`. Chọn kết quả: dialog
+   hiện tiêu đề, deadline gốc và **Open official source**. Liên kết ở launcher
+   này dẫn tới trang nguồn giả lập trên cùng máy, không tới tài khoản thật.
+   Close/Escape đóng dialog và trả focus về kết quả. Đóng/mở popover giữ lại
+   Search; Clear trả Search về idle và không đổi lịch.
+2. **So sánh điểm.** Clear rồi lần lượt submit `5 điểm`, `từ 5 điểm`,
+   `nhiều hơn 5 điểm`. Kết quả tương ứng là **1 / 2 / 1 task**: cá nhân
+   `88888888-8888-4888-8888-888888888888` (5 điểm); thêm công khai
+   `66666666-6666-4666-8666-666666666666` (7 điểm); cuối cùng chỉ task 7 điểm.
+   Task 4, 0 và thiếu điểm không lọt vào các kết quả này. `bé hơn 5 điểm`
+   lấy task 4 và 0 điểm. Đây là so sánh task sự kiện, không phải scope riêng tư.
+   Giao diện chỉ hiện số task và thứ tự; không có nhãn tóm tắt điểm suy luận.
+3. **Bài tập trong một tuần.** Clear, để ô Search trống; chọn Type
+   **Assignments**, Course **CSC10006**, Deadline from **2026-11-30** và
+   Deadline through **2026-12-06**; nhấn Search. Hai đầu ngày đều được tính
+   theo giờ Việt Nam. Ba task hư cấu là:
+
+   | Ký hiệu | Tiêu đề | Deadline Việt Nam | Key (scope luôn là `personal`) |
+   | --- | --- | --- | --- |
+   | C | Chuẩn bị truy vấn dữ liệu | 30/11 00:00 | `a7100000-0000-4000-8000-000000000001` |
+   | B | Báo cáo thực hành cơ sở dữ liệu | 04/12 09:00 | `33333333-3333-4333-8333-333333333333` |
+   | G | Ghi chú thiết kế bảng | 06/12 23:59 | `a7100000-0000-4000-8000-000000000002` |
+
+   **Soonest deadline:** C → B → G; **Latest deadline:** G → B → C;
+   **Title A–Z:** B → C → G. Mỗi lần vẫn cùng ba key. Sửa ngày bắt đầu thành
+   07/12 để thấy lỗi khoảng đảo, rồi sửa lại mà không nhập lại query.
+   Calendar/Agenda/Schedule và bộ lọc loại ở toolbar vẫn hoạt động riêng.
+
+### Demo diễn đạt khác nghĩa đen (model tùy chọn, chạy trên máy)
+
+Dừng launcher bằng Ctrl+C. Cài model một lần; revision cố định, license MIT,
+CPU, khoảng 488 MB assets, không nằm trong Git:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-semantic.txt
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.setup_model "$env:LOCALAPPDATA\SmartCalendar\models\multilingual-e5-small"
+$env:SEARCH_SEMANTIC_MODEL = "$env:LOCALAPPDATA\SmartCalendar\models\multilingual-e5-small"
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_demo.app
+```
+
+Model `intfloat/multilingual-e5-small`, revision
+`fd1525a9fd15316a2d503bf26ab031a61d056e98`, cutoff **0.86**.
+Mở lại phiên riêng tư, Clear các bộ lọc, tìm `hạn cuối đóng học phí`.
+Task **Thời điểm hoàn tất nghĩa vụ tài chính** là đích mong đợi, rank 1 trên
+fixture demo đã kiểm tra; keyword-only không tìm thấy. Query không có từ
+literal nào trong title/description của task này. Chọn nó để mở cùng dialog
+và nguồn giả lập. Lần đầu có thể hiện **Searching…** trong khi chuẩn bị;
+kết quả ban đầu vẫn dùng được, số lượng cuối chỉ hiện sau khi hoàn tất.
+Chuẩn bị chạy nền, không chặn lịch; với nhiều task, chờ model có thể lâu.
+
+Không có model: bỏ `SEARCH_SEMANTIC_MODEL` như lệnh đầu rồi khởi động lại.
+Exact, điểm, course, ngày và sort vẫn dùng được; paraphrase trên không có hit.
+Không có truy vấn/task nào được gửi tới dịch vụ embedding bên ngoài.
+
+Kiểm tra lại trên tập E **14 task / 31 case** (khác fixture demo 15 task):
+
+```powershell
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.run_keyword --check
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.check_prepared --output fixtures/search_semantic/hybrid_integrated_report.json
+```
+
+Đây là regression trên các case đã xem: keyword **1/3 tuning, 0/4 held-out**;
+model **3/3 tuning, 1/4 held-out**; cả hai **0/4 unrelated false hits**, không
+có vi phạm correctness. Không diễn giải thành khả năng hiểu mọi câu tiếng Việt.
+
+### Đối chiếu live chỉ đọc
+
+Dùng cấu hình public-client và hướng dẫn live ở mục 2, không dùng service-role
+key. Không để `PYTHON_DOTENV_DISABLED=1` nếu cần đọc `.env`; nhập mật khẩu qua
+trang đăng nhập, không ghi vào lệnh, ảnh hay biên bản. Với nguồn bật giống nhau,
+có thể dùng tiêu đề công khai **Tổng kết Buổi giới thiệu về các chương trình
+học bổng trường Đại học Quốc gia Seoul (Hàn Quốc)** để exact lookup. Public key
+`public:322661b8-b705-4723-a512-04b426028960` được kiểm tra qua repository guest,
+rank 1, trong 23 hàng live ngày 27/11/2026; không phải kiểm tra guest qua Calendar.
+Nguồn công khai nằm trong dialog; chưa kiểm tra đích Facebook bằng tài khoản thật.
+
+Search chỉ bao phủ originals được cấp quyền và nguồn đang bật, gồm cả task
+không ngày/chưa xếp lịch; dialog giữ facts gốc, khác overlay xếp lịch Calendar.
+Không dùng export cá nhân để suy ra quyền: phải xác thực A/B, đọc đúng owner,
+thử private key với owner, account kia và guest, rồi chuyển account khi dialog
+đang mở. Kiểm tra live ngày 27/11/2026: guest/A/B cùng thấy **23 public task**;
+A có **12 private task**, tìm và mở đúng original/source; B và guest không tìm
+hoặc resolve được private key đó. Logout khi dialog của A đang mở xóa details,
+link và lựa chọn; callback cũ bị từ chối. Query/details không đọc task thêm.
+B có **0 private task**, khớp export theo identity đã xác thực; chưa có fixture
+để thử chiều B → A/guest, không tạo dữ liệu thật để bù. Kết quả ẩn danh trong
+`fixtures/search_demo/live_accounts_verification.json`; không ghi credentials,
+private title/key/URL hoặc ảnh riêng tư. Phản hồi paraphrase mới từ đồng đội,
+review layout của Long và xác nhận shared build của Hiển: **đang chờ**.

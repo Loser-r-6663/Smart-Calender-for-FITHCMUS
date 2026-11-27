@@ -1,0 +1,161 @@
+{
+  "tested_revision": "5ad961d44437b5d1681d280a777397b977d0a0a1",
+  "observed_utc": "2026-11-27T03:59:32.329274+00:00",
+  "mode": "live-public-repository-only",
+  "accounts_A_B": "blocked: credentials unavailable",
+  "private_contents_recorded": false,
+  "status": "passed",
+  "public_rows": 23,
+  "export_public_rows": 23,
+  "export_only_count": 0,
+  "live_only_count": 0,
+  "loaded_scopes": [
+    "public"
+  ],
+  "row_limit": null,
+  "read_requests": 1,
+  "only_public_task_requests": true,
+  "interaction_reads": 0,
+  "source_preferences": "all enabled",
+  "exact_public_lookup": {
+    "key": [
+      "public",
+      "322661b8-b705-4723-a512-04b426028960"
+    ],
+    "public_title": "Tổng kết Buổi giới thiệu về các chương trình học bổng trường Đại học Quốc gia Seoul (Hàn Quốc)",
+    "public_source_url": "https://www.facebook.com/fit.hcmus.hoatdong/posts/pfbid02FNGqoPtHLXyXsaqydmjJqkAzwQAiXxynv5VechCFX5aBYuYd4sPAPFfnGjYdcfxol",
+    "position": 1,
+    "detail_from_snapshot": true
+  },
+  "point_cases": [
+    {
+      "query": "5 điểm",
+      "expected_public_keys": [
+        [
+          "public",
+          "92cd09b2-559f-48f4-bb2f-83a55ce88719"
+        ],
+        [
+          "public",
+          "9895dfaa-0f48-4da4-81b6-76579d05d7af"
+        ],
+        [
+          "public",
+          "bfb8b873-04e0-43e2-9dd6-a43e2e5482cb"
+        ]
+      ],
+      "actual_ordered_keys": [
+        [
+          "public",
+          "92cd09b2-559f-48f4-bb2f-83a55ce88719"
+        ],
+        [
+          "public",
+          "9895dfaa-0f48-4da4-81b6-76579d05d7af"
+        ],
+        [
+          "public",
+          "bfb8b873-04e0-43e2-9dd6-a43e2e5482cb"
+        ]
+      ],
+      "matches_export_expectation": true
+    },
+    {
+      "query": "từ 5 điểm",
+      "expected_public_keys": [
+        [
+          "public",
+          "0adaf6c1-71cf-4507-999f-dccc27a4ee41"
+        ],
+        [
+          "public",
+          "82b16547-8eb7-497f-be8a-4345dc5f496f"
+        ],
+        [
+          "public",
+          "92cd09b2-559f-48f4-bb2f-83a55ce88719"
+        ],
+        [
+          "public",
+          "9895dfaa-0f48-4da4-81b6-76579d05d7af"
+        ],
+        [
+          "public",
+          "bfb8b873-04e0-43e2-9dd6-a43e2e5482cb"
+        ],
+        [
+          "public",
+          "d9df6d52-d037-4abb-88fd-464aefb05194"
+        ]
+      ],
+      "actual_ordered_keys": [
+        [
+          "public",
+          "92cd09b2-559f-48f4-bb2f-83a55ce88719"
+        ],
+        [
+          "public",
+          "0adaf6c1-71cf-4507-999f-dccc27a4ee41"
+        ],
+        [
+          "public",
+          "82b16547-8eb7-497f-be8a-4345dc5f496f"
+        ],
+        [
+          "public",
+          "9895dfaa-0f48-4da4-81b6-76579d05d7af"
+        ],
+        [
+          "public",
+          "bfb8b873-04e0-43e2-9dd6-a43e2e5482cb"
+        ],
+        [
+          "public",
+          "d9df6d52-d037-4abb-88fd-464aefb05194"
+        ]
+      ],
+      "matches_export_expectation": true
+    },
+    {
+      "query": "nhiều hơn 5 điểm",
+      "expected_public_keys": [
+        [
+          "public",
+          "0adaf6c1-71cf-4507-999f-dccc27a4ee41"
+        ],
+        [
+          "public",
+          "82b16547-8eb7-497f-be8a-4345dc5f496f"
+        ],
+        [
+          "public",
+          "d9df6d52-d037-4abb-88fd-464aefb05194"
+        ]
+      ],
+      "actual_ordered_keys": [
+        [
+          "public",
+          "0adaf6c1-71cf-4507-999f-dccc27a4ee41"
+        ],
+        [
+          "public",
+          "82b16547-8eb7-497f-be8a-4345dc5f496f"
+        ],
+        [
+          "public",
+          "d9df6d52-d037-4abb-88fd-464aefb05194"
+        ]
+      ],
+      "matches_export_expectation": true
+    }
+  ],
+  "private_permission_checks": "not run: authenticated ownership not established",
+  "export_summary": {
+    "public_rows": 23,
+    "personal_rows": 46,
+    "personal_owner_groups": 5,
+    "groups_with_unique_private_title_candidate": 1,
+    "account_A_B_mapping": "unavailable until authenticated identities are supplied",
+    "groups_with_searchable_candidate": 5
+  }
+}
