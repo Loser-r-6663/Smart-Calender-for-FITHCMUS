@@ -5,7 +5,7 @@
     "corpus.json": "d3ad4f8a19046e4f6e66ee4322061b44f099a33203f0e159558d6d9276c05e97",
     "cases.json": "3012ee824e8576005b86934df0e2606d796ed00ef448286d01f40dc4f02cf0a7"
   },
-  "matcher_sha256_lf": "04eddf344b8ce8273a00c7a555e46187cfb4961176faede3bfad0b6eb57380cb",
+  "matcher_sha256_lf": "ebe75d1b825a49784470482ab47c1c2639f5c2f73e381cd8f4a3890310680103",
   "corpus_records": 14,
   "case_counts": {
     "exact_control": 3,

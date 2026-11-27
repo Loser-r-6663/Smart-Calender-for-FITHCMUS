@@ -107,11 +107,10 @@ def _interpret(query, filters):
         filters["max_training_points"] = min(filters.get("max_training_points", 100), maximum)
     _require(filters.get("min_training_points", 0) <= filters.get("max_training_points", 100),
              "Conflicting training-point constraints")
+    filters["types"] = ("event",) if "event" in filters["types"] else ()
     spans = [(match.start(), match.end())]
     event_matches = list(EVENT.finditer(text))
     if event_matches:
-        _require("event" in filters["types"], "Conflicting task types")
-        filters["types"] = ("event",)
         spans.extend((item.start(), item.end()) for item in event_matches)
     for start, end in sorted(spans, reverse=True):
         text = text[:start] + " " + text[end:]
