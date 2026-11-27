@@ -8,6 +8,9 @@ import requests
 from academic_search import SearchAuthenticationError, SearchLoadError, load_snapshot
 from test_search_records import SHARED_ID, task
 
+import pytest
+pytestmark = pytest.mark.search_core
+
 USER_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 USER_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 URL = "https://search.example.invalid"

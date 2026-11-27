@@ -14,6 +14,8 @@ from client.core.mock_backend import MockBackend
 from client.core.models import ClientUser
 from test_search_records import task
 
+pytestmark = pytest.mark.search_core
+
 OWNER_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 OWNER_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 TASK_ID = "11111111-1111-4111-8111-111111111111"

@@ -10,6 +10,8 @@ from academic_search.semantic import HybridSearch
 from fixtures.search_semantic.run_keyword import evaluate, load_inputs, visible_records
 
 
+pytestmark = pytest.mark.search_core
+
 class Encoder:
     def __init__(self):
         self.calls = []
@@ -109,13 +111,17 @@ def test_exact_topic_keeps_complete_literal_set(query, sort):
 def test_ineligible_exact_does_not_suppress_paraphrase_expansion():
     _, owned, _, _ = load_inputs()
     template = owned[0].record
-    exact = replace(template, title='tìm nơi rèn kỹ năng', training_points=5)
+    exact = replace(template, type='event', title='tìm nơi rèn kỹ năng', training_points=5)
     paraphrase = replace(template, scope='personal', title='Xưởng thực tập sáng tạo',
-                         description='Hướng dẫn chế tạo thiết bị', training_points=7)
+                         type='event', description='Hướng dẫn chế tạo thiết bị', training_points=7)
+    assignment = replace(paraphrase, scope='public', type='assignment')
     encoder = Encoder()
     hybrid = HybridSearch(encoder)
     assert search_records((paraphrase,), exact.title).hits == ()
     # Authorization/source selection supplies only permitted records to retrieval.
     assert hybrid((paraphrase,), exact.title).hits == (paraphrase,)
-    assert hybrid((exact, paraphrase), exact.title + ' nhiều hơn 5 điểm').hits == (paraphrase,)
+    assert hybrid((exact, paraphrase, assignment), exact.title + ' nhiều hơn 5 điểm').hits == (paraphrase,)
+    result = hybrid((exact, paraphrase, assignment), exact.title + ' nhiều hơn 5 điểm',
+                    filters={'types': ['assignment']})
+    assert result.hits == result.eligible_records == ()
     assert len(encoder.calls) == 2

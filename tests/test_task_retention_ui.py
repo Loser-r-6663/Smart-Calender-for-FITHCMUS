@@ -6,6 +6,8 @@ import pytest
 from playwright.sync_api import expect
 from test_search_ui import APP, OFF_MONTH, page, serve_ui, fictional_tasks, submit, choose, close_details
 
+pytestmark = pytest.mark.search_browser
+
 OWNER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 PERSONAL = "personal:66666666-6666-4666-8666-666666666666"
 LIVE_SETUP = r"""

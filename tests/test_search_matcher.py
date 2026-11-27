@@ -1,6 +1,7 @@
 """Authored matching and ordering expectations over fictional authorized records."""
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, datetime
 import unicodedata
 import unittest
@@ -9,6 +10,9 @@ from unittest.mock import patch
 from academic_search import SearchFilterError, SearchSnapshot, map_task, search_records
 from test_search_records import task
 
+
+import pytest
+pytestmark = pytest.mark.search_core
 
 IDS = {
     1: "11111111-1111-4111-8111-111111111111",
@@ -32,13 +36,26 @@ def keys(records):
     return [record.key for record in records]
 
 
+def event_record(number, **fields):
+    points = fields.get("training_points")
+    persisted_points = points if points is not None and 0 <= points <= 24 else 0
+    mapped = record(number, **{**fields, "type": "event", "estimated_hours": 2,
+                              "training_points": persisted_points,
+                              "training_point_category": "Articles 3" if persisted_points else None})
+    return replace(mapped, training_points=points)
+
+
 def comparison_records():
     return (
-        record(1, title="Thiện nguyện", training_points=0),
-        record(2, title="Thiện nguyện", training_points=4),
-        record(1, scope="personal", title="Thiện nguyện", training_points=5),
-        record(4, title="Thiện nguyện", training_points=7),
-        record(5, scope="personal", title="Thiện nguyện", training_points=None),
+        event_record(1, title="Thiện nguyện", training_points=0),
+        event_record(2, title="Thiện nguyện", training_points=4),
+        event_record(1, scope="personal", title="Thiện nguyện", training_points=5),
+        event_record(4, title="Thiện nguyện", training_points=7),
+        event_record(5, scope="personal", title="Thiện nguyện", training_points=None),
+        record(3, type="class", title="Thiện nguyện", training_points=5),
+        record(2, scope="personal", type="assignment", title="Thiện nguyện", training_points=7),
+        record(5, title="Thiện nguyện", training_points=4),
+        record(6, scope="personal", type="personal", title="Thiện nguyện", training_points=0),
     )
 
 
@@ -71,13 +88,13 @@ class SearchMatcherTests(unittest.TestCase):
                                 self.assertEqual(keys(result.eligible_records), eligible)
                                 self.assertEqual(keys(result.hits), hits)
                                 self.assertEqual(dict(result.effective_filters), {
-                                    "types": ("class", "assignment", "event", "announcement", "personal"), **bounds,
+                                    "types": ("event",), **bounds,
                                 })
 
     def test_comparisons_filter_nonliteral_candidates_and_preserve_event_inference(self):
-        records = (record(1, title="Unrelated", training_points=4),
-                   record(2, title="Thiện nguyện", training_points=4),
-                   record(3, title="Thiện nguyện", training_points=5))
+        records = (event_record(1, title="Unrelated", training_points=4),
+                   event_record(2, title="Thiện nguyện", training_points=4),
+                   event_record(3, title="Thiện nguyện", training_points=5))
         result = search_records(records, "thiện nguyện ít hơn 5 điểm")
         self.assertEqual(result.topic, "thiện nguyện")
         self.assertEqual(keys(result.eligible_records), [key(1), key(2)])
@@ -88,10 +105,16 @@ class SearchMatcherTests(unittest.TestCase):
                                 filters={"types": ["event", "assignment"]})
         self.assertEqual(result.topic, "thiện nguyện")
         self.assertEqual(result.effective_filters["types"], ("event",))
-        self.assertEqual(keys(result.eligible_records), [key(4)])
-        self.assertEqual(keys(result.hits), [key(4)])
-        with self.assertRaises(SearchFilterError):
-            search_records(records, "sự kiện hơn 4 điểm", filters={"types": ["announcement"]})
+        self.assertEqual(keys(result.eligible_records), [key(1), key(2), key(3), key(4)])
+        self.assertEqual(keys(result.hits), [key(2), key(3), key(4)])
+        for kind in ("class", "assignment", "announcement", "personal"):
+            with self.subTest(kind=kind):
+                selected = {"types": [kind]}
+                result = search_records(comparison_records(), "sự kiện hơn 4 điểm", filters=selected)
+                self.assertEqual(result.effective_filters["types"], ())
+                self.assertEqual(result.eligible_records, ())
+                self.assertEqual(result.hits, ())
+                self.assertEqual(selected, {"types": [kind]})
 
     def test_strict_and_inclusive_intersections_with_selected_bounds(self):
         zero, four, five, seven = key(1), key(2), key(1, "personal"), key(4)
@@ -120,7 +143,7 @@ class SearchMatcherTests(unittest.TestCase):
                 self.assertEqual(keys(result.eligible_records), eligible)
                 self.assertEqual(keys(result.hits), hits)
                 self.assertEqual(dict(result.effective_filters), {
-                    "types": ("class", "assignment", "event", "announcement", "personal"), **effective,
+                    "types": ("event",), **effective,
                 })
                 self.assertEqual(selected, original)
         for query, selected in (
@@ -134,7 +157,7 @@ class SearchMatcherTests(unittest.TestCase):
                 search_records(records, query, filters=selected)
 
     def test_point_domain_edges_are_not_clamped_and_unknown_points_never_qualify(self):
-        records = (*comparison_records(), record(6, title="Thiện nguyện", training_points=100))
+        records = (*comparison_records(), event_record(6, title="Thiện nguyện", training_points=100))
         zero, four, five, seven, hundred = key(1), key(2), key(1, "personal"), key(4), key(6)
         for query, expected in (
             ("ít hơn 1 điểm", [zero]), ("tối đa 0 điểm", [zero]), ("0 điểm", [zero]),
@@ -154,7 +177,7 @@ class SearchMatcherTests(unittest.TestCase):
                 search_records(records, query)
 
     def test_exact_minimum_points_topic_and_effective_filters(self):
-        records = tuple(record(n, title="Thiện nguyện", training_points=points)
+        records = tuple(event_record(n, title="Thiện nguyện", training_points=points)
                         for n, points in ((1, 4), (2, 5), (3, 7), (4, None)))
         for query, expected, bounds, topic in (
             ("5 điểm", [key(2)], {"min_training_points": 5, "max_training_points": 5}, ""),
@@ -167,12 +190,12 @@ class SearchMatcherTests(unittest.TestCase):
                 self.assertEqual(keys(result.hits), expected)
                 self.assertEqual(keys(result.eligible_records), expected)
                 self.assertEqual(dict(result.effective_filters), {
-                    "types": ("class", "assignment", "event", "announcement", "personal"), **bounds,
+                    "types": ("event",), **bounds,
                 })
                 self.assertEqual(result.topic, topic)
 
     def test_zero_and_unknown_are_distinct(self):
-        records = (record(1, training_points=0), record(2, training_points=None))
+        records = (event_record(1, training_points=0), event_record(2, training_points=None))
         self.assertEqual(keys(search_records(records).hits), [key(1), key(2)])
         self.assertEqual(keys(search_records(records, "0 điểm").hits), [key(1)])
         self.assertEqual(keys(search_records(records, filters={"max_training_points": 0}).hits), [key(1)])
@@ -247,14 +270,17 @@ class SearchMatcherTests(unittest.TestCase):
                    "max_training_points": 7, "deadline_start": "2026-11-24",
                    "deadline_end": date(2026, 11, 25)}
         before = deepcopy(filters)
-        for query in ("", " \t\n", "từ 5 điểm"):
+        for query in ("", " \t\n"):
             with self.subTest(query=query):
                 result = search_records(records, query, filters=filters)
                 self.assertEqual(keys(result.hits), [key(1), key(2)])
                 self.assertEqual(result.sort, "soonest_deadline")
                 self.assertEqual(result.effective_filters["deadline_start"], date(2026, 11, 24))
         self.assertEqual(filters, before)
-        self.assertEqual(keys(search_records(records, "5 điểm", filters=filters).hits), [key(1)])
+        for query in ("5 điểm", "từ 5 điểm"):
+            result = search_records(records, query, filters=filters)
+            self.assertEqual(result.hits, ())
+            self.assertEqual(result.effective_filters["types"], ())
         self.assertEqual(search_records(records, filters={"course": "CSC1000"}).hits, ())
 
     def test_inclusive_local_dates_single_bounds_and_undated(self):
@@ -277,7 +303,7 @@ class SearchMatcherTests(unittest.TestCase):
     def test_historical_point_aliases_intersections_and_type_inference(self):
         event = record(1, type="event", title="Thiện nguyện", training_points=5,
                        training_point_category="Articles 3", estimated_hours=2)
-        records = (event, record(2, title="Thiện nguyện", training_points=7))
+        records = (event, event_record(2, title="Thiện nguyện", training_points=7))
         for query in ("5 điểm rèn luyện", "5 đrl", "000005 điểm",
                       unicodedata.normalize("NFD", "  TỪ 5 ĐIỂM RÈN LUYỆN SỰ KIỆN Thiện nguyện")):
             with self.subTest(query=query):
@@ -303,7 +329,6 @@ class SearchMatcherTests(unittest.TestCase):
         for query, filters in (
             ("5 điểm", {"min_training_points": 7}),
             ("từ 5 điểm", {"max_training_points": 3}),
-            ("sự kiện 5 điểm", {"types": ["announcement"]}),
             ("", {"deadline_start": "2026-11-25", "deadline_end": "2026-11-24"}),
             ("", {"deadline_end": "2026-02-30"}),
             ("", {"deadline_start": datetime(2026, 11, 23)}),

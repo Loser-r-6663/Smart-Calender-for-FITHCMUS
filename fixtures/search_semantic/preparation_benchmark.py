@@ -11,30 +11,13 @@ import sys
 import tempfile
 from time import perf_counter
 
-from .benchmark import tasks
-from .run_keyword import ROOT
+from uuid import NAMESPACE_URL, uuid5
+from .run_keyword import ROOT, load_inputs
 
 INSTRUMENT = r'''
 import time, types, threading
 import academic_search.semantic as semantic_module
 import client.core.controller as controller_module
-import client.pages.calendar as calendar_module
-reference=os.environ.get('PREPARATION_REFERENCE')
-if reference:
-    def load_reference(name, package):
-        module=types.ModuleType(package+'._preparation_reference_'+name)
-        module.__package__=package
-        exec(compile((Path(reference)/(name+'.py')).read_text(encoding='utf-8'),name,'exec'),module.__dict__)
-        return module
-    semantic_module=load_reference('semantic','academic_search')
-    controller_module=load_reference('controller','client.core')
-    controller_module.ClientController.defer_preparation=lambda self:None
-    filters_module=load_reference('filters','client.components')
-    details_module=load_reference('details','client.components')
-    SearchPanel=filters_module.SearchPanel
-    calendar_module.ClientController=controller_module.ClientController
-    calendar_module.SearchPanel=SearchPanel
-    calendar_module.SearchDetailsDialog=details_module.SearchDetailsDialog
 counts={'foreground_queries':0,'foreground_passages':0,'preparation_passages':0,
         'foreground_encode_ms':0.,'preparation_encode_ms':0.,'model_startup_ms':0.}
 role=threading.local()
@@ -94,27 +77,33 @@ async def first_prepared():
 '''
 
 
+def tasks(size):
+    """Preserve frozen text/facts; project ownership/UUIDs into one mock view."""
+    corpus = json.loads((ROOT / 'corpus.json').read_text(encoding='utf-8'))['records']
+    result = []
+    for index in range(size):
+        item = corpus[index % len(corpus)]
+        task = dict(item['task'])
+        task['id'] = str(uuid5(NAMESPACE_URL, f'smart-calendar-latency/{index}'))
+        task['user_id'] = 'demo-user' if item['scope'] == 'personal' else None
+        if size > 14:
+            task['title'] += f' · Nhóm thực hành {index + 1}'
+        result.append(task)
+    return result
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--reference-dir',type=Path)
-    parser.add_argument('--reference-archive',type=Path)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--sizes',type=int,nargs='+',default=[14,1008])
     parser.add_argument('--warm-queries',action='store_true',help='Measure a different and repeated query after preparation')
+    parser.add_argument('--check',action='store_true',help='Compare complete ordered keys with the retained measurement')
     args=parser.parse_args()
-    if args.reference_archive:
-        if args.reference_dir: parser.error('Use only one reference source')
-        archive=json.loads(args.reference_archive.read_text(encoding='utf-8'))
-        assert set(archive['files'])=={'semantic','controller','filters','details'}
-        args.reference_dir=Path(tempfile.mkdtemp(prefix='preparation-reference-replay-'))
-        for name,item in archive['files'].items():
-            data=item['source'].encode('utf-8')
-            assert hashlib.sha256(data).hexdigest()==item['sha256']
-            (args.reference_dir/(name+'.py')).write_bytes(data)
-    if args.reference_dir: os.environ['PREPARATION_REFERENCE']=str(args.reference_dir)
-    else: os.environ.pop('PREPARATION_REFERENCE',None)
+    if args.output.resolve().is_relative_to(ROOT.resolve()):
+        parser.error('Preserve retained evidence; write observations to TEMP')
+    load_inputs()
     sys.path.insert(0,str(ROOT.parents[1]/'tests'))
-    from test_search_ui import APP,serve_ui,open_search,close_details
+    from search_ui_support import APP,serve_ui,open_search,close_details
     from playwright.sync_api import sync_playwright,expect
     app_code=APP.replace('backend = CountingBackend',INSTRUMENT+'\nbackend = CountingBackend')
     rows=[]
@@ -200,10 +189,23 @@ def main():
                     print({k:v for k,v in rows[-1].items() if k not in ('ordered_keys','warm_queries')},flush=True)
                 finally: browser.close()
             args.output.write_text(json.dumps({'rows':rows},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    sources={name:hashlib.sha256((args.reference_dir/(name+'.py') if args.reference_dir else Path(path)).read_bytes()).hexdigest()
+    if args.check:
+        expected=json.loads((ROOT/'preparation_integrated.json').read_text(encoding='utf8'))
+        from academic_search.semantic import REVISION, CUTOFF
+        assert expected['model_revision']==REVISION and expected['cutoff']==CUTOFF
+        for row in rows:
+            old=next(r for r in expected['rows'] if (r['size'],r['scenario'])==(row['size'],row['scenario']))
+            assert row['ordered_keys']==old['ordered_keys']
+            assert row['task_reads_during_search']==row['detail_task_reads']==0
+            assert row['foreground_passages']+row['background_passages']==row['size']
+            if row['scenario']=='prepared':assert row['foreground_passages']==0
+            if args.warm_queries:
+                assert [q['ordered_keys'] for q in row['warm_queries']]==[q['ordered_keys'] for q in old['warm_queries']]
+        print('Retained ordered outcomes and read/cache invariants match',flush=True)
+    sources={name:hashlib.sha256(Path(path).read_bytes()).hexdigest()
              for name,path in [('semantic','academic_search/semantic.py'),('controller','client/core/controller.py'),('filters','client/components/filters.py'),('details','client/components/search_details.py')]}
     from academic_search.semantic import REVISION,CUTOFF
-    args.output.write_text(json.dumps(dict(source_sha256=sources,reference_directory=str(args.reference_dir) if args.reference_dir else None,
+    args.output.write_text(json.dumps(dict(source_sha256=sources,
         model_revision=REVISION,cutoff=CUTOFF,device='CPU / '+platform.processor(),python=sys.version,
         tested_revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         trial_count=1,rows=rows),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

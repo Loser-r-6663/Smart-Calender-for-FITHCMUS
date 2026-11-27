@@ -16,6 +16,9 @@ from client.core.models import ClientUser
 from fixtures.search_semantic.run_keyword import load_inputs
 
 
+import pytest
+pytestmark = pytest.mark.search_core
+
 class Encoder:
     def __init__(self):
         self.calls = []
@@ -39,7 +42,7 @@ def records():
 
 
 def test_lazy_narrow_widen_different_query_repeat_and_sort():
-    source = records()
+    source = tuple(replace(record, type='event') for record in records())
     encoder = Encoder()
     search = HybridSearch(encoder)
     assert search(source, '5 điểm').hits == (source[1],)
@@ -184,7 +187,7 @@ def test_async_new_query_wins_and_event_loop_keeps_running():
 
 
 def test_source_preference_refresh_invalidates_warmed_passages(tmp_path):
-    from test_search_ui import fictional_tasks
+    from search_ui_support import fictional_tasks
     fixture = tmp_path/'tasks.json'
     fixture.write_text(json.dumps(fictional_tasks()), encoding='utf-8')
     async def scenario():

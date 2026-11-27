@@ -10,6 +10,8 @@ from playwright.sync_api import expect, sync_playwright
 
 from test_search_ui import PUBLIC, fictional_tasks, serve_ui
 
+pytestmark = pytest.mark.search_browser
+
 TITLE = "Tổng kết Buổi giới thiệu về các chương trình học bổng trường Đại học Quốc gia Seoul (Hàn Quốc)"
 WORDS = ("kết", "về", "bổng", "Quốc")
 

@@ -1,8 +1,0 @@
-{
-  "passed": true,
-  "initial_reads": 1,
-  "cold_passages": 1008,
-  "warm_queries": 1,
-  "warm_passages": 0,
-  "warm_task_reads": 0
-}

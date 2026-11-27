@@ -18,6 +18,8 @@ from client.core.models import ClientUser
 from test_search_embedding_cache import Encoder, records
 
 
+pytestmark = pytest.mark.search_core
+
 def prepare_all(ranker, source, token):
     epoch=ranker.begin_preparation(source,cache_token=token)
     start=0

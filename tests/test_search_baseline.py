@@ -14,6 +14,8 @@ from academic_search import search_records
 from fixtures.search_semantic.run_keyword import ROOT, evaluate, load_inputs, visible_records
 
 
+pytestmark = pytest.mark.search_core
+
 def test_frozen_labels_and_saved_keyword_measurement():
     accounts, owned, cases, manifest = load_inputs()
     assert manifest == {

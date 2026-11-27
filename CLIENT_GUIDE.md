@@ -170,6 +170,22 @@ python -m pytest -q
 
 Các test client và database repository nằm trong thư mục `tests/`.
 
+Lệnh nhanh duy nhất cho Search core (không khởi chạy model/database/browser;
+dùng project environment đã cài test dependencies):
+
+```powershell
+$env:PYTHON_DOTENV_DISABLED = '1'
+Remove-Item Env:SEARCH_SEMANTIC_MODEL -ErrorAction SilentlyContinue
+.\.venv\Scripts\python.exe -B -X utf8 -m pytest -q -m search_core
+```
+
+Browser journeys còn lại: `python -m pytest -q -m search_browser` (cần
+Playwright và Edge). Xem [bản đồ coverage](fixtures/search_demo/VERIFICATION.md)
+và [quality/performance](fixtures/search_semantic/README.md). Demo Search chỉ
+có một entry point `fixtures.search_demo.app` ở mục 7; cùng lệnh dùng được khi
+bật hoặc tắt model. Báo cáo mới của evaluator/benchmark ghi vào TEMP, không
+thay frozen inputs hay ghi đè evidence đã giữ.
+
 ## 6. Xử lý sự cố thường gặp
 
 | Hiện tượng | Kiểm tra |
@@ -185,8 +201,8 @@ Các test client và database repository nằm trong thư mục `tests/`.
 
 ## 7. Demo Search trên bản tích hợp
 
-Bản kiểm tra: `FE-Client` tại `5ad961d44437b5d1681d280a777397b977d0a0a1`
-(FE `67fea68` + Search/P `2a4fe34`). Kết quả chi tiết và các kiểm tra chưa
+Bản tham chiếu: Commit 7 `0acb8e6` trên `FE-Client`, chứa runtime tích hợp
+`5ad961d` (FE `67fea68` + Search/P `2a4fe34`). Cleanup giữ nguyên runtime. Kết quả chi tiết và các kiểm tra chưa
 thực hiện nằm trong [biên bản demo](fixtures/search_demo/VERIFICATION.md).
 Phần này không yêu cầu crawl, Auto-schedule hay thay đổi dữ liệu thật.
 
@@ -221,6 +237,8 @@ lựa chọn của hai phần độc lập. Không bấm crawl, tạo task hay l
    `66666666-6666-4666-8666-666666666666` (7 điểm); cuối cùng chỉ task 7 điểm.
    Task 4, 0 và thiếu điểm không lọt vào các kết quả này. `bé hơn 5 điểm`
    lấy task 4 và 0 điểm. Đây là so sánh task sự kiện, không phải scope riêng tư.
+   So sánh điểm chỉ xét **Events**. Nếu Type đang chọn Classes, Assignments,
+   Notices hoặc Personal, Search giữ lựa chọn đó và hiện **No matching tasks**.
    Giao diện chỉ hiện số task và thứ tự; không có nhãn tóm tắt điểm suy luận.
 3. **Bài tập trong một tuần.** Clear, để ô Search trống; chọn Type
    **Assignments**, Course **CSC10006**, Deadline from **2026-11-30** và
@@ -268,7 +286,7 @@ Kiểm tra lại trên tập E **14 task / 31 case** (khác fixture demo 15 task
 
 ```powershell
 .\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.run_keyword --check
-.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.check_prepared --output fixtures/search_semantic/hybrid_integrated_report.json
+.\.venv\Scripts\python.exe -B -X utf8 -m fixtures.search_semantic.run_hybrid --check --output "$env:TEMP\search-quality.json"
 ```
 
 Đây là regression trên các case đã xem: keyword **1/3 tuning, 0/4 held-out**;
@@ -290,12 +308,13 @@ Search chỉ bao phủ originals được cấp quyền và nguồn đang bật,
 không ngày/chưa xếp lịch; dialog giữ facts gốc, khác overlay xếp lịch Calendar.
 Không dùng export cá nhân để suy ra quyền: phải xác thực A/B, đọc đúng owner,
 thử private key với owner, account kia và guest, rồi chuyển account khi dialog
-đang mở. Kiểm tra live ngày 27/11/2026: guest/A/B cùng thấy **23 public task**;
+đang mở. Kiểm tra live của Commit 7 ngày 27/11/2026 (không chạy lại trong cleanup): guest/A/B cùng thấy **23 public task**;
 A có **12 private task**, tìm và mở đúng original/source; B và guest không tìm
 hoặc resolve được private key đó. Logout khi dialog của A đang mở xóa details,
 link và lựa chọn; callback cũ bị từ chối. Query/details không đọc task thêm.
 B có **0 private task**, khớp export theo identity đã xác thực; chưa có fixture
 để thử chiều B → A/guest, không tạo dữ liệu thật để bù. Kết quả ẩn danh trong
-`fixtures/search_demo/live_accounts_verification.json`; không ghi credentials,
+[biên bản xác minh](fixtures/search_demo/VERIFICATION.md); evidence chi tiết
+truy xuất tại Commit 7 `0acb8e6`, không ghi credentials,
 private title/key/URL hoặc ảnh riêng tư. Phản hồi paraphrase mới từ đồng đội,
 review layout của Long và xác nhận shared build của Hiển: **đang chờ**.

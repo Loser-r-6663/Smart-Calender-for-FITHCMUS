@@ -6,6 +6,9 @@ from datetime import date, datetime, time
 from academic_search import map_task
 from DataProcessor.Standardization.ExtractedTask import ExtractedTask, VN_TZ
 
+import pytest
+pytestmark = pytest.mark.search_core
+
 SHARED_ID = "11111111-1111-4111-8111-111111111111"
 CLASS_ID = "22222222-2222-4222-8222-222222222222"
 NOTICE_ID = "33333333-3333-4333-8333-333333333333"
@@ -150,3 +153,29 @@ def test_personal_type_preserves_optional_original_fields():
     assert record.publisher is None and record.source_url == ""
     assert record.training_points is None and record.deadline is None
     assert record.registration_start is None and record.registration_end is None
+
+
+def test_result_dates_use_known_endpoints_without_inventing_occurrences():
+    from academic_search import map_task
+    from client.components.filters import record_date
+
+    ended = map_task(task(end_time={"date": "2026-11-25", "time": "10:30:00"}), scope="public")
+    weekly = map_task(task(start_time={"day": "T2", "time": "08:00:00"}), scope="personal")
+    undated = map_task(task(), scope="public")
+    assert record_date(ended) == "Ends 25 Nov 2026, 10:30"
+    assert record_date(weekly) == "Date not provided · Every Monday, 08:00"
+    assert weekly.start_time.date is None
+    assert record_date(undated) == "Date not provided"
+
+
+@pytest.mark.parametrize("url", ["", "javascript:example", "https://["])
+def test_missing_or_unusable_source_does_not_hide_task_facts(monkeypatch, url):
+    from unittest.mock import MagicMock
+    from academic_search import map_task
+    from client.components.task_panel import render_record_details
+
+    ui = MagicMock()
+    monkeypatch.setattr("client.components.task_panel.ui", ui)
+    render_record_details(map_task(task(source_url=url), scope="public"))
+    ui.label.assert_any_call("Sinh hoạt sinh viên")
+    ui.link.assert_not_called()

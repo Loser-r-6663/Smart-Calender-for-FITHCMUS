@@ -29,6 +29,16 @@ runs the signed-in user's crawler separately from Search reads.
 
 ### Test
 
+Fast Search core: `python -m pytest -q -m search_core`. Actual fictional
+Search journeys: `python -m pytest -q -m search_browser`.
+[The Vietnamese demo](CLIENT_GUIDE.md#7-demo-search-trên-bản-tích-hợp) uses one
+entry point, `python -m fixtures.search_demo.app`.
+[Verification/coverage](fixtures/search_demo/VERIFICATION.md) and
+[current model/evaluation commands](fixtures/search_semantic/README.md)
+distinguish historical live evidence from offline fixtures.
+
+Full repository suite:
+
 ```powershell
 python -m pytest -q
 ```

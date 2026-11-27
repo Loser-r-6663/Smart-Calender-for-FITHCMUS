@@ -17,6 +17,8 @@ from client.core.models import ClientUser, TaskDraft
 from Database.Repository.task_repository import TaskRepository
 from test_search_records import task
 
+pytestmark = pytest.mark.search_core
+
 A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 MONTH = date(2026, 11, 1)
