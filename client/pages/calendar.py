@@ -101,9 +101,7 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                 app.storage.user.clear()
                 ui.navigate.to("/login")
 
-        await load_month()
-        if controller.state.session_expired:
-            return
+        controller.state.loading = True
         ui.page_title("Calendar · Smart Calendar")
 
         async def _refresh_data_and_schedule() -> None:
@@ -835,7 +833,11 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
 
                     render_calendar_filters(controller, apply_filter, set_view, search_panel, lambda _: _safe_refresh(body))
 
-                    if controller.state.error:
+                    if controller.state.loading:
+                        with ui.row().classes("items-center gap-2 px-4 py-2").props('role="status"'):
+                            ui.spinner(size="sm")
+                            ui.label("Loading calendar…")
+                    elif controller.state.error:
                         with ui.element("div").classes("error-banner"):
                             ui.icon("error_outline")
                             ui.label(controller.state.error)
@@ -853,9 +855,14 @@ def register_calendar_page(backend: ClientBackend, config: AppConfig) -> None:
                 search_panel.clear(lambda _: body.refresh())
 
         ui.timer(0.1, invalidate_session_ui)
-        if preparation_gate is not None:
-            try:
-                await ui.context.client.connected()
+        try:
+            await ui.context.client.connected()
+            await load_month()
+            if controller.state.session_expired:
+                return
+            _safe_refresh(body)
+            if preparation_gate is not None:
                 await ui.run_javascript('return await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))', timeout=5)
-            finally:
+        finally:
+            if preparation_gate is not None:
                 preparation_gate.set()
