@@ -162,14 +162,51 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
                     "Save credentials", on_click=save_portal_credentials
                 ).props("unelevated no-caps color=positive")
 
-        def open_moodle_placeholder() -> None:
-            # Moodle connection is intentionally unsupported for now. Keep
-            # this control as a placeholder until backend support is added.
-            ui.notify(
-                "Placeholder",
-                type="negative",
-                position="bottom-right",
-            )
+        with ui.dialog() as moodle_dialog, ui.card().classes("credential-dialog"):
+            ui.label("Connect Moodle").classes("form-title credential-title")
+            ui.label(
+                "You can open Moodle in a new tab, but its login session is not "
+                "shared with the crawler. To connect Moodle for crawling, use "
+                "Capture session below; a separate browser window will open. "
+                "Complete Google sign-in there, not in this app."
+            ).classes("connection-copy credential-note")
+            ui.link(
+                "Open Moodle in a new tab",
+                "https://courses.ctda.hcmus.edu.vn/login/index.php",
+                new_tab=True,
+            ).classes("source-link")
+            moodle_message = ui.label().classes("login-error")
+            moodle_message.visible = False
+
+            async def connect_moodle() -> None:
+                nonlocal status
+                moodle_message.visible = False
+                connect_moodle_button.props(add="loading disable")
+                ui.notify(
+                    "Complete Moodle's Google sign-in in the separate browser window.",
+                    type="info",
+                    position="bottom-right",
+                )
+                try:
+                    result = await backend.connect_moodle(user)
+                    if not result.ok:
+                        moodle_message.text = result.message
+                        moodle_message.visible = True
+                        return
+                    status = await backend.get_connection_status(user)
+                    moodle_dialog.close()
+                    connection_cards.refresh()
+                    ui.notify(result.message, type="positive", position="bottom-right")
+                finally:
+                    connect_moodle_button.props(remove="loading disable")
+
+            with ui.row().classes("justify-end w-full gap-2"):
+                ui.button("Cancel", on_click=moodle_dialog.close).props(
+                    "flat no-caps"
+                )
+                connect_moodle_button = ui.button(
+                    "Capture Moodle session", on_click=connect_moodle
+                ).props("unelevated no-caps color=positive")
 
         @ui.refreshable
         def connection_cards() -> None:
@@ -188,8 +225,8 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
                         "Moodle",
                         status.moodle,
                         status.moodle_configured,
-                        "Assignments and course deadlines",
-                        open_moodle_placeholder,
+                        "Assignments and course deadlines via Google sign-in",
+                        moodle_dialog.open,
                     ),
                 ):
                     if connected:
@@ -211,7 +248,12 @@ def register_settings_page(backend: ClientBackend, config: AppConfig) -> None:
                         with ui.row().classes("connection-controls items-center gap-2"):
                             ui.badge(status_text).classes(status_class)
                             ui.button(
-                                "Update credentials" if name == "Student Portal" and configured else "Connect",
+                                (
+                                    "Update credentials"
+                                    if name == "Student Portal" and configured
+                                    else "Reconnect" if name == "Moodle" and configured
+                                    else "Connect"
+                                ),
                                 on_click=action,
                             ).props("outline no-caps").classes("connection-action")
 
