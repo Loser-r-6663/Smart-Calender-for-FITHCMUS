@@ -67,10 +67,10 @@ class FBCrawler(PlaywrightCrawler):
             page.locator('xpath=//div[contains(@aria-label,"Facebook") and contains(@role,"button")]').nth(1).click()
             
             # 2-step verification, wait until the user enters the code sent via email
-            page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and contains(@aria-label,"Thông báo")]',timeout=300000)
+            page.wait_for_selector('xpath=//div[not(@aria-hidden) and contains(@role,"button") and (contains(@aria-label,"Thông báo") or contains(@aria-label,"Notifications"))]',timeout=300000)
             
             # Store state file and close browser
-            state_file = f"Backend/Crawler/State/{self.state_key}.json"
+            state_file = f"DataProcessor/Crawler/State/{self.state_key}.json"
             self.state.update(context.storage_state(path=state_file))
             browser.close()
     
