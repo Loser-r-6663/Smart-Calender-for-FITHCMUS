@@ -9,6 +9,8 @@ RUN playwright install --with-deps chromium
 
 COPY DataProcessor ./DataProcessor
 COPY Database ./Database
+COPY Scheduler ./Scheduler
+COPY academic_search ./academic_search
 COPY client ./client
 
 ENV CLIENT_MODE=live \
